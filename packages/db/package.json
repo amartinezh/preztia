@@ -16,7 +16,9 @@
     "postgres": "^3.4.0"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.28.0",
-    "@preztiaos/config": "workspace:*"
+    "@preztiaos/config": "workspace:*",
+    "@types/node": "^25.9.2",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.28.0"
   }
 }
