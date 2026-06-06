@@ -15,6 +15,16 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
 
+  packages/application:
+    dependencies:
+      '@preztiaos/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@preztiaos/config':
+        specifier: workspace:*
+        version: link:../config
+
   packages/config: {}
 
   packages/db:
