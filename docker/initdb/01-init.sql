@@ -1,0 +1,15 @@
+-- Extensiones requeridas
+CREATE EXTENSION IF NOT EXISTS ltree;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
+
+-- Rol de aplicación: NO superusuario, NO bypass de RLS
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app') THEN
+    CREATE ROLE app LOGIN PASSWORD 'app' NOSUPERUSER NOBYPASSRLS;
+  END IF;
+END$$;
+GRANT CONNECT ON DATABASE cobranzaos TO app;
+GRANT USAGE ON SCHEMA public TO app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app;
