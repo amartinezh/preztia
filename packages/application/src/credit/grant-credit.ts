@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Money, buildSchedule } from "@preztiaos/domain";
 
 // Puerto de salida (interface). La infraestructura lo implementa.
@@ -15,7 +16,7 @@ export class GrantCreditHandler {
   async execute(cmd: GrantCreditCommand): Promise<{ id: string; installments: number }> {
     const principal = Money.of(cmd.principalMinor, cmd.currency);
     const schedule = buildSchedule(principal, cmd.interestPct, cmd.installmentsCount);
-    const id = crypto.randomUUID();
+    const id = randomUUID();
     await this.credits.save({ id, tenantId: cmd.tenantId, principalMinor: cmd.principalMinor, currency: cmd.currency });
     return { id, installments: schedule.length };
   }

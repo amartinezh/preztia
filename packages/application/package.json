@@ -9,6 +9,11 @@
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "@preztiaos/domain": "workspace:*" },
-  "devDependencies": { "@preztiaos/config": "workspace:*" }
+  "dependencies": {
+    "@preztiaos/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@preztiaos/config": "workspace:*",
+    "@types/node": "^25.9.2"
+  }
 }
