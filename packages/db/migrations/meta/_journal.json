@@ -15,6 +15,20 @@
       "when": 1780714586287,
       "tag": "0001_rls_and_ltree",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780783123088,
+      "tag": "0002_open_dreaming_celestial",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780783200000,
+      "tag": "0003_tenant_config_rls",
+      "breakpoints": true
     }
   ]
 }

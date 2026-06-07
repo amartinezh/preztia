@@ -35,15 +35,24 @@ importers:
       '@preztiaos/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@preztiaos/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      drizzle-orm:
+        specifier: ^0.36.0
+        version: 0.36.4(@types/react@19.2.17)(postgres@3.4.9)(react@19.2.3)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
     devDependencies:
       '@eslint/eslintrc':
         specifier: ^3.2.0
@@ -221,6 +230,9 @@ importers:
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.2
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@25.9.2)(lightningcss@1.32.0)(terser@5.48.0)
 
   packages/config: {}
 
