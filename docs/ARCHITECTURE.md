@@ -1,7 +1,7 @@
 # PreztiaOS — Documento de Arquitectura
 
 > **Estado:** documento vivo. Se ajusta conforme se toman decisiones.
-> **Última actualización:** 2026-06-06
+> **Última actualización:** 2026-06-06 (añadidos atributos de calidad y estándares de código — §3)
 > **Ámbito:** plataforma multi-tenant de **préstamos y cobranza** (microcrédito de ruta/gota a gota, cobranza por zonas).
 
 ---
@@ -10,25 +10,26 @@
 
 1. [Visión del producto](#1-visión-del-producto)
 2. [Principios de arquitectura](#2-principios-de-arquitectura)
-3. [Vista de contexto (C4 nivel 1)](#3-vista-de-contexto-c4-nivel-1)
-4. [Vista de contenedores (C4 nivel 2)](#4-vista-de-contenedores-c4-nivel-2)
-5. [Estructura del monorepo](#5-estructura-del-monorepo)
-6. [Arquitectura en capas (hexagonal / DDD)](#6-arquitectura-en-capas-hexagonal--ddd)
-7. [Multitenancy y seguridad (RLS)](#7-multitenancy-y-seguridad-rls)
-8. [Modelo de datos](#8-modelo-de-datos)
-9. [Zonificación con `ltree`](#9-zonificación-con-ltree)
-10. [Contract-first (ts-rest + zod)](#10-contract-first-ts-rest--zod)
-11. [Flujo de un caso de uso: otorgar crédito](#11-flujo-de-un-caso-de-uso-otorgar-crédito)
-12. [El dominio: dinero y calendario de cuotas](#12-el-dominio-dinero-y-calendario-de-cuotas)
-13. [Clientes: app móvil/web (Expo)](#13-clientes-app-móvilweb-expo)
-14. [Infraestructura local](#14-infraestructura-local)
-15. [Build, tooling y pipeline](#15-build-tooling-y-pipeline)
-16. [Integración continua (CI)](#16-integración-continua-ci)
-17. [Convenciones del proyecto](#17-convenciones-del-proyecto)
-18. [Bounded contexts y roadmap](#18-bounded-contexts-y-roadmap)
-19. [Registro de decisiones (ADR)](#19-registro-de-decisiones-adr)
-20. [Deuda técnica y riesgos](#20-deuda-técnica-y-riesgos)
-21. [Glosario](#21-glosario)
+3. [Atributos de calidad y estándares de código](#3-atributos-de-calidad-y-estándares-de-código)
+4. [Vista de contexto (C4 nivel 1)](#4-vista-de-contexto-c4-nivel-1)
+5. [Vista de contenedores (C4 nivel 2)](#5-vista-de-contenedores-c4-nivel-2)
+6. [Estructura del monorepo](#6-estructura-del-monorepo)
+7. [Arquitectura en capas (hexagonal / DDD)](#7-arquitectura-en-capas-hexagonal--ddd)
+8. [Multitenancy y seguridad (RLS)](#8-multitenancy-y-seguridad-rls)
+9. [Modelo de datos](#9-modelo-de-datos)
+10. [Zonificación con `ltree`](#10-zonificación-con-ltree)
+11. [Contract-first (ts-rest + zod)](#11-contract-first-ts-rest--zod)
+12. [Flujo de un caso de uso: otorgar crédito](#12-flujo-de-un-caso-de-uso-otorgar-crédito)
+13. [El dominio: dinero y calendario de cuotas](#13-el-dominio-dinero-y-calendario-de-cuotas)
+14. [Clientes: app móvil/web (Expo)](#14-clientes-app-móvilweb-expo)
+15. [Infraestructura local](#15-infraestructura-local)
+16. [Build, tooling y pipeline](#16-build-tooling-y-pipeline)
+17. [Integración continua (CI)](#17-integración-continua-ci)
+18. [Convenciones del proyecto](#18-convenciones-del-proyecto)
+19. [Bounded contexts y roadmap](#19-bounded-contexts-y-roadmap)
+20. [Registro de decisiones (ADR)](#20-registro-de-decisiones-adr)
+21. [Deuda técnica y riesgos](#21-deuda-técnica-y-riesgos)
+22. [Glosario](#22-glosario)
 
 ---
 
@@ -64,7 +65,87 @@ El núcleo del diseño se apoya en tres pilares:
 
 ---
 
-## 3. Vista de contexto (C4 nivel 1)
+## 3. Atributos de calidad y estándares de código
+
+> **Regla vinculante.** Esta sección define los **atributos de calidad** que rigen *todo* el código del proyecto. **Todo algoritmo, caso de uso o módulo futuro debe cumplirla** y demostrar que es **correcto** (ver §3.6). No son recomendaciones: son **criterios de aceptación** de cualquier PR y parte obligatoria de la revisión de código.
+
+Los cuatro atributos que perseguimos, en orden de aplicación al escribir código:
+
+| Atributo | Qué significa aquí | Cómo se verifica |
+|---|---|---|
+| **Responsabilidad única (SRP)** | cada unidad tiene una sola razón para cambiar | revisión + límites de capa (§7) |
+| **Código limpio** | sin duplicación, sin números mágicos, errores explícitos | lint + revisión |
+| **Código entendible** | se lee como prosa; intención evidente sin comentarios de relleno | revisión de pares |
+| **Código mantenible** | cambiar/extender es barato y de bajo riesgo | pruebas + acoplamiento bajo |
+
+### 3.1 Principio de responsabilidad única (SRP)
+
+Cada módulo, clase o función tiene **una sola razón para cambiar**. En este proyecto se traduce en una asignación estricta de responsabilidades por capa:
+
+| Pieza | **Sí** hace | **No** hace |
+|---|---|---|
+| **Controller** (`*.controller.ts`) | valida la frontera HTTP (zod) y delega | reglas de negocio, SQL |
+| **Caso de uso** (`*Handler`) | orquesta dominio + puertos, define la transacción | validar HTTP, armar SQL, calcular reglas |
+| **Dominio** (`Money`, `buildSchedule`) | reglas puras e invariantes | I/O, conocer NestJS/Drizzle/HTTP |
+| **Repositorio** (`*Repository`) | traduce dominio ↔ persistencia | reglas de negocio |
+| **Contrato** (`@preztiaos/contracts`) | forma y validación del API | lógica de dominio o infra |
+
+> 🚨 **Señales de violación del SRP:** nombres con “y”/`Manager`/`Util` genéricos; funciones de más de ~40 líneas o con varios niveles de abstracción mezclados; una clase que importa de capas distintas (p. ej. dominio que importa Drizzle); un `if` que decide *qué* hacer y *cómo* hacerlo a la vez.
+
+### 3.2 Código limpio (clean code)
+
+- **Nombres reveladores de intención.** El nombre dice *qué* y *por qué*, no *cómo*. Identificadores en inglés, dominio/comentarios en español (§18).
+- **Funciones pequeñas y de un solo nivel de abstracción.** Una función hace una cosa; si necesita un comentario para separar “bloques”, son funciones distintas.
+- **Sin números mágicos.** Constantes con nombre (p. ej. la base-mil del interés, no `200` suelto).
+- **Sin duplicación (DRY).** La lógica vive en un solo lugar; el reuso pasa por `packages/*`.
+- **Errores explícitos.** Lanzar `DomainError` con mensaje claro; **prohibido** `catch` vacío o tragarse errores. La validación de entrada ocurre en la frontera (zod); el dominio asume datos válidos.
+- **Inmutabilidad por defecto.** Los objetos de valor son inmutables (`Money` devuelve nuevas instancias; nunca muta).
+- **Sin código muerto ni `console.log` de depuración** en lo que se mergea.
+
+### 3.3 Código entendible (legibilidad)
+
+- El código se lee de arriba abajo como una narración del caso de uso.
+- **Comentarios que explican el porqué**, no el qué (el qué lo dice el código). Documentar invariantes y decisiones no obvias (p. ej. “la última cuota absorbe el redondeo”).
+- Una sola forma de hacer cada cosa (consistencia con las convenciones de §18).
+- Tipos explícitos en las fronteras públicas; evitar `any` (ver deuda `tx: any` en §21).
+- Estructura predecible: un *slice* nuevo replica la estructura del *slice* de crédito (contrato → controlador → caso de uso → dominio → repo).
+
+### 3.4 Código fácil de mantener (mantenibilidad)
+
+- **Bajo acoplamiento / alta cohesión:** se logra con la inversión de dependencias (§7); el dominio y la aplicación no dependen de framework ni de infraestructura.
+- **Dependencias solo “hacia abajo”** (regla de oro, §6): apps → packages, application → domain.
+- **Pruebas como red de seguridad:** todo cambio de comportamiento se cubre con prueba (dominio puro primero); el invariante de negocio se vuelve test (p. ej. `Σ cuotas === total`).
+- **Cambios localizados:** añadir una regla no debe obligar a tocar varias capas; si lo hace, revisar el diseño.
+- **Configuración fuera del código:** secretos y entornos por variables (`.env`), nunca hardcodeados (ver placeholders en §21).
+
+### 3.5 Checklist obligatorio para cada nuevo algoritmo / caso de uso
+
+Antes de marcar como “listo”, todo algoritmo o caso de uso nuevo debe poder responder **sí** a:
+
+- [ ] Arrancó por su **spec (Gherkin) → prueba de dominio → implementación** (DDD, §2).
+- [ ] Cada pieza respeta el **SRP** (tabla §3.1); no cruza límites de capa.
+- [ ] Las **reglas de negocio están en el dominio puro**, sin I/O ni framework.
+- [ ] La **entrada se valida en la frontera** (zod del contrato); el dominio asume datos válidos.
+- [ ] Los **invariantes** están enunciados y cubiertos por **pruebas** (ver §3.6).
+- [ ] **Dinero en unidades menores** (entero), sin coma flotante (§2, principio 5).
+- [ ] Respeta **multitenancy**: toda escritura va por `withTenantTx`; toda tabla lleva `tenant_id`.
+- [ ] Sin **números mágicos**, sin **duplicación**, errores **explícitos**, nombres **reveladores**.
+- [ ] Pasa **typecheck + lint + test + build** (§17) en verde.
+
+### 3.6 Definición de “correcto” (corrección verificable)
+
+Un algoritmo es **correcto** solo si su corrección es **demostrable y verificada**, no asumida:
+
+1. **Invariantes explícitos.** Se enuncian las propiedades que siempre deben cumplirse (ej.: `Σ amountDueMinor === total.amountMinor`).
+2. **Pruebas que los verifican.** Cada invariante y cada caso borde (cero, redondeo, monedas distintas, valores límite) tiene una prueba automatizada.
+3. **Determinismo y manejo de bordes.** Entradas inválidas fallan rápido con `DomainError`; no hay estados silenciosamente incorrectos.
+4. **Verde en CI.** La corrección se considera establecida solo cuando las pruebas pasan en el pipeline (§17), no en la máquina local.
+
+> En resumen: **no se mezcla responsabilidades, se escribe limpio y legible, se diseña para el cambio, y se prueba la corrección.** Cualquier código que no cumpla estos cuatro atributos se considera incompleto.
+
+---
+
+## 4. Vista de contexto (C4 nivel 1)
 
 ```mermaid
 flowchart TB
@@ -88,7 +169,7 @@ flowchart TB
 
 ---
 
-## 4. Vista de contenedores (C4 nivel 2)
+## 5. Vista de contenedores (C4 nivel 2)
 
 ```mermaid
 flowchart TB
@@ -120,7 +201,7 @@ flowchart TB
 
 ---
 
-## 5. Estructura del monorepo
+## 6. Estructura del monorepo
 
 Gestionado con **pnpm workspaces** + **Turborepo**. Scope canónico de los paquetes: **`@preztiaos`**.
 
@@ -176,7 +257,7 @@ flowchart BT
 
 ---
 
-## 6. Arquitectura en capas (hexagonal / DDD)
+## 7. Arquitectura en capas (hexagonal / DDD)
 
 ```mermaid
 flowchart LR
@@ -231,7 +312,7 @@ La infraestructura ([credit.repository.ts](../apps/api/src/credit/credit.reposit
 
 ---
 
-## 7. Multitenancy y seguridad (RLS)
+## 8. Multitenancy y seguridad (RLS)
 
 El aislamiento entre tenants es la **propiedad de seguridad más importante** del sistema y se garantiza en **tres niveles**:
 
@@ -285,7 +366,7 @@ CREATE POLICY tenant_isolation ON credit
 
 ---
 
-## 8. Modelo de datos
+## 9. Modelo de datos
 
 Estado actual del esquema Drizzle ([packages/db/src/schema](../packages/db/src/schema)). Todas las tablas de negocio llevan `tenant_id` (clave del aislamiento RLS).
 
@@ -341,7 +422,7 @@ erDiagram
 
 ---
 
-## 9. Zonificación con `ltree`
+## 10. Zonificación con `ltree`
 
 Las zonas forman un árbol (país → ciudad → barrio → ruta…). Se usa una **ruta materializada** (`path` tipo `ltree`) con índice **GiST** para responder eficientemente “dame todo el subárbol bajo esta zona”.
 
@@ -369,7 +450,7 @@ Esto habilita el futuro `ZoneScopeGuard`: un coordinador solo ve/actúa sobre el
 
 ---
 
-## 10. Contract-first (ts-rest + zod)
+## 11. Contract-first (ts-rest + zod)
 
 `@preztiaos/contracts` es la **fuente única de verdad** del API. El mismo objeto:
 
@@ -423,7 +504,7 @@ export const creditContract = c.router({
 
 ---
 
-## 11. Flujo de un caso de uso: otorgar crédito
+## 12. Flujo de un caso de uso: otorgar crédito
 
 End-to-end, atravesando todas las capas:
 
@@ -458,7 +539,7 @@ sequenceDiagram
 
 ---
 
-## 12. El dominio: dinero y calendario de cuotas
+## 13. El dominio: dinero y calendario de cuotas
 
 ### `Money` — valor inmutable en centavos
 
@@ -484,11 +565,11 @@ flowchart LR
 
 > **Invariante:** `Σ amountDueMinor === total.amountMinor`. Es la primera prueba de dominio del proyecto ([schedule.test.ts](../packages/domain/src/credit/schedule.test.ts)).
 
-> ⚠️ **Convención de interés (base mil):** el dominio interpreta `interestPct` como *base-thousand* (`200` = 20,0%). El nombre del campo sugiere porcentaje simple; ver [Deuda técnica](#20-deuda-técnica-y-riesgos).
+> ⚠️ **Convención de interés (base mil):** el dominio interpreta `interestPct` como *base-thousand* (`200` = 20,0%). El nombre del campo sugiere porcentaje simple; ver [Deuda técnica](#21-deuda-técnica-y-riesgos).
 
 ---
 
-## 13. Clientes: app móvil/web (Expo)
+## 14. Clientes: app móvil/web (Expo)
 
 `apps/mobile` es **una sola base de código** que corre en **iOS, Android y Web** (Expo SDK 56 + Expo Router + `react-native-web`).
 
@@ -522,7 +603,7 @@ flowchart TB
 | **Emulador Android** | `http://10.0.2.2:3000` (localhost = el emulador) |
 | Dispositivo físico | IP LAN de la máquina vía `EXPO_PUBLIC_API_URL` |
 
-- **Monorepo + Metro:** `metro.config.js` con `watchFolders` a la raíz y `nodeModulesPaths` (reemplaza al `transpilePackages` de Next). Requiere `node-linker=hoisted` (ver §15).
+- **Monorepo + Metro:** `metro.config.js` con `watchFolders` a la raíz y `nodeModulesPaths` (reemplaza al `transpilePackages` de Next). Requiere `node-linker=hoisted` (ver §16).
 
 Arranque:
 
@@ -534,7 +615,7 @@ pnpm --filter @preztiaos/mobile android  # emulador Android
 
 ---
 
-## 14. Infraestructura local
+## 15. Infraestructura local
 
 `docker-compose.yml` levanta los tres servicios de respaldo:
 
@@ -567,7 +648,7 @@ pnpm db:down      # docker compose down
 
 ---
 
-## 15. Build, tooling y pipeline
+## 16. Build, tooling y pipeline
 
 - **Gestor:** pnpm 9 (workspaces). **Node ≥ 20** (.nvmrc / engines).
 - **Orquestador:** Turborepo ([turbo.json](../turbo.json)).
@@ -604,7 +685,7 @@ pnpm test
 
 ---
 
-## 16. Integración continua (CI)
+## 17. Integración continua (CI)
 
 Pipeline propuesto (GitHub Actions) con Postgres efímero como *service*:
 
@@ -626,7 +707,7 @@ Pasos: `install → typecheck → lint → test → build`, con `DATABASE_URL`/`
 
 ---
 
-## 17. Convenciones del proyecto
+## 18. Convenciones del proyecto
 
 | Tema | Convención |
 |---|---|
@@ -641,7 +722,7 @@ Pasos: `install → typecheck → lint → test → build`, con `DATABASE_URL`/`
 
 ---
 
-## 18. Bounded contexts y roadmap
+## 19. Bounded contexts y roadmap
 
 ```mermaid
 flowchart TB
@@ -677,7 +758,7 @@ flowchart TB
 
 ---
 
-## 19. Registro de decisiones (ADR)
+## 20. Registro de decisiones (ADR)
 
 Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `docs/adr/` cuando se necesite.
 
@@ -694,10 +775,11 @@ Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `doc
 | 9 | **`node-linker=hoisted`** | requisito de Metro/Expo para resolver el workspace | ✅ |
 | 10 | **Drizzle ORM + drizzle-kit** | schema tipado + migraciones; `customType` para `ltree` | ✅ |
 | 11 | **Identidad del tenant vía header (esqueleto)** | simplicidad inicial; migrará a JWT/subdominio | 🔄 provisional |
+| 12 | **Atributos de calidad como criterio de aceptación** ([§3](#3-atributos-de-calidad-y-estándares-de-código)) | SRP + código limpio/entendible/mantenible y corrección verificable obligatorios en todo algoritmo futuro | ✅ |
 
 ---
 
-## 20. Deuda técnica y riesgos
+## 21. Deuda técnica y riesgos
 
 | Ítem | Detalle | Acción sugerida |
 |---|---|---|
@@ -711,7 +793,7 @@ Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `doc
 
 ---
 
-## 21. Glosario
+## 22. Glosario
 
 | Término | Definición |
 |---|---|
@@ -727,4 +809,4 @@ Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `doc
 
 ---
 
-> **Cómo mantener este documento:** ante cada decisión relevante, añade una fila en [§19 ADR](#19-registro-de-decisiones-adr), actualiza el diagrama afectado y, si cambia el alcance, ajusta [§18 roadmap](#18-bounded-contexts-y-roadmap). Mantén la fecha de “última actualización” del encabezado.
+> **Cómo mantener este documento:** ante cada decisión relevante, añade una fila en [§20 ADR](#20-registro-de-decisiones-adr), actualiza el diagrama afectado y, si cambia el alcance, ajusta [§19 roadmap](#19-bounded-contexts-y-roadmap). Mantén la fecha de “última actualización” del encabezado.
