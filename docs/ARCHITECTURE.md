@@ -143,6 +143,30 @@ Un algoritmo es **correcto** solo si su corrección es **demostrable y verificad
 
 > En resumen: **no se mezcla responsabilidades, se escribe limpio y legible, se diseña para el cambio, y se prueba la corrección.** Cualquier código que no cumpla estos cuatro atributos se considera incompleto.
 
+### 3.7 Atributos de calidad del sistema (-ilities)
+
+Los §3.1–§3.6 son atributos a **nivel de código**. Esta sección añade los atributos a **nivel de sistema** que, por tratarse de una plataforma **fintech multi-tenant** (dinero, deudores, multiusuario), son tan obligatorios como los anteriores. Cada algoritmo o caso de uso futuro debe considerarlos y dejar explícita su estrategia.
+
+#### Críticos (dinero + multi-tenant)
+
+| Atributo | Qué exigimos (reglas accionables) | Estado / referencia |
+|---|---|---|
+| **Seguridad** | aislamiento por RLS `FORCE` + rol `app`; identidad del tenant desde **JWT** (no header spoofable), 401 si falta; authZ por rol y por subárbol de zonas (`ZoneScopeGuard`); secretos solo por entorno; validación en la frontera (zod) | ⚠️ RLS ✅; authN/authZ y tenant-por-JWT pendientes (§8, §21) |
+| **Auditabilidad / trazabilidad** | **todo movimiento de dinero y cambio de estado** se registra en un **audit log append-only** (quién, qué, cuándo, tenant); `correlationId` por petición; nada de borrar/editar historial financiero | ❌ por diseñar |
+| **Confiabilidad / idempotencia** | toda operación de dinero y todo webhook (WhatsApp) es **idempotente** (clave de idempotencia / `dedup`); reintentos seguros; consistencia transaccional (`withTenantTx`); sin doble cobro/abono | ⚠️ transacciones ✅; idempotencia pendiente |
+| **Integridad / corrección financiera** | invariantes de agregado (saldo nunca negativo, `Σ abonos ≤ total`, cuadre de caja); dinero en enteros (`Money`); invariantes verificados con pruebas (§3.6) | ⚠️ `Money` + cuadre de cuotas ✅; invariantes de agregado/caja pendientes |
+
+#### Operación
+
+| Atributo | Qué exigimos (reglas accionables) | Estado / referencia |
+|---|---|---|
+| **Observabilidad** | logs **estructurados** (JSON) con `tenantId` + `correlationId`; métricas de negocio y técnicas; *tracing* de extremo a extremo; sin PII en logs | ❌ por diseñar |
+| **Disponibilidad / resiliencia** | timeouts y **reintentos con backoff** hacia servicios externos (WhatsApp, mapas); *circuit breaker*; degradación elegante; colas (Redis) para desacoplar picos | ⚠️ Redis previsto; políticas pendientes |
+| **Rendimiento / escalabilidad** | índices adecuados (GiST en `ltree` ✅); **paginación obligatoria** en listados; evitar N+1; trabajo pesado (cobro masivo, notificaciones) a colas; *read models* (CQRS) para reportería | ⚠️ parcial (§9, §2 CQRS-ready) |
+| **Privacidad / cumplimiento** | datos personales de deudores y KYC: **cifrado en reposo** (MinIO), control de acceso, política de retención y minimización; no exponer PII en API/logs | ❌ por diseñar |
+
+> Estos atributos se conectan con la [§21 Deuda técnica](#21-deuda-técnica-y-riesgos): varios (validación de tenant, pruebas de aislamiento) ya están listados como pendientes y son la materialización de estas exigencias.
+
 ---
 
 ## 4. Vista de contexto (C4 nivel 1)
@@ -781,10 +805,14 @@ Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `doc
 
 ## 21. Deuda técnica y riesgos
 
+> 🔴 = **crítico**: bloqueante para producción por tocar dinero o aislamiento de tenants (ver [§3.7](#37-atributos-de-calidad-del-sistema--ilities)).
+
 | Ítem | Detalle | Acción sugerida |
 |---|---|---|
 | **Placeholders en el repo de crédito** | [credit.repository.ts](../apps/api/src/credit/credit.repository.ts) usa `borrowerId = zoneId = id` y valores fijos (`interestPct: 200`, fechas hardcodeadas) | propagar el `GrantCreditCommand` completo hasta el insert |
-| **Identidad de tenant por header** | `x-tenant-id` es spoofable; el middleware no rechaza si falta | extraer del JWT y exigir 401 sin tenant |
+| 🔴 **Identidad de tenant por header** (seguridad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | `x-tenant-id` es spoofable; el middleware no rechaza si falta. Riesgo de cruce de datos entre tenants | derivar el `tenantId` del **JWT** verificado (no del header del cliente); `tenantMiddleware` responde **401** si no hay tenant válido; mantener el header solo para entornos de prueba detrás de un flag |
+| 🔴 **Idempotencia ausente en dinero y webhooks** (confiabilidad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | reintentos de cliente, reenvíos de WhatsApp o reintentos de cola pueden **duplicar abonos/cobros**; hoy nada lo impide | exigir `Idempotency-Key` en endpoints de dinero y persistir resultado por clave (tabla `idempotency_key` o Redis con TTL); para WhatsApp, *dedup* por `message_id` del proveedor; los webhooks deben ser seguros ante reentrega |
+| 🔴 **Audit log inexistente** (auditabilidad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | no hay traza inmutable de quién hizo qué movimiento de dinero / cambio de estado; obligatorio en fintech | tabla `audit_log` **append-only** (`tenant_id`, actor, acción, entidad, antes/después, `correlation_id`, `ts`); escribir dentro de la misma transacción del cambio (`withTenantTx`); sin `UPDATE`/`DELETE` (revocar el permiso al rol `app`) |
 | **Semántica de `interestPct`** | el dominio lo trata como *base-mil* (200=20%), el nombre sugiere % simple | renombrar a `interestBaseThousand` o normalizar en la frontera |
 | **`tx: any` en `withTenantTx`** | se pierde el tipado de Drizzle dentro de la transacción | tipar con el tipo de transacción de Drizzle |
 | **RLS por tabla manual** | cada tabla nueva debe repetir el bloque `ENABLE/FORCE/POLICY` | helper SQL o generador para no olvidarlo |

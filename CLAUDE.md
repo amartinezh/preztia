@@ -28,6 +28,22 @@ Un algoritmo es correcto solo si se **demuestra**, no se asume:
 - **Fallo rápido** ante entradas inválidas (`DomainError`); sin estados silenciosamente incorrectos.
 - **Verde en CI**: typecheck + lint + test + build pasan.
 
+### Atributos de calidad del sistema (-ilities)
+
+Por ser una plataforma **fintech multi-tenant**, todo caso de uso debe considerar también estos atributos a nivel de sistema. Detalle en [§3.7](docs/ARCHITECTURE.md#37-atributos-de-calidad-del-sistema--ilities).
+
+**Críticos (dinero + multi-tenant):**
+- **Seguridad** → aislamiento por RLS; identidad del tenant desde **JWT** (nunca confiar en `x-tenant-id` del cliente), 401 si falta; authZ por rol y por subárbol de zonas; secretos solo por entorno.
+- **Auditabilidad** → todo movimiento de dinero y cambio de estado va a un **audit log append-only** (quién/qué/cuándo/tenant); nada de editar o borrar historial financiero.
+- **Confiabilidad / idempotencia** → toda operación de dinero y todo webhook (WhatsApp) es **idempotente** (clave de idempotencia); reintentos seguros; sin doble cobro/abono.
+- **Integridad financiera** → invariantes de agregado (saldo nunca negativo, `Σ abonos ≤ total`, cuadre de caja) verificados con pruebas.
+
+**Operación:**
+- **Observabilidad** → logs estructurados (JSON) con `tenantId` + `correlationId`; sin PII en logs.
+- **Disponibilidad / resiliencia** → timeouts y reintentos con backoff hacia servicios externos; degradación elegante; colas (Redis) para picos.
+- **Rendimiento / escalabilidad** → **paginación obligatoria** en listados; evitar N+1; trabajo pesado a colas; *read models* (CQRS) para reportería.
+- **Privacidad / cumplimiento** → cifrado en reposo del KYC (MinIO), retención y minimización; no exponer PII en API ni logs.
+
 ### Checklist antes de marcar algo como "listo"
 
 - [ ] Arrancó por **spec (Gherkin) → prueba de dominio → implementación**.
@@ -37,6 +53,10 @@ Un algoritmo es correcto solo si se **demuestra**, no se asume:
 - [ ] **Invariantes** enunciados y cubiertos por **pruebas**.
 - [ ] **Dinero en unidades menores** (entero), sin coma flotante.
 - [ ] Respeta **multitenancy**: toda escritura por `withTenantTx`; toda tabla de negocio lleva `tenant_id`.
+- [ ] Operaciones de dinero y webhooks son **idempotentes** (sin doble cobro/abono).
+- [ ] Movimientos de dinero / cambios de estado quedan en el **audit log** (append-only).
+- [ ] Listados con **paginación**; sin N+1; trabajo pesado a colas.
+- [ ] Logs estructurados con `correlationId`; **sin PII** en logs.
 - [ ] Sin números mágicos ni duplicación; errores explícitos; nombres reveladores.
 - [ ] Pasa **typecheck + lint + test + build**.
 
