@@ -14,6 +14,7 @@ const mediaObject = z.object({
   sha256: z.string().optional(),
   voice: z.boolean().optional(), // presente en audio
   caption: z.string().optional(), // presente en imagen
+  filename: z.string().optional(), // presente en document
 });
 
 const whatsappMessage = z
@@ -25,6 +26,7 @@ const whatsappMessage = z
     text: z.object({ body: z.string() }).optional(),
     audio: mediaObject.optional(),
     image: mediaObject.optional(),
+    document: mediaObject.optional(),
   })
   .passthrough();
 

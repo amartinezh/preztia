@@ -1,7 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { AudioMessage, ImageMessage, InboundMessage, TextMessage } from "@preztiaos/domain";
+import type {
+  AudioMessage,
+  DocumentMessage,
+  ImageMessage,
+  InboundMessage,
+  TextMessage,
+} from "@preztiaos/domain";
 import { ProcessInboundMessageHandler } from "./process-inbound-message";
-import type { AudioMessageDispatcher, ImageMessageDispatcher, TextMessageConsumer } from "./ports";
+import type {
+  AudioMessageDispatcher,
+  DocumentMessageDispatcher,
+  ImageMessageDispatcher,
+  TextMessageConsumer,
+} from "./ports";
 
 class SpyTextConsumer implements TextMessageConsumer {
   received: TextMessage[] = [];
@@ -15,6 +26,10 @@ class SpyImageDispatcher implements ImageMessageDispatcher {
   received: ImageMessage[] = [];
   async dispatch(m: ImageMessage) { this.received.push(m); }
 }
+class SpyDocumentDispatcher implements DocumentMessageDispatcher {
+  received: DocumentMessage[] = [];
+  async dispatch(m: DocumentMessage) { this.received.push(m); }
+}
 
 const base = { id: "wamid.1", from: "573001112233", channelId: "PNID", receivedAt: new Date(0) };
 
@@ -22,13 +37,15 @@ describe("ProcessInboundMessageHandler", () => {
   let text: SpyTextConsumer;
   let audio: SpyAudioDispatcher;
   let image: SpyImageDispatcher;
+  let document: SpyDocumentDispatcher;
   let handler: ProcessInboundMessageHandler;
 
   beforeEach(() => {
     text = new SpyTextConsumer();
     audio = new SpyAudioDispatcher();
     image = new SpyImageDispatcher();
-    handler = new ProcessInboundMessageHandler(text, audio, image);
+    document = new SpyDocumentDispatcher();
+    handler = new ProcessInboundMessageHandler(text, audio, image, document);
   });
 
   it("el texto va al consumidor de consola y a ningún otro destino", async () => {
@@ -53,5 +70,13 @@ describe("ProcessInboundMessageHandler", () => {
     expect(image.received).toEqual([msg]);
     expect(text.received).toHaveLength(0);
     expect(audio.received).toHaveLength(0);
+  });
+
+  it("el archivo adjunto (PDF) va al servicio de documentos", async () => {
+    const msg: InboundMessage = { ...base, kind: "document", media: { mediaId: "m3", mimeType: "application/pdf" } };
+    expect(await handler.execute(msg)).toBe("document-service");
+    expect(document.received).toEqual([msg]);
+    expect(image.received).toHaveLength(0);
+    expect(text.received).toHaveLength(0);
   });
 });

@@ -1,6 +1,7 @@
 import type { InboundMessage } from "@preztiaos/domain";
 import type {
   AudioMessageDispatcher,
+  DocumentMessageDispatcher,
   ImageMessageDispatcher,
   TextMessageConsumer,
 } from "./ports";
@@ -17,6 +18,7 @@ export class ProcessInboundMessageHandler {
     private readonly text: TextMessageConsumer,
     private readonly audio: AudioMessageDispatcher,
     private readonly image: ImageMessageDispatcher,
+    private readonly document: DocumentMessageDispatcher,
   ) {}
 
   async execute(message: InboundMessage): Promise<MessageDestination> {
@@ -29,6 +31,9 @@ export class ProcessInboundMessageHandler {
         return "audio-service";
       case "image":
         await this.image.dispatch(message);
+        return "document-service";
+      case "document":
+        await this.document.dispatch(message);
         return "document-service";
     }
   }

@@ -29,6 +29,20 @@
       "when": 1780783200000,
       "tag": "0003_tenant_config_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780804373744,
+      "tag": "0004_condemned_ghost_rider",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780804400000,
+      "tag": "0005_credit_application_rls",
+      "breakpoints": true
     }
   ]
 }

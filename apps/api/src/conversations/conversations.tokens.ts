@@ -5,9 +5,18 @@
 export const TEXT_CONSUMER = Symbol("TextMessageConsumer");
 export const AUDIO_DISPATCHER = Symbol("AudioMessageDispatcher");
 export const IMAGE_DISPATCHER = Symbol("ImageMessageDispatcher");
+export const DOCUMENT_DISPATCHER = Symbol("DocumentMessageDispatcher");
 
 // Caso de uso de texto (answer-text-message).
 export const CONFIG_REPOSITORY = Symbol("TenantAssistantConfigRepository");
 export const KNOWLEDGE_ASSISTANT = Symbol("KnowledgeAssistant");
 export const OUTBOUND_TEXT_SENDER = Symbol("OutboundTextSender");
 export const CREDIT_APPLICATION_STARTER = Symbol("CreditApplicationStarter");
+
+// Slice de solicitud de crédito (start/submit + antifraude + KYC).
+export const CREDIT_APPLICATION_REPOSITORY = Symbol("CreditApplicationRepository");
+export const MEDIA_DOWNLOADER = Symbol("MediaDownloader");
+export const DOCUMENT_STORAGE = Symbol("DocumentStorage");
+export const ANTIFRAUD_SERVICE = Symbol("AntifraudService");
+export const INBOUND_MESSAGE_DEDUPLICATOR = Symbol("InboundMessageDeduplicator");
+export const TENANT_RESOLVER = Symbol("TenantResolver");

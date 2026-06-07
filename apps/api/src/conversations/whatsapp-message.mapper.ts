@@ -49,8 +49,18 @@ function normalize(message: WhatsappMessage, channelId: string): InboundMessage 
           }
         : null;
 
+    case "document":
+      return message.document
+        ? {
+            ...base,
+            kind: "document",
+            media: toMediaRef(message.document),
+            ...(message.document.filename !== undefined ? { filename: message.document.filename } : {}),
+          }
+        : null;
+
     default:
-      return null; // documentos, ubicaciones, stickers, etc.: aún no soportados
+      return null; // ubicaciones, stickers, etc.: aún no soportados
   }
 }
 

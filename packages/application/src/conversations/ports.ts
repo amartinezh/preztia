@@ -1,4 +1,4 @@
-import type { AudioMessage, ImageMessage, TextMessage } from "@preztiaos/domain";
+import type { AudioMessage, DocumentMessage, ImageMessage, TextMessage } from "@preztiaos/domain";
 
 // Puertos de salida del caso de uso. Un destino por puerto (segregación de
 // interfaces): la infraestructura provee la implementación concreta de cada uno.
@@ -13,7 +13,12 @@ export interface AudioMessageDispatcher {
   dispatch(message: AudioMessage): Promise<void>;
 }
 
-/** La imagen se despacha al servicio de documentos (procesamiento futuro). */
+/** La imagen se despacha al servicio de documentos (posible documento KYC). */
 export interface ImageMessageDispatcher {
   dispatch(message: ImageMessage): Promise<void>;
+}
+
+/** El archivo adjunto (PDF, etc.) se despacha al servicio de documentos (posible documento KYC). */
+export interface DocumentMessageDispatcher {
+  dispatch(message: DocumentMessage): Promise<void>;
 }

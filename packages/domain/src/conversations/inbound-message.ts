@@ -2,7 +2,7 @@
 // Es el resultado de "clasificar": una unión discriminada por `kind` que el
 // caso de uso enruta a destinos distintos. El dominio no conoce HTTP ni Meta.
 
-export type MessageKind = "text" | "audio" | "image";
+export type MessageKind = "text" | "audio" | "image" | "document";
 
 export interface InboundMessageBase {
   /** id único del mensaje en el proveedor (wamid). Útil para idempotencia. */
@@ -41,4 +41,12 @@ export interface ImageMessage extends InboundMessageBase {
   readonly caption?: string;
 }
 
-export type InboundMessage = TextMessage | AudioMessage | ImageMessage;
+/** Archivo adjunto (p. ej. PDF de un certificado o recibo). */
+export interface DocumentMessage extends InboundMessageBase {
+  readonly kind: "document";
+  readonly media: MediaRef;
+  /** nombre original del archivo en el proveedor, si lo informa. */
+  readonly filename?: string;
+}
+
+export type InboundMessage = TextMessage | AudioMessage | ImageMessage | DocumentMessage;
