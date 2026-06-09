@@ -1,7 +1,7 @@
-import { Injectable } from "@nestjs/common";
-import { schema } from "@preztiaos/db";
-import { type InboundMessageDeduplicator } from "@preztiaos/application";
-import { withTenantTxFor } from "../tenancy/unit-of-work";
+import { Injectable } from '@nestjs/common';
+import { schema } from '@preztiaos/db';
+import { type InboundMessageDeduplicator } from '@preztiaos/application';
+import { withTenantTxFor } from '../tenancy/unit-of-work';
 
 /**
  * Adaptador del puerto InboundMessageDeduplicator: registra el wamid procesado por
@@ -10,7 +10,10 @@ import { withTenantTxFor } from "../tenancy/unit-of-work";
  */
 @Injectable()
 export class ProcessedInboundMessageDeduplicator implements InboundMessageDeduplicator {
-  async firstSeen(input: { tenantId: string; messageId: string }): Promise<boolean> {
+  async firstSeen(input: {
+    tenantId: string;
+    messageId: string;
+  }): Promise<boolean> {
     return withTenantTxFor(input.tenantId, async (tx) => {
       const inserted = await tx
         .insert(schema.processedInboundMessage)

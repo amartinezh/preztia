@@ -46,3 +46,16 @@ export interface OutboundTextSender {
 export interface CreditApplicationStarter {
   start(input: { tenantId: string; channelId: string; applicant: string }): Promise<void>;
 }
+
+/**
+ * Puerto: si el solicitante tiene una solicitud activa con documentos pendientes,
+ * devuelve un recordatorio (título del documento que falta) para insistir en la
+ * comunicación hasta lograr la completitud; null si no hay nada pendiente.
+ */
+export interface PendingDocumentReminder {
+  forApplicant(input: {
+    tenantId: string;
+    channelId: string;
+    applicant: string;
+  }): Promise<string | null>;
+}

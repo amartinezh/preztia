@@ -1,9 +1,12 @@
-import { Injectable } from "@nestjs/common";
-import { createHash } from "node:crypto";
-import { type DownloadedMedia, type MediaDownloader } from "@preztiaos/application";
-import { type MediaRef } from "@preztiaos/domain";
+import { Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import {
+  type DownloadedMedia,
+  type MediaDownloader,
+} from '@preztiaos/application';
+import { type MediaRef } from '@preztiaos/domain';
 
-const DEFAULT_GRAPH_VERSION = "v21.0";
+const DEFAULT_GRAPH_VERSION = 'v21.0';
 
 interface MediaUrlResponse {
   url?: string;
@@ -21,22 +24,29 @@ export class WhatsappMediaDownloader implements MediaDownloader {
     const token = this.requireToken();
     const version = process.env.WHATSAPP_GRAPH_VERSION ?? DEFAULT_GRAPH_VERSION;
 
-    const metaRes = await fetch(`https://graph.facebook.com/${version}/${media.mediaId}`, {
-      headers: { authorization: `Bearer ${token}` },
-    });
+    const metaRes = await fetch(
+      `https://graph.facebook.com/${version}/${media.mediaId}`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+      },
+    );
     if (!metaRes.ok) {
-      throw new Error(`Graph API (media url) respondió ${metaRes.status}: ${await metaRes.text()}`);
+      throw new Error(
+        `Graph API (media url) respondió ${metaRes.status}: ${await metaRes.text()}`,
+      );
     }
     const meta = (await metaRes.json()) as MediaUrlResponse;
-    if (!meta.url) throw new Error("Graph API no devolvió la URL del media");
+    if (!meta.url) throw new Error('Graph API no devolvió la URL del media');
 
-    const binRes = await fetch(meta.url, { headers: { authorization: `Bearer ${token}` } });
+    const binRes = await fetch(meta.url, {
+      headers: { authorization: `Bearer ${token}` },
+    });
     if (!binRes.ok) {
       throw new Error(`Descarga de media respondió ${binRes.status}`);
     }
 
     const bytes = new Uint8Array(await binRes.arrayBuffer());
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
     return {
       bytes,
       mimeType: meta.mime_type ?? media.mimeType,
@@ -47,7 +57,10 @@ export class WhatsappMediaDownloader implements MediaDownloader {
 
   private requireToken(): string {
     const token = process.env.WHATSAPP_ACCESS_TOKEN;
-    if (!token) throw new Error("WHATSAPP_ACCESS_TOKEN no configurado: no se puede descargar el media");
+    if (!token)
+      throw new Error(
+        'WHATSAPP_ACCESS_TOKEN no configurado: no se puede descargar el media',
+      );
     return token;
   }
 }

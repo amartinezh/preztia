@@ -1,12 +1,19 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { AssistantAnswer, TextMessage } from "@preztiaos/domain";
+import {
+  ASSISTANT_UNAVAILABLE_REPLY,
+  OFF_TOPIC_REPLY,
+  type AssistantAnswer,
+  type TextMessage,
+} from "@preztiaos/domain";
 import { AnswerTextMessageHandler } from "./answer-text-message";
+import type { InboundMessageDeduplicator } from "../../credit/application/ports";
 import type {
   AssistantRequest,
   CreditApplicationStarter,
   KnowledgeAssistant,
   OutboundRecipient,
   OutboundTextSender,
+  PendingDocumentReminder,
   TenantAssistantConfig,
   TenantAssistantConfigRepository,
 } from "./ports";
@@ -15,10 +22,21 @@ class FakeConfigRepo implements TenantAssistantConfigRepository {
   constructor(private readonly config: TenantAssistantConfig | null) {}
   async findByChannelId() { return this.config; }
 }
+class FakeDedup implements InboundMessageDeduplicator {
+  seen: { tenantId: string; messageId: string }[] = [];
+  constructor(private readonly first: boolean = true) {}
+  async firstSeen(input: { tenantId: string; messageId: string }) {
+    this.seen.push(input);
+    return this.first;
+  }
+}
 class StubAssistant implements KnowledgeAssistant {
   requests: AssistantRequest[] = [];
   constructor(private readonly result: AssistantAnswer) {}
   async answer(req: AssistantRequest) { this.requests.push(req); return this.result; }
+}
+class FailingAssistant implements KnowledgeAssistant {
+  async answer(): Promise<AssistantAnswer> { throw new Error("Gemini respondió 429"); }
 }
 class SpySender implements OutboundTextSender {
   sent: { to: OutboundRecipient; body: string }[] = [];
@@ -27,6 +45,10 @@ class SpySender implements OutboundTextSender {
 class SpyCreditStarter implements CreditApplicationStarter {
   started: { tenantId: string; channelId: string; applicant: string }[] = [];
   async start(input: { tenantId: string; channelId: string; applicant: string }) { this.started.push(input); }
+}
+class StubReminder implements PendingDocumentReminder {
+  constructor(private readonly reminder: string | null = null) {}
+  async forApplicant() { return this.reminder; }
 }
 
 const config: TenantAssistantConfig = {
@@ -45,8 +67,7 @@ const message: TextMessage = {
 };
 const answer = (over: Partial<AssistantAnswer> = {}): AssistantAnswer => ({
   reply: "La cuota diaria es de $10.000.",
-  inScope: true,
-  creditIntent: "none",
+  classification: "knowledge_question",
   ...over,
 });
 
@@ -58,33 +79,74 @@ describe("AnswerTextMessageHandler", () => {
     credit = new SpyCreditStarter();
   });
 
-  it("responde usando la base de conocimiento y no inicia solicitud si no hay intención", async () => {
-    const assistant = new StubAssistant(answer());
-    const handler = new AnswerTextMessageHandler(new FakeConfigRepo(config), assistant, sender, credit);
+  const handlerWith = (
+    assistant: KnowledgeAssistant,
+    opts: { reminder?: StubReminder; dedup?: FakeDedup } = {},
+  ) =>
+    new AnswerTextMessageHandler(
+      new FakeConfigRepo(config),
+      opts.dedup ?? new FakeDedup(),
+      assistant,
+      sender,
+      credit,
+      opts.reminder ?? new StubReminder(),
+    );
 
-    await handler.execute(message);
+  it("A: responde una pregunta de conocimiento sin iniciar solicitud", async () => {
+    await handlerWith(new StubAssistant(answer())).execute(message);
 
-    expect(assistant.requests[0]?.knowledgeBase).toBe(config.knowledgeBase);
-    expect(sender.sent).toEqual([{ to: { channelId: "PNID", recipient: "573001112233" }, body: "La cuota diaria es de $10.000." }]);
+    expect(sender.sent).toEqual([
+      { to: { channelId: "PNID", recipient: "573001112233" }, body: "La cuota diaria es de $10.000." },
+    ]);
     expect(credit.started).toHaveLength(0);
   });
 
-  it("inicia la solicitud de crédito cuando el usuario está listo para aplicar", async () => {
-    const assistant = new StubAssistant(answer({ reply: "¡Genial! Iniciemos.", creditIntent: "ready_to_apply" }));
-    const handler = new AnswerTextMessageHandler(new FakeConfigRepo(config), assistant, sender, credit);
+  it("B: inicia la solicitud de crédito y delega el mensaje al protocolo", async () => {
+    await handlerWith(new StubAssistant(answer({ classification: "credit_application" }))).execute(message);
 
-    await handler.execute(message);
-
-    expect(sender.sent).toHaveLength(1);
+    expect(sender.sent).toHaveLength(0); // el protocolo envía su propio mensaje
     expect(credit.started).toEqual([{ tenantId: config.tenantId, channelId: "PNID", applicant: "573001112233" }]);
+  });
+
+  it("C: ante un tema fuera de alcance responde el aviso cordial fijo", async () => {
+    await handlerWith(new StubAssistant(answer({ classification: "off_topic", reply: "no debería usarse" }))).execute(message);
+
+    expect(sender.sent[0]?.body).toBe(OFF_TOPIC_REPLY);
+    expect(credit.started).toHaveLength(0);
+  });
+
+  it("insiste: con solicitud activa, anexa el recordatorio del documento pendiente", async () => {
+    await handlerWith(new StubAssistant(answer()), { reminder: new StubReminder("Aún falta: Envíame tu cédula.") }).execute(message);
+
+    expect(sender.sent[0]?.body).toBe("La cuota diaria es de $10.000.\n\nAún falta: Envíame tu cédula.");
+  });
+
+  it("idempotencia: no reprocesa un wamid ya visto (no llama a la IA ni responde)", async () => {
+    const assistant = new StubAssistant(answer());
+    await handlerWith(assistant, { dedup: new FakeDedup(false) }).execute(message);
+
+    expect(assistant.requests).toHaveLength(0);
+    expect(sender.sent).toHaveLength(0);
+    expect(credit.started).toHaveLength(0);
+  });
+
+  it("degradación elegante: si la IA falla, avisa al usuario sin escalar el error", async () => {
+    await handlerWith(new FailingAssistant()).execute(message);
+
+    expect(sender.sent[0]?.body).toBe(ASSISTANT_UNAVAILABLE_REPLY);
+    expect(credit.started).toHaveLength(0);
   });
 
   it("no hace nada si el canal no está configurado o falta la credencial de IA", async () => {
     const assistant = new StubAssistant(answer());
-    const handler = new AnswerTextMessageHandler(new FakeConfigRepo(null), assistant, sender, credit);
+    const dedup = new FakeDedup();
+    const handler = new AnswerTextMessageHandler(
+      new FakeConfigRepo(null), dedup, assistant, sender, credit, new StubReminder(),
+    );
 
     await handler.execute(message);
 
+    expect(dedup.seen).toHaveLength(0); // ni siquiera intenta deduplicar
     expect(assistant.requests).toHaveLength(0);
     expect(sender.sent).toHaveLength(0);
     expect(credit.started).toHaveLength(0);

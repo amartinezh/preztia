@@ -16,6 +16,7 @@ Todo algoritmo, caso de uso o módulo que generes **debe** cumplir estos cuatro 
    - **Dominio (`Money`, `buildSchedule`)** → reglas puras e invariantes; no conoce I/O, NestJS, Drizzle ni HTTP.
    - **Repositorio (`*Repository`)** → traduce dominio ↔ persistencia; no contiene reglas de negocio.
    - 🚨 Alarma: nombres con "y"/`Manager`/`Util` genéricos, funciones >~40 líneas, una clase que importa de capas distintas.
+   - Manejo de Errores (Frontera): El Controller NO usa bloques try/catch para atrapar DomainError. Estos se delegan a los Exception Filters globales de NestJS para su traducción a códigos HTTP (400, 404, 409).
 2. **Código limpio.** Nombres reveladores de intención; funciones pequeñas de un solo nivel de abstracción; sin números mágicos (constantes con nombre); sin duplicación (DRY, reuso vía `packages/*`); errores explícitos (`DomainError`, nunca `catch` vacío); inmutabilidad por defecto.
 3. **Código entendible.** Se lee como narración del caso de uso; comentarios explican el *porqué*, no el *qué*; tipos explícitos en fronteras públicas, evitar `any`; un *slice* nuevo replica la estructura del de crédito.
 4. **Código mantenible.** Bajo acoplamiento / alta cohesión vía inversión de dependencias; dependencias solo "hacia abajo" (apps → packages, application → domain); todo cambio de comportamiento se cubre con prueba; configuración fuera del código (`.env`).
@@ -68,6 +69,8 @@ Por ser una plataforma **fintech multi-tenant**, todo caso de uso debe considera
 - **Contract-first.** `@preztiaos/contracts` (ts-rest + zod) es la fuente única de tipos del API; servidor y clientes derivan de ahí. La validación de entrada vive en el contrato.
 - **Multitenancy con RLS.** Aislamiento garantizado por PostgreSQL (RLS `FORCE` + rol `app` `NOBYPASSRLS`). Toda escritura va por `withTenantTx`; nunca confiar solo en que el código "recuerde" filtrar.
 - **Dependencias solo hacia abajo:** `domain → config`; `application → domain, config`; `contracts/db → config`; `api → application, contracts, db`; `mobile → contracts`.
+- **Cero Alucinaciones de Dependencias:** NO agregues, sugieras ni instales nuevos paquetes (npm/pnpm) sin autorización explícita. Usa las herramientas ya existentes en el monorepo (ej. zod para validación, no introduzcas yup o class-validator).
+- **Modificaciones Quirúrgicas:** Al modificar código existente, cambia solo lo necesario para cumplir el requerimiento. Evita refactorizaciones cosméticas de código adyacente a menos que se solicite expresamente.
 
 ## Convenciones
 
@@ -79,6 +82,7 @@ Por ser una plataforma **fintech multi-tenant**, todo caso de uso debe considera
 - **Fechas:** `timestamptz` para auditoría; `date` para fechas de negocio.
 - **Imports de Node:** explícitos (`node:crypto`).
 - **Idioma:** dominio y comentarios en español; identificadores de código en inglés.
+- **Esquema de BD:** Todo cambio en la estructura de la base de datos se realiza modificando los archivos de esquema de Drizzle en el paquete correspondiente. NUNCA generes SQL crudo (DDL) a mano; indícame que ejecute pnpm db:generate.
 
 ## Comandos
 

@@ -1,8 +1,14 @@
-import { Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
-import { schema } from "@preztiaos/db";
-import { TenantAssistantConfig, TenantAssistantConfigRepository } from "@preztiaos/application";
-import { resolveTenantByWhatsappPhone, withTenantTxFor } from "../../tenancy/unit-of-work";
+import { Injectable } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
+import { schema } from '@preztiaos/db';
+import {
+  TenantAssistantConfig,
+  TenantAssistantConfigRepository,
+} from '@preztiaos/application';
+import {
+  resolveTenantByWhatsappPhone,
+  withTenantTxFor,
+} from '../../tenancy/unit-of-work';
 
 /**
  * Adaptador: carga la configuración del asistente desde la BD.
@@ -11,7 +17,9 @@ import { resolveTenantByWhatsappPhone, withTenantTxFor } from "../../tenancy/uni
  */
 @Injectable()
 export class TenantConfigDrizzleRepository implements TenantAssistantConfigRepository {
-  async findByChannelId(channelId: string): Promise<TenantAssistantConfig | null> {
+  async findByChannelId(
+    channelId: string,
+  ): Promise<TenantAssistantConfig | null> {
     const tenantId = await resolveTenantByWhatsappPhone(channelId);
     if (!tenantId) return null;
 

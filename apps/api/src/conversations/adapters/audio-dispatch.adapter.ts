@@ -1,6 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { AudioMessageDispatcher } from "@preztiaos/application";
-import { AudioMessage } from "@preztiaos/domain";
+import { Injectable, Logger } from '@nestjs/common';
+import { AudioMessageDispatcher } from '@preztiaos/application';
+import { AudioMessage } from '@preztiaos/domain';
 
 /**
  * Adaptador: prepara los audios para el servicio de transcripción.
@@ -11,7 +11,7 @@ import { AudioMessage } from "@preztiaos/domain";
  */
 @Injectable()
 export class AudioDispatchAdapter implements AudioMessageDispatcher {
-  private readonly logger = new Logger("WhatsApp:Audio");
+  private readonly logger = new Logger('WhatsApp:Audio');
 
   async dispatch(message: AudioMessage): Promise<void> {
     // TODO: encolar { mediaId, mimeType, from, channelId } hacia el servicio de transcripción.

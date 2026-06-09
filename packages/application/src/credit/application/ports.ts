@@ -1,7 +1,9 @@
 import type {
   CreditApplication,
+  DocumentReviewDecision,
   FraudAssessment,
   MediaRef,
+  RequiredDocumentSpec,
   RequiredDocumentType,
 } from "@preztiaos/domain";
 
@@ -45,10 +47,13 @@ export interface DocumentOutcome {
   readonly applicationId: string;
   readonly documentType: RequiredDocumentType;
   readonly mediaId: string;
-  readonly storageKey: string;
+  /** clave de almacenamiento; null cuando el documento fue rechazado y NO se guardó. */
+  readonly storageKey: string | null;
   readonly mimeType: string;
   readonly sha256: string;
   readonly assessment: FraudAssessment;
+  /** true si se aceptó por insistencia y queda marcado para revisión manual. */
+  readonly manualReview: boolean;
   /** estado resultante del agregado tras registrar este documento. */
   readonly application: CreditApplication;
 }
@@ -65,6 +70,30 @@ export interface CreditApplicationRepository {
    * la misma transacción.
    */
   saveDocumentOutcome(outcome: DocumentOutcome): Promise<void>;
+}
+
+/**
+ * Puerto: catálogo de documentos requeridos por tenant. Es la fuente de qué
+ * documentos se piden, en qué orden y con qué título/descripción. La infraestructura
+ * lo lee de la tabla `credit_document_requirement` bajo RLS.
+ */
+export interface RequiredDocumentCatalog {
+  /** Documentos requeridos activos del tenant, en el orden en que se solicitan. */
+  listRequested(tenantId: string): Promise<readonly RequiredDocumentSpec[]>;
+}
+
+/**
+ * Puerto: se invoca cuando una solicitud reúne TODOS sus documentos (completitud).
+ * Hoy solo deja constancia (observabilidad); más adelante disparará el siguiente
+ * paso del flujo (revisión, notificaciones, colas).
+ */
+export interface ApplicationCompletionNotifier {
+  onCompleted(input: {
+    tenantId: string;
+    applicationId: string;
+    /** teléfono del solicitante (E.164 sin '+'). */
+    applicant: string;
+  }): Promise<void>;
 }
 
 /** Puerto: descarga el binario de un media desde el proveedor (Graph API). */
@@ -95,6 +124,37 @@ export interface AntifraudInput {
 /** Puerto: servicio antifraude que valida un documento entrante. */
 export interface AntifraudService {
   assess(input: AntifraudInput): Promise<FraudAssessment>;
+}
+
+/** Contexto del documento entrante a revisar (lo que la IA necesita para identificarlo). */
+export interface DocumentReviewJob {
+  readonly tenantId: string;
+  readonly applicationId: string;
+  readonly documentType: RequiredDocumentType;
+  /** teléfono (E.164 sin '+') desde el que se envió el documento. */
+  readonly applicantPhone: string;
+  readonly mediaId: string;
+  /** especificación del catálogo (título/descripción, caso Brasil) para guiar a la IA. */
+  readonly spec?: RequiredDocumentSpec;
+  /** binario ya descargado del documento. */
+  readonly media: DownloadedMedia;
+}
+
+/** Resultado de revisar el documento: la decisión (dominio) + contexto para el mensaje. */
+export interface DocumentReviewResult {
+  readonly decision: DocumentReviewDecision;
+  /** qué identificó la IA (texto libre), o null si no lo reconoció / no se ejecutó. */
+  readonly identifiedType: string | null;
+}
+
+/**
+ * Puerto: revisa un documento entrante. La implementación (1) cuenta cuántas veces el
+ * documento ya no coincidió, (2) lo identifica con IA y persiste la extracción para
+ * trazabilidad (best-effort), y (3) aplica la regla `decideDocumentReview` del dominio
+ * con el máximo de intentos configurado. El proveedor de IA es configurable por tenant.
+ */
+export interface DocumentReviewer {
+  review(job: DocumentReviewJob, structural: FraudAssessment): Promise<DocumentReviewResult>;
 }
 
 /** Puerto: idempotencia de webhooks — registra el mensaje y dice si es la primera vez. */

@@ -1,6 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { AnswerTextMessageHandler, TextMessageConsumer } from "@preztiaos/application";
-import { TextMessage } from "@preztiaos/domain";
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  AnswerTextMessageHandler,
+  TextMessageConsumer,
+} from '@preztiaos/application';
+import { TextMessage } from '@preztiaos/domain';
 
 /**
  * Adaptador del puerto TextMessageConsumer: muestra el texto entrante en consola
@@ -8,7 +11,7 @@ import { TextMessage } from "@preztiaos/domain";
  */
 @Injectable()
 export class WhatsappTextConsumer implements TextMessageConsumer {
-  private readonly logger = new Logger("WhatsApp:Text");
+  private readonly logger = new Logger('WhatsApp:Text');
 
   constructor(private readonly answer: AnswerTextMessageHandler) {}
 

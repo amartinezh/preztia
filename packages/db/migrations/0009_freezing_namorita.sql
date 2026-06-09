@@ -1,0 +1,1 @@
+ALTER TABLE "credit_application_document" ADD COLUMN "manual_review" boolean DEFAULT false NOT NULL;

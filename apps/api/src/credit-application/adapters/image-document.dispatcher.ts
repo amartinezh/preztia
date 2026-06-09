@@ -1,6 +1,9 @@
-import { Injectable } from "@nestjs/common";
-import { type ImageMessageDispatcher, SubmitApplicationDocumentHandler } from "@preztiaos/application";
-import { type ImageMessage } from "@preztiaos/domain";
+import { Injectable } from '@nestjs/common';
+import {
+  type ImageMessageDispatcher,
+  SubmitApplicationDocumentHandler,
+} from '@preztiaos/application';
+import { type ImageMessage } from '@preztiaos/domain';
 
 /**
  * Adaptador del puerto ImageMessageDispatcher: una imagen entrante puede ser un

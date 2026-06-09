@@ -1,7 +1,7 @@
-import { Injectable } from "@nestjs/common";
-import { AssistantRequest, KnowledgeAssistant } from "@preztiaos/application";
-import { AssistantAnswer } from "@preztiaos/domain";
-import { askGemini } from "./gemini.client";
+import { Injectable } from '@nestjs/common';
+import { AssistantRequest, KnowledgeAssistant } from '@preztiaos/application';
+import { AssistantAnswer } from '@preztiaos/domain';
+import { askGemini } from './gemini.client';
 
 /**
  * Adaptador del puerto KnowledgeAssistant: despacha al proveedor configurado por
@@ -11,11 +11,13 @@ import { askGemini } from "./gemini.client";
 export class KnowledgeAssistantRouter implements KnowledgeAssistant {
   async answer(request: AssistantRequest): Promise<AssistantAnswer> {
     switch (request.provider) {
-      case "GEMINI":
+      case 'GEMINI':
         return askGemini(request);
-      case "OPENAI":
-      case "CLAUDE":
-        throw new Error(`Proveedor de IA '${request.provider}' aún no implementado (la Fase 1 usa GEMINI)`);
+      case 'OPENAI':
+      case 'CLAUDE':
+        throw new Error(
+          `Proveedor de IA '${request.provider}' aún no implementado (la Fase 1 usa GEMINI)`,
+        );
     }
   }
 }

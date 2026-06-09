@@ -1,12 +1,14 @@
-import { InboundMessage, MediaRef } from "@preztiaos/domain";
-import { WhatsappMessage, WhatsappWebhookEvent } from "@preztiaos/contracts";
+import { InboundMessage, MediaRef } from '@preztiaos/domain';
+import { WhatsappMessage, WhatsappWebhookEvent } from '@preztiaos/contracts';
 
 /**
  * Adaptador de normalización: traduce el payload de WhatsApp Cloud API a la
  * unión discriminada del dominio. Los tipos de mensaje no soportados se omiten
  * (el webhook igualmente responde 200 para que Meta no reintente).
  */
-export function toInboundMessages(event: WhatsappWebhookEvent): InboundMessage[] {
+export function toInboundMessages(
+  event: WhatsappWebhookEvent,
+): InboundMessage[] {
   const result: InboundMessage[] = [];
 
   for (const entry of event.entry) {
@@ -22,7 +24,10 @@ export function toInboundMessages(event: WhatsappWebhookEvent): InboundMessage[]
   return result;
 }
 
-function normalize(message: WhatsappMessage, channelId: string): InboundMessage | null {
+function normalize(
+  message: WhatsappMessage,
+  channelId: string,
+): InboundMessage | null {
   const base = {
     id: message.id,
     from: message.from,
@@ -31,31 +36,42 @@ function normalize(message: WhatsappMessage, channelId: string): InboundMessage 
   };
 
   switch (message.type) {
-    case "text":
-      return message.text ? { ...base, kind: "text", body: message.text.body } : null;
-
-    case "audio":
-      return message.audio
-        ? { ...base, kind: "audio", media: toMediaRef(message.audio), voice: message.audio.voice ?? false }
+    case 'text':
+      return message.text
+        ? { ...base, kind: 'text', body: message.text.body }
         : null;
 
-    case "image":
-      return message.image
+    case 'audio':
+      return message.audio
         ? {
             ...base,
-            kind: "image",
-            media: toMediaRef(message.image),
-            ...(message.image.caption !== undefined ? { caption: message.image.caption } : {}),
+            kind: 'audio',
+            media: toMediaRef(message.audio),
+            voice: message.audio.voice ?? false,
           }
         : null;
 
-    case "document":
+    case 'image':
+      return message.image
+        ? {
+            ...base,
+            kind: 'image',
+            media: toMediaRef(message.image),
+            ...(message.image.caption !== undefined
+              ? { caption: message.image.caption }
+              : {}),
+          }
+        : null;
+
+    case 'document':
       return message.document
         ? {
             ...base,
-            kind: "document",
+            kind: 'document',
             media: toMediaRef(message.document),
-            ...(message.document.filename !== undefined ? { filename: message.document.filename } : {}),
+            ...(message.document.filename !== undefined
+              ? { filename: message.document.filename }
+              : {}),
           }
         : null;
 
@@ -64,7 +80,11 @@ function normalize(message: WhatsappMessage, channelId: string): InboundMessage 
   }
 }
 
-function toMediaRef(media: { id: string; mime_type: string; sha256?: string }): MediaRef {
+function toMediaRef(media: {
+  id: string;
+  mime_type: string;
+  sha256?: string;
+}): MediaRef {
   return {
     mediaId: media.id,
     mimeType: media.mime_type,

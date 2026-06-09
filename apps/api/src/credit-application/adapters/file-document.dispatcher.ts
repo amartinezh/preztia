@@ -1,6 +1,9 @@
-import { Injectable } from "@nestjs/common";
-import { type DocumentMessageDispatcher, SubmitApplicationDocumentHandler } from "@preztiaos/application";
-import { type DocumentMessage } from "@preztiaos/domain";
+import { Injectable } from '@nestjs/common';
+import {
+  type DocumentMessageDispatcher,
+  SubmitApplicationDocumentHandler,
+} from '@preztiaos/application';
+import { type DocumentMessage } from '@preztiaos/domain';
 
 /**
  * Adaptador del puerto DocumentMessageDispatcher: un archivo adjunto (PDF, etc.)

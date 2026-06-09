@@ -55,17 +55,17 @@ export function isComplete(app: CreditApplication): boolean {
 }
 
 /**
- * Registra el veredicto antifraude de un documento.
- * - approved → VALIDATED; si con eso se completa el checklist, la solicitud pasa a IN_REVIEW.
- * - suspicious/rejected → REJECTED (se pedirá reenvío); la solicitud sigue AWAITING_DOCUMENTS.
+ * Registra el resultado de revisar un documento.
+ * - accepted → VALIDATED; si con eso se completa el checklist, la solicitud pasa a IN_REVIEW.
+ * - !accepted → REJECTED (se pedirá reenvío); la solicitud sigue AWAITING_DOCUMENTS.
  *
  * Idempotencia: si el documento ya estaba VALIDATED, se devuelve la solicitud sin cambios
  * (un reenvío del mismo o un webhook reentregado no degrada el estado).
  */
-export function recordDocumentOutcome(
+export function recordDocumentResult(
   app: CreditApplication,
   type: RequiredDocumentType,
-  assessment: FraudAssessment,
+  accepted: boolean,
 ): CreditApplication {
   const target = app.documents.find((doc) => doc.type === type);
   if (!target) {
@@ -73,11 +73,24 @@ export function recordDocumentOutcome(
   }
   if (target.status === "VALIDATED") return app; // idempotente
 
-  const newStatus: DocumentStatus = isAcceptable(assessment) ? "VALIDATED" : "REJECTED";
+  const newStatus: DocumentStatus = accepted ? "VALIDATED" : "REJECTED";
   const documents = app.documents.map((doc) =>
     doc.type === type ? { ...doc, status: newStatus } : doc,
   );
   const updated: CreditApplication = { ...app, documents };
 
   return { ...updated, status: isComplete(updated) ? "IN_REVIEW" : "AWAITING_DOCUMENTS" };
+}
+
+/**
+ * Registra el veredicto antifraude estructural de un documento (atajo histórico):
+ * acepta si el veredicto es aceptable. La identificación por IA se decide aparte
+ * (ver `decideDocumentReview`) y se materializa con `recordDocumentResult`.
+ */
+export function recordDocumentOutcome(
+  app: CreditApplication,
+  type: RequiredDocumentType,
+  assessment: FraudAssessment,
+): CreditApplication {
+  return recordDocumentResult(app, type, isAcceptable(assessment));
 }

@@ -5,6 +5,7 @@ import {
   text,
   integer,
   jsonb,
+  boolean,
   timestamp,
   pgEnum,
   uniqueIndex,
@@ -77,6 +78,9 @@ export const creditApplicationDocument = pgTable(
     // Veredicto antifraude (auditable). 0..100; mayor = más riesgo.
     fraudScore: integer("fraud_score"),
     fraudReasons: jsonb("fraud_reasons").$type<string[]>(),
+    // true si el documento se aceptó por insistencia del solicitante (la IA no lo
+    // reconoció como el esperado) y queda marcado para revisión manual del analista.
+    manualReview: boolean("manual_review").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
