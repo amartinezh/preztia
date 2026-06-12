@@ -46,6 +46,7 @@ class FakeRepo implements CreditApplicationRepository {
   constructor(private readonly active: ActiveCreditApplication | null) {}
   async findActiveByApplicant(_: ApplicantRef) { return this.active; }
   async create() { return "app-1"; }
+  async reset() {}
   async saveDocumentOutcome(o: DocumentOutcome) { this.saved.push(o); }
 }
 class FakeCatalog implements RequiredDocumentCatalog {

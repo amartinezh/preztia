@@ -4,3 +4,8 @@ export * from "./tenant-config";
 export * from "./credit-application";
 export * from "./required-document-catalog";
 export * from "./document-extraction";
+export * from "./conversation-message";
+export * from "./installment";
+export * from "./payment";
+export * from "./borrower-contact";
+export * from "./tenant-bank-account";

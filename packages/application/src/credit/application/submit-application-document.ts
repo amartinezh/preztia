@@ -12,6 +12,7 @@ import type {
   CreditApplicationRepository,
   DocumentReviewer,
   DocumentStorage,
+  DownloadedMedia,
   InboundMessageDeduplicator,
   MediaDownloader,
   RequiredDocumentCatalog,
@@ -24,6 +25,14 @@ export interface SubmitDocumentCommand {
   readonly channelId: string;
   readonly applicant: string;
   readonly media: MediaRef;
+  /**
+   * Presente cuando el enrutador de media ya resolvió tenant, deduplicó y descargó
+   * el binario: el handler salta esas etapas para no repetir trabajo ni I/O.
+   */
+  readonly prepared?: {
+    readonly tenantId: string;
+    readonly downloaded: DownloadedMedia;
+  };
 }
 
 const COMPLETED =
@@ -52,10 +61,13 @@ export class SubmitApplicationDocumentHandler {
   ) {}
 
   async execute(cmd: SubmitDocumentCommand): Promise<void> {
-    const tenantId = await this.tenants.resolveByChannel(cmd.channelId);
+    const tenantId = cmd.prepared?.tenantId ?? (await this.tenants.resolveByChannel(cmd.channelId));
     if (!tenantId) return; // canal no asociado a ningún tenant
 
-    if (!(await this.dedup.firstSeen({ tenantId, messageId: cmd.messageId }))) return; // ya procesado
+    // El enrutador de media ya deduplicó cuando viene `prepared`.
+    if (!cmd.prepared && !(await this.dedup.firstSeen({ tenantId, messageId: cmd.messageId }))) {
+      return; // ya procesado
+    }
 
     const applicant = { tenantId, channelId: cmd.channelId, applicant: cmd.applicant };
     const active = await this.applications.findActiveByApplicant(applicant);
@@ -69,7 +81,7 @@ export class SubmitApplicationDocumentHandler {
     const recipient = { channelId: cmd.channelId, recipient: cmd.applicant };
 
     // 1) Descargar y validar estructuralmente (formato/tamaño/reuso) sobre los metadatos.
-    const media = await this.downloader.download(cmd.media);
+    const media = cmd.prepared?.downloaded ?? (await this.downloader.download(cmd.media));
     const structural = await this.antifraud.assess({
       tenantId,
       applicationId: active.id,

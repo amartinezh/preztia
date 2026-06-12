@@ -11,6 +11,8 @@ export const grantCreditInput = z.object({
   principalMinor: z.number().int().positive(),
   interestPct: z.number().nonnegative(),
   installmentsCount: z.number().int().positive(),
+  // Teléfono WhatsApp del deudor (E.164 sin '+'): habilita el abono de pagos PIX.
+  borrowerPhone: z.string().regex(/^\d{8,15}$/).optional(),
 });
 export type GrantCreditInput = z.infer<typeof grantCreditInput>;
 

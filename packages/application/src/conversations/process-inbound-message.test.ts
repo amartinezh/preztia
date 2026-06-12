@@ -9,6 +9,7 @@ import type {
 import { ProcessInboundMessageHandler } from "./process-inbound-message";
 import type {
   AudioMessageDispatcher,
+  ConversationLog,
   DocumentMessageDispatcher,
   ImageMessageDispatcher,
   TextMessageConsumer,
@@ -30,6 +31,11 @@ class SpyDocumentDispatcher implements DocumentMessageDispatcher {
   received: DocumentMessage[] = [];
   async dispatch(m: DocumentMessage) { this.received.push(m); }
 }
+class SpyConversationLog implements ConversationLog {
+  inbound: InboundMessage[] = [];
+  async recordInbound(m: InboundMessage) { this.inbound.push(m); }
+  async recordOutbound() {}
+}
 
 const base = { id: "wamid.1", from: "573001112233", channelId: "PNID", receivedAt: new Date(0) };
 
@@ -38,6 +44,7 @@ describe("ProcessInboundMessageHandler", () => {
   let audio: SpyAudioDispatcher;
   let image: SpyImageDispatcher;
   let document: SpyDocumentDispatcher;
+  let log: SpyConversationLog;
   let handler: ProcessInboundMessageHandler;
 
   beforeEach(() => {
@@ -45,7 +52,14 @@ describe("ProcessInboundMessageHandler", () => {
     audio = new SpyAudioDispatcher();
     image = new SpyImageDispatcher();
     document = new SpyDocumentDispatcher();
-    handler = new ProcessInboundMessageHandler(text, audio, image, document);
+    log = new SpyConversationLog();
+    handler = new ProcessInboundMessageHandler(text, audio, image, document, log);
+  });
+
+  it("registra cada mensaje entrante en el transcript", async () => {
+    const msg: InboundMessage = { ...base, kind: "text", body: "hola" };
+    await handler.execute(msg);
+    expect(log.inbound).toEqual([msg]);
   });
 
   it("el texto va al consumidor de consola y a ningún otro destino", async () => {

@@ -91,6 +91,38 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
     });
   }
 
+  async reset(input: { tenantId: string; applicationId: string }): Promise<void> {
+    await withTenantTxFor(input.tenantId, async (tx) => {
+      // Vuelve todos los documentos a PENDING, limpiando los datos KYC previos.
+      await tx
+        .update(schema.creditApplicationDocument)
+        .set({
+          status: 'PENDING',
+          mediaId: null,
+          storageKey: null,
+          mimeType: null,
+          sha256: null,
+          fraudScore: null,
+          fraudReasons: null,
+          manualReview: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.creditApplicationDocument.applicationId, input.applicationId));
+
+      await tx
+        .update(schema.creditApplication)
+        .set({ status: 'AWAITING_DOCUMENTS', updatedAt: new Date() })
+        .where(eq(schema.creditApplication.id, input.applicationId));
+
+      await tx.insert(schema.creditApplicationEvent).values({
+        tenantId: input.tenantId,
+        applicationId: input.applicationId,
+        type: 'APPLICATION_RESTARTED',
+        payload: null,
+      });
+    });
+  }
+
   async saveDocumentOutcome(outcome: DocumentOutcome): Promise<void> {
     const resultingStatus = documentStatusOf(
       outcome.application,

@@ -42,9 +42,17 @@ export interface OutboundTextSender {
   sendText(to: OutboundRecipient, body: string): Promise<void>;
 }
 
-/** Puerto: inicia el proceso de solicitud de crédito (documentación). Se desarrollará más adelante. */
+/** Puerto: inicia (o retoma) el proceso de solicitud de crédito (documentación). */
 export interface CreditApplicationStarter {
   start(input: { tenantId: string; channelId: string; applicant: string }): Promise<void>;
+}
+
+/**
+ * Puerto: reinicia la solicitud activa del solicitante (vuelve todos los documentos a
+ * pendientes) y pide de nuevo el primero. Si no hay solicitud activa, inicia una nueva.
+ */
+export interface CreditApplicationRestarter {
+  restart(input: { tenantId: string; channelId: string; applicant: string }): Promise<void>;
 }
 
 /**

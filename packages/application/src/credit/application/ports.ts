@@ -65,6 +65,11 @@ export interface CreditApplicationRepository {
   /** Crea una solicitud nueva y devuelve su id. */
   create(input: { applicant: ApplicantRef; application: CreditApplication }): Promise<string>;
   /**
+   * Reinicia una solicitud: vuelve todos sus documentos a PENDING (limpiando los datos
+   * KYC previos) y la solicitud a AWAITING_DOCUMENTS, registrando el evento de auditoría.
+   */
+  reset(input: { tenantId: string; applicationId: string }): Promise<void>;
+  /**
    * Persiste el resultado de un documento: inserta/actualiza la fila del documento,
    * actualiza el estado de la solicitud y registra el evento de auditoría, todo en
    * la misma transacción.

@@ -6,14 +6,16 @@
 export type AiProvider = "GEMINI" | "OPENAI" | "CLAUDE";
 
 /**
- * Clasificación del mensaje de un usuario: las tres intenciones que el chat de
- * apoyo crediticio sabe atender. Determina cómo se enruta la conversación.
+ * Clasificación del mensaje de un usuario: las intenciones que el chat de apoyo
+ * crediticio sabe atender. Determina cómo se enruta la conversación.
  */
 export type MessageClassification =
   /** A: pregunta resoluble con la base de conocimiento del tenant. */
   | "knowledge_question"
   /** B: el usuario quiere iniciar la solicitud de crédito ahora. */
   | "credit_application"
+  /** D: el usuario quiere reiniciar y volver a enviar todos los documentos. */
+  | "restart_application"
   /** C: tema ajeno al servicio de apoyo crediticio. */
   | "off_topic";
 

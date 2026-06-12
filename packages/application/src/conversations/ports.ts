@@ -1,4 +1,10 @@
-import type { AudioMessage, DocumentMessage, ImageMessage, TextMessage } from "@preztiaos/domain";
+import type {
+  AudioMessage,
+  DocumentMessage,
+  ImageMessage,
+  InboundMessage,
+  TextMessage,
+} from "@preztiaos/domain";
 
 // Puertos de salida del caso de uso. Un destino por puerto (segregación de
 // interfaces): la infraestructura provee la implementación concreta de cada uno.
@@ -21,4 +27,17 @@ export interface ImageMessageDispatcher {
 /** El archivo adjunto (PDF, etc.) se despacha al servicio de documentos (posible documento KYC). */
 export interface DocumentMessageDispatcher {
   dispatch(message: DocumentMessage): Promise<void>;
+}
+
+/**
+ * Puerto: bitácora (transcript) de la conversación. Registra cada mensaje ENTRANTE y
+ * SALIENTE por cliente para trazabilidad/auditoría. Es **best-effort**: un fallo al
+ * registrar no debe afectar la atención del mensaje.
+ */
+export interface ConversationLog {
+  recordInbound(message: InboundMessage): Promise<void>;
+  recordOutbound(
+    to: { channelId: string; recipient: string },
+    body: string,
+  ): Promise<void>;
 }

@@ -9,6 +9,7 @@ import { AnswerTextMessageHandler } from "./answer-text-message";
 import type { InboundMessageDeduplicator } from "../../credit/application/ports";
 import type {
   AssistantRequest,
+  CreditApplicationRestarter,
   CreditApplicationStarter,
   KnowledgeAssistant,
   OutboundRecipient,
@@ -46,6 +47,10 @@ class SpyCreditStarter implements CreditApplicationStarter {
   started: { tenantId: string; channelId: string; applicant: string }[] = [];
   async start(input: { tenantId: string; channelId: string; applicant: string }) { this.started.push(input); }
 }
+class SpyCreditRestarter implements CreditApplicationRestarter {
+  restarted: { tenantId: string; channelId: string; applicant: string }[] = [];
+  async restart(input: { tenantId: string; channelId: string; applicant: string }) { this.restarted.push(input); }
+}
 class StubReminder implements PendingDocumentReminder {
   constructor(private readonly reminder: string | null = null) {}
   async forApplicant() { return this.reminder; }
@@ -74,9 +79,11 @@ const answer = (over: Partial<AssistantAnswer> = {}): AssistantAnswer => ({
 describe("AnswerTextMessageHandler", () => {
   let sender: SpySender;
   let credit: SpyCreditStarter;
+  let restart: SpyCreditRestarter;
   beforeEach(() => {
     sender = new SpySender();
     credit = new SpyCreditStarter();
+    restart = new SpyCreditRestarter();
   });
 
   const handlerWith = (
@@ -89,6 +96,7 @@ describe("AnswerTextMessageHandler", () => {
       assistant,
       sender,
       credit,
+      restart,
       opts.reminder ?? new StubReminder(),
     );
 
@@ -106,6 +114,15 @@ describe("AnswerTextMessageHandler", () => {
 
     expect(sender.sent).toHaveLength(0); // el protocolo envía su propio mensaje
     expect(credit.started).toEqual([{ tenantId: config.tenantId, channelId: "PNID", applicant: "573001112233" }]);
+    expect(restart.restarted).toHaveLength(0);
+  });
+
+  it("D: reinicia la solicitud y delega el mensaje al protocolo", async () => {
+    await handlerWith(new StubAssistant(answer({ classification: "restart_application" }))).execute(message);
+
+    expect(sender.sent).toHaveLength(0); // el reinicio envía su propio mensaje
+    expect(restart.restarted).toEqual([{ tenantId: config.tenantId, channelId: "PNID", applicant: "573001112233" }]);
+    expect(credit.started).toHaveLength(0);
   });
 
   it("C: ante un tema fuera de alcance responde el aviso cordial fijo", async () => {
@@ -141,7 +158,7 @@ describe("AnswerTextMessageHandler", () => {
     const assistant = new StubAssistant(answer());
     const dedup = new FakeDedup();
     const handler = new AnswerTextMessageHandler(
-      new FakeConfigRepo(null), dedup, assistant, sender, credit, new StubReminder(),
+      new FakeConfigRepo(null), dedup, assistant, sender, credit, restart, new StubReminder(),
     );
 
     await handler.execute(message);

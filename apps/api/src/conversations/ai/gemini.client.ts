@@ -15,7 +15,12 @@ const RESPONSE_SCHEMA = {
   properties: {
     classification: {
       type: 'string',
-      enum: ['knowledge_question', 'credit_application', 'off_topic'],
+      enum: [
+        'knowledge_question',
+        'credit_application',
+        'restart_application',
+        'off_topic',
+      ],
     },
     reply: { type: 'string' },
   },

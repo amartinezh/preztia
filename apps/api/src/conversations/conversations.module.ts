@@ -4,21 +4,27 @@ import {
   type AntifraudService,
   type ApplicationCompletionNotifier,
   type AudioMessageDispatcher,
+  type ConversationLog,
   type CreditApplicationRepository,
+  type CreditApplicationRestarter,
   type CreditApplicationStarter,
+  type CreditPortfolioRepository,
   type DocumentMessageDispatcher,
   type DocumentReviewer,
   type DocumentStorage,
   type ImageMessageDispatcher,
   type InboundMessageDeduplicator,
   type KnowledgeAssistant,
+  type MediaClassifier,
   type MediaDownloader,
   type OutboundTextSender,
   type PendingDocumentReminder,
   ProcessInboundMessageHandler,
   type RequiredDocumentCatalog,
+  RouteInboundMediaHandler,
   StartCreditApplicationHandler,
   SubmitApplicationDocumentHandler,
+  SubmitPaymentReceiptHandler,
   type TenantAssistantConfigRepository,
   type TenantResolver,
   type TextMessageConsumer,
@@ -29,8 +35,15 @@ import { AudioDispatchAdapter } from './adapters/audio-dispatch.adapter';
 import { TenantConfigDrizzleRepository } from './text/tenant-config.repository';
 import { KnowledgeAssistantRouter } from './ai/knowledge-assistant.router';
 import { WhatsappTextSender } from './text/whatsapp-text-sender';
-import { ImageDocumentDispatcher } from '../credit-application/adapters/image-document.dispatcher';
-import { FileDocumentDispatcher } from '../credit-application/adapters/file-document.dispatcher';
+import { LoggingTextSender } from './text/logging-text-sender';
+import { ConversationMessageLog } from './conversation-message.log';
+import { PaymentsModule } from '../payments/payments.module';
+import { MediaRouterDispatcher } from '../payments/adapters/media-router.dispatcher';
+import {
+  CREDIT_PORTFOLIO_REPOSITORY,
+  MEDIA_CLASSIFIER,
+  MEDIA_ROUTER,
+} from '../payments/payments.tokens';
 import { CreditApplicationDrizzleRepository } from '../credit-application/credit-application.repository';
 import { RequiredDocumentCatalogDrizzleRepository } from '../credit-application/required-document-catalog.repository';
 import { LoggingApplicationCompletionNotifier } from '../credit-application/application-completion.notifier';
@@ -46,7 +59,9 @@ import {
   APPLICATION_COMPLETION_NOTIFIER,
   AUDIO_DISPATCHER,
   CONFIG_REPOSITORY,
+  CONVERSATION_LOG,
   CREDIT_APPLICATION_REPOSITORY,
+  CREDIT_APPLICATION_RESTARTER,
   CREDIT_APPLICATION_STARTER,
   DOCUMENT_DISPATCHER,
   DOCUMENT_REVIEWER,
@@ -68,18 +83,67 @@ import {
  * los casos de uso se componen por inyección de dependencias (inversión de dependencias).
  */
 @Module({
+  imports: [PaymentsModule],
   controllers: [WhatsappWebhookController],
   providers: [
-    // Enrutado por tipo de mensaje → adaptadores.
+    // Enrutado por tipo de mensaje → adaptadores. Imagen y archivo pasan por el
+    // enrutador de media, que decide entre protocolo KYC y recepción de pagos.
     { provide: TEXT_CONSUMER, useClass: WhatsappTextConsumer },
     { provide: AUDIO_DISPATCHER, useClass: AudioDispatchAdapter },
-    { provide: IMAGE_DISPATCHER, useClass: ImageDocumentDispatcher },
-    { provide: DOCUMENT_DISPATCHER, useClass: FileDocumentDispatcher },
+    MediaRouterDispatcher,
+    { provide: IMAGE_DISPATCHER, useExisting: MediaRouterDispatcher },
+    { provide: DOCUMENT_DISPATCHER, useExisting: MediaRouterDispatcher },
+
+    // Enrutador de media: único dueño de tenant-resolve + dedup + descarga.
+    {
+      provide: MEDIA_ROUTER,
+      inject: [
+        TENANT_RESOLVER,
+        INBOUND_MESSAGE_DEDUPLICATOR,
+        CREDIT_APPLICATION_REPOSITORY,
+        CREDIT_PORTFOLIO_REPOSITORY,
+        MEDIA_DOWNLOADER,
+        MEDIA_CLASSIFIER,
+        SubmitApplicationDocumentHandler,
+        SubmitPaymentReceiptHandler,
+      ],
+      useFactory: (
+        tenants: TenantResolver,
+        dedup: InboundMessageDeduplicator,
+        applications: CreditApplicationRepository,
+        portfolios: CreditPortfolioRepository,
+        downloader: MediaDownloader,
+        classifier: MediaClassifier,
+        documents: SubmitApplicationDocumentHandler,
+        payments: SubmitPaymentReceiptHandler,
+      ) =>
+        new RouteInboundMediaHandler(
+          tenants,
+          dedup,
+          applications,
+          portfolios,
+          downloader,
+          classifier,
+          documents,
+          payments,
+        ),
+    },
+
+    // Transcript de la conversación (entrante + saliente).
+    ConversationMessageLog,
+    { provide: CONVERSATION_LOG, useExisting: ConversationMessageLog },
 
     // Puertos del caso de uso de texto → adaptadores.
     { provide: CONFIG_REPOSITORY, useClass: TenantConfigDrizzleRepository },
     { provide: KNOWLEDGE_ASSISTANT, useClass: KnowledgeAssistantRouter },
-    { provide: OUTBOUND_TEXT_SENDER, useClass: WhatsappTextSender },
+    // El envío de texto se decora para registrar el mensaje saliente en el transcript.
+    WhatsappTextSender,
+    {
+      provide: OUTBOUND_TEXT_SENDER,
+      inject: [WhatsappTextSender, ConversationMessageLog],
+      useFactory: (inner: WhatsappTextSender, log: ConversationMessageLog) =>
+        new LoggingTextSender(inner, log),
+    },
     {
       provide: PENDING_DOCUMENT_REMINDER,
       useClass: CreditApplicationPendingDocumentReminder,
@@ -122,6 +186,8 @@ import {
         catalog: RequiredDocumentCatalog,
       ) => new StartCreditApplicationHandler(repo, sender, catalog),
     },
+    // El mismo handler implementa también el reinicio (CreditApplicationRestarter).
+    { provide: CREDIT_APPLICATION_RESTARTER, useExisting: CREDIT_APPLICATION_STARTER },
 
     // Caso de uso: recibe y valida un documento del protocolo.
     {
@@ -173,6 +239,7 @@ import {
         KNOWLEDGE_ASSISTANT,
         OUTBOUND_TEXT_SENDER,
         CREDIT_APPLICATION_STARTER,
+        CREDIT_APPLICATION_RESTARTER,
         PENDING_DOCUMENT_REMINDER,
       ],
       useFactory: (
@@ -181,6 +248,7 @@ import {
         assistant: KnowledgeAssistant,
         sender: OutboundTextSender,
         credit: CreditApplicationStarter,
+        restart: CreditApplicationRestarter,
         reminders: PendingDocumentReminder,
       ) =>
         new AnswerTextMessageHandler(
@@ -189,6 +257,7 @@ import {
           assistant,
           sender,
           credit,
+          restart,
           reminders,
         ),
     },
@@ -201,13 +270,15 @@ import {
         AUDIO_DISPATCHER,
         IMAGE_DISPATCHER,
         DOCUMENT_DISPATCHER,
+        CONVERSATION_LOG,
       ],
       useFactory: (
         text: TextMessageConsumer,
         audio: AudioMessageDispatcher,
         image: ImageMessageDispatcher,
         document: DocumentMessageDispatcher,
-      ) => new ProcessInboundMessageHandler(text, audio, image, document),
+        log: ConversationLog,
+      ) => new ProcessInboundMessageHandler(text, audio, image, document, log),
     },
   ],
 })

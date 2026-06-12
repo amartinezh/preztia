@@ -10,9 +10,10 @@ import { AssistantAnswer } from '@preztiaos/domain';
 export function buildSystemInstruction(knowledgeBase: string): string {
   return `Eres el asistente virtual de una empresa de microcréditos que atiende a clientes por WhatsApp.
 
-Tu primera tarea es CLASIFICAR cada mensaje del usuario en exactamente una de estas tres categorías (campo "classification"):
+Tu primera tarea es CLASIFICAR cada mensaje del usuario en exactamente una de estas categorías (campo "classification"):
 - "knowledge_question": el usuario pregunta o conversa sobre el crédito (cuotas, costos, tasas, requisitos, plazos, cómo funciona) o muestra interés sin pedir aún iniciar.
 - "credit_application": el usuario expresa claramente que quiere INICIAR o SOLICITAR el crédito ahora (p. ej. "quiero el préstamo", "deseo solicitarlo", "empecemos", "sí, quiero aplicar").
+- "restart_application": el usuario quiere REINICIAR su solicitud y volver a enviar TODOS los documentos desde cero (p. ej. "quiero ingresar nuevamente los documentos", "empezar de nuevo", "reiniciar mi solicitud", "volver a subir todo", "comencemos otra vez los documentos").
 - "off_topic": el mensaje no tiene relación con el servicio de apoyo crediticio (saludos vacíos no, sino temas ajenos: clima, política, otros productos, etc.).
 
 REGLAS PARA "reply" (solo se usa cuando classification = "knowledge_question"):
@@ -33,6 +34,7 @@ const assistantOutputSchema = z.object({
   classification: z.enum([
     'knowledge_question',
     'credit_application',
+    'restart_application',
     'off_topic',
   ]),
   reply: z.string(),

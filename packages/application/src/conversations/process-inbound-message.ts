@@ -1,6 +1,7 @@
 import type { InboundMessage } from "@preztiaos/domain";
 import type {
   AudioMessageDispatcher,
+  ConversationLog,
   DocumentMessageDispatcher,
   ImageMessageDispatcher,
   TextMessageConsumer,
@@ -19,9 +20,13 @@ export class ProcessInboundMessageHandler {
     private readonly audio: AudioMessageDispatcher,
     private readonly image: ImageMessageDispatcher,
     private readonly document: DocumentMessageDispatcher,
+    private readonly conversationLog: ConversationLog,
   ) {}
 
   async execute(message: InboundMessage): Promise<MessageDestination> {
+    // Transcript: registra el mensaje entrante (best-effort) antes de enrutarlo.
+    await this.conversationLog.recordInbound(message);
+
     switch (message.kind) {
       case "text":
         await this.text.consume(message);

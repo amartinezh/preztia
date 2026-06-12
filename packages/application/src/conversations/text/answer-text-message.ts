@@ -4,6 +4,7 @@ import { ASSISTANT_UNAVAILABLE_REPLY, OFF_TOPIC_REPLY } from "@preztiaos/domain"
 // slice de documentos); se reutiliza para no reprocesar el mismo wamid de texto.
 import type { InboundMessageDeduplicator } from "../../credit/application/ports";
 import type {
+  CreditApplicationRestarter,
   CreditApplicationStarter,
   KnowledgeAssistant,
   OutboundTextSender,
@@ -30,6 +31,7 @@ export class AnswerTextMessageHandler {
     private readonly assistant: KnowledgeAssistant,
     private readonly sender: OutboundTextSender,
     private readonly creditApplications: CreditApplicationStarter,
+    private readonly creditRestarts: CreditApplicationRestarter,
     private readonly reminders: PendingDocumentReminder,
   ) {}
 
@@ -70,6 +72,12 @@ export class AnswerTextMessageHandler {
     // que envía su propio mensaje (intro + primer documento, o recordatorio).
     if (answer.classification === "credit_application") {
       await this.creditApplications.start(applicant);
+      return;
+    }
+
+    // D: el usuario quiere volver a enviar todos los documentos → reinicia la solicitud.
+    if (answer.classification === "restart_application") {
+      await this.creditRestarts.restart(applicant);
       return;
     }
 

@@ -3,6 +3,7 @@
 
 // Enrutado por tipo de mensaje (process-inbound-message).
 export const TEXT_CONSUMER = Symbol('TextMessageConsumer');
+export const CONVERSATION_LOG = Symbol('ConversationLog');
 export const AUDIO_DISPATCHER = Symbol('AudioMessageDispatcher');
 export const IMAGE_DISPATCHER = Symbol('ImageMessageDispatcher');
 export const DOCUMENT_DISPATCHER = Symbol('DocumentMessageDispatcher');
@@ -12,6 +13,7 @@ export const CONFIG_REPOSITORY = Symbol('TenantAssistantConfigRepository');
 export const KNOWLEDGE_ASSISTANT = Symbol('KnowledgeAssistant');
 export const OUTBOUND_TEXT_SENDER = Symbol('OutboundTextSender');
 export const CREDIT_APPLICATION_STARTER = Symbol('CreditApplicationStarter');
+export const CREDIT_APPLICATION_RESTARTER = Symbol('CreditApplicationRestarter');
 export const PENDING_DOCUMENT_REMINDER = Symbol('PendingDocumentReminder');
 
 // Slice de solicitud de crédito (start/submit + antifraude + KYC).
