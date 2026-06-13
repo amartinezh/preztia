@@ -13,10 +13,11 @@ import { AudioMessage } from '@preztiaos/domain';
 export class AudioDispatchAdapter implements AudioMessageDispatcher {
   private readonly logger = new Logger('WhatsApp:Audio');
 
-  async dispatch(message: AudioMessage): Promise<void> {
+  dispatch(message: AudioMessage): Promise<void> {
     // TODO: encolar { mediaId, mimeType, from, channelId } hacia el servicio de transcripción.
     this.logger.log(
       `🎙️  audio preparado para transcripción · mediaId=${message.media.mediaId} mime=${message.media.mimeType} de=${message.from}`,
     );
+    return Promise.resolve();
   }
 }

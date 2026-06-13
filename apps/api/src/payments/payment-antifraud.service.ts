@@ -80,19 +80,19 @@ export class DuplicateEndToEndRule implements PaymentFraudRule {
 
 /** Comprobante demasiado antiguo respecto del momento en que se reporta. */
 export class StaleReceiptRule implements PaymentFraudRule {
-  async evaluate(input: PaymentAntifraudInput): Promise<RuleFinding | null> {
+  evaluate(input: PaymentAntifraudInput): Promise<RuleFinding | null> {
     const paidAt = input.pix?.paidAt;
-    if (!paidAt) return null;
+    if (!paidAt) return Promise.resolve(null);
     const paidTime = Date.parse(paidAt);
-    if (Number.isNaN(paidTime)) return null;
+    if (Number.isNaN(paidTime)) return Promise.resolve(null);
 
     const ageDays = (Date.parse(input.receivedAt) - paidTime) / MS_PER_DAY;
-    if (ageDays <= maxAgeDays()) return null;
-    return {
+    if (ageDays <= maxAgeDays()) return Promise.resolve(null);
+    return Promise.resolve({
       scoreDelta: SCORE_SUSPICIOUS,
       reasons: [`El comprobante tiene más de ${maxAgeDays()} días`],
       rejects: false,
-    };
+    });
   }
 }
 

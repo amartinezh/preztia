@@ -69,6 +69,9 @@ export const payment = pgTable(
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     reconciliationAttempts: integer("reconciliation_attempts").notNull().default(0),
     lastReconciliationAt: timestamp("last_reconciliation_at", { withTimezone: true }),
+    // Clave de idempotencia del cliente (abonos en efectivo): garantiza que un
+    // reintento/reenvío no produzca un doble abono. Null para pagos PIX entrantes.
+    idempotencyKey: text("idempotency_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -76,6 +79,10 @@ export const payment = pgTable(
     byEndToEndIdx: uniqueIndex("payment_tenant_end_to_end_idx")
       .on(t.tenantId, t.endToEndId)
       .where(sql`end_to_end_id is not null`),
+    // Una Idempotency-Key solo puede materializar un abono por tenant.
+    byIdempotencyIdx: uniqueIndex("payment_tenant_idempotency_idx")
+      .on(t.tenantId, t.idempotencyKey)
+      .where(sql`idempotency_key is not null`),
     bySha256Idx: index("payment_tenant_sha256_idx").on(t.tenantId, t.sha256),
     byStatusIdx: index("payment_tenant_status_idx").on(t.tenantId, t.status),
   }),

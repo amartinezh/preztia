@@ -27,7 +27,9 @@ import { BankVerifierRegistry } from './banking/bank-verifier.registry';
 import { InterApiClient } from './banking/inter/inter-api.client';
 import { InterPaymentVerifier } from './banking/inter/inter-payment.verifier';
 import { PaymentsQueryRepository } from './payments-query.repository';
+import { CashPaymentDrizzleRepository } from './cash-payment.repository';
 import { PaymentsController } from './payments.controller';
+import { AuthModule } from '../auth/auth.module';
 import {
   BANK_PAYMENT_VERIFIER,
   CREDIT_PORTFOLIO_REPOSITORY,
@@ -53,8 +55,10 @@ function reconciliationMaxAttempts(): number {
  * importa para enrutar el media entrante hacia SubmitPaymentReceiptHandler.
  */
 @Module({
+  imports: [AuthModule],
   controllers: [PaymentsController],
   providers: [
+    CashPaymentDrizzleRepository,
     // Puertos del slice → adaptadores.
     {
       provide: CREDIT_PORTFOLIO_REPOSITORY,

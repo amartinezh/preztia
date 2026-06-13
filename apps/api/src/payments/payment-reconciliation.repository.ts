@@ -8,11 +8,7 @@ import {
   type PendingPayment,
   type ReconciliationRepository,
 } from '@preztiaos/application';
-import {
-  type AllocationResult,
-  type InstallmentStatus,
-  type PixReceiptData,
-} from '@preztiaos/domain';
+import { type AllocationResult, type PixReceiptData } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 
 /**
@@ -49,7 +45,7 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
       return {
         items,
         nextCursor:
-          rows.length === input.limit ? rows[rows.length - 1]!.id : null,
+          rows.length === input.limit ? rows[rows.length - 1].id : null,
       };
     });
   }
@@ -122,7 +118,7 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         });
       if (!transitioned.length) return; // otro proceso ya lo verificó
 
-      const creditId = transitioned[0]!.creditId;
+      const creditId = transitioned[0].creditId;
       for (const allocation of input.allocation.allocations) {
         const updated = await tx
           .update(schema.installment)
@@ -220,7 +216,7 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
       await tx.insert(schema.paymentEvent).values({
         tenantId: input.tenantId,
         paymentId: input.paymentId,
-        creditId: flagged[0]!.creditId,
+        creditId: flagged[0].creditId,
         type: 'payment_flagged_suspected_fraud',
         payload: { reasons: [...input.reasons] },
       });

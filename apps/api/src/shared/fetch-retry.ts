@@ -39,5 +39,7 @@ export async function fetchWithRetry(
     await sleep(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs);
   }
   // Inalcanzable: el bucle siempre retorna o lanza en el último intento.
-  throw lastError ?? new Error('fetchWithRetry agotó los intentos');
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('fetchWithRetry agotó los intentos');
 }

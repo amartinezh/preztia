@@ -6,10 +6,8 @@ import {
   type CreditPortfolioRepository,
   type PaymentOutcome,
 } from '@preztiaos/application';
-import {
-  type InstallmentStatus,
-  type PaymentAllocation,
-} from '@preztiaos/domain';
+import { type PaymentAllocation } from '@preztiaos/domain';
+import { type Tx } from '../tenancy/unit-of-work';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 
 /**
@@ -151,7 +149,7 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
    * transacción completa se revierte (nunca un saldo corrupto en silencio).
    */
   private async applyAllocations(
-    tx: any,
+    tx: Tx,
     tenantId: string,
     paymentId: string,
     allocations: readonly PaymentAllocation[],

@@ -113,6 +113,20 @@
       "when": 1781292911467,
       "tag": "0015_document_validation_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1781385723200,
+      "tag": "0016_lowly_scarlet_spider",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781385783200,
+      "tag": "0017_app_user_rls",
+      "breakpoints": true
     }
   ]
 }

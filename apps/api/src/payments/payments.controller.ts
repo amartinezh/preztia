@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Headers,
@@ -7,24 +8,32 @@ import {
   Param,
   Post,
   Query,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
 import { ReconcilePendingPaymentsHandler } from '@preztiaos/application';
-import { paginationQuery } from '@preztiaos/contracts';
+import {
+  paginationQuery,
+  registerCashPaymentInput,
+} from '@preztiaos/contracts';
 import { PaymentsQueryRepository } from './payments-query.repository';
+import { CashPaymentDrizzleRepository } from './cash-payment.repository';
+import { JwtGuard } from '../auth/jwt.guard';
+import { requireTenant } from '../auth/require-tenant';
 
 const uuid = z.string().uuid();
 
 /**
  * Frontera HTTP del slice de pagos: valida con zod (contrato) y delega.
- * No contiene reglas de negocio ni SQL.
+ * No contiene reglas de negocio ni SQL. Protegido por JWT.
  */
 @Controller()
+@UseGuards(JwtGuard)
 export class PaymentsController {
   constructor(
     private readonly queries: PaymentsQueryRepository,
     private readonly reconcile: ReconcilePendingPaymentsHandler,
+    private readonly cashPayments: CashPaymentDrizzleRepository,
   ) {}
 
   @Get('credits/:creditId/payments')
@@ -43,6 +52,26 @@ export class PaymentsController {
       pageSize,
     });
     return { items, page, pageSize, total };
+  }
+
+  @Post('credits/:creditId/payments')
+  async registerCashPayment(
+    @Param('creditId') creditId: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() body: unknown,
+  ) {
+    const tenant = requireTenant(tenantId);
+    const id = uuid.parse(creditId);
+    const { amountMinor } = registerCashPaymentInput.parse(body);
+    const result = await this.cashPayments.register({
+      tenantId: tenant,
+      creditId: id,
+      amountMinor,
+      idempotencyKey: idempotencyKey ?? null,
+    });
+    if (!result) throw new NotFoundException('Crédito no encontrado');
+    return result;
   }
 
   @Get('credits/:creditId/portfolio')
@@ -68,11 +97,4 @@ export class PaymentsController {
     const tenant = requireTenant(tenantId);
     return this.reconcile.execute({ tenantId: tenant });
   }
-}
-
-function requireTenant(tenantId: string | undefined): string {
-  const parsed = uuid.safeParse(tenantId);
-  if (!parsed.success)
-    throw new UnauthorizedException('Falta la identidad del tenant');
-  return parsed.data;
 }

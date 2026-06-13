@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7f2a9c4e-1b3d-4e8a-9c6f-preztiaos0001",
     "name": "PreztiaOS — API completa (E2E)",
-    "description": "Colección para probar el 100% de la superficie HTTP de PreztiaOS: salud, webhook de WhatsApp (verificación, seguridad HMAC, idempotencia), conversación por texto (IA), protocolo KYC de documentos (que dispara el pipeline antifraude documental de 4 etapas), créditos y pagos/cartera.\n\n---\n\n## Requisitos previos\n\n1. Infraestructura y BD: `pnpm db:up && pnpm db:migrate`\n2. API corriendo: `pnpm build && pnpm dev` (puerto 3000 por defecto)\n3. Variables de la colección (pestaña *Variables*):\n   - `whatsappAppSecret` y `whatsappVerifyToken` → copia los valores de tu `.env` (`WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`). La firma `x-hub-signature-256` de cada POST al webhook se calcula sola en el pre-request script de la colección.\n   - `channelId` → `phone_number_id` del canal registrado en `tenant_config` (necesario para que los flujos conversacionales encuentren el tenant; sin él, el webhook responde 200 e ignora el mensaje, que es el comportamiento esperado).\n   - `tenantId` → uuid del tenant para los endpoints REST.\n\n## Orden sugerido de ejecución\n\n00 → 01 → 02 → 03 (inicia la solicitud) → 04 (envía los 3 documentos KYC) → 05 (crea el crédito y guarda `creditId`) → 06.\n\n## Pipeline antifraude (sin endpoint HTTP propio)\n\nAl aceptarse el TERCER documento (carpeta 04) la solicitud logra completitud y se dispara automáticamente el pipeline antifraude (Etapas 2-4: reglas locales → Minha Receita/BrasilAPI → Serpro opcional). El reporte queda **append-only** en la tabla `document_validation` y el evento `ANTIFRAUD_VALIDATION_COMPLETED` en `credit_application_event`. Verificación:\n\n```sql\nSELECT status, score, jsonb_pretty(alerts), consulted_sources, created_at\nFROM document_validation ORDER BY created_at DESC LIMIT 1;\n```\n\n> Nota sobre media: para que la descarga del binario funcione de verdad, `mediaId*` debe ser un media real de la Graph API (con `WHATSAPP_ACCESS_TOKEN` válido). Con ids de prueba el webhook responde 200 igualmente y el error queda trazado en el log (resiliencia: Meta no debe reintentar).",
+    "description": "Colección para probar el 100% de la superficie HTTP de PreztiaOS: salud, webhook de WhatsApp (verificación, seguridad HMAC, idempotencia), conversación por texto (IA), protocolo KYC de documentos (que dispara el pipeline antifraude documental de 4 etapas), créditos y pagos/cartera.\n\n---\n\n## Requisitos previos\n\n1. Infraestructura y BD: `pnpm db:up && pnpm db:migrate`\n2. API corriendo: `pnpm build && pnpm dev` (puerto 3000 por defecto)\n3. Usuario para login: `pnpm --filter api seed:user` y `JWT_SECRET` con un valor real en `.env` (los endpoints REST de créditos/pagos exigen `Authorization: Bearer`).\n4. Variables de la colección (pestaña *Variables*):\n   - `whatsappAppSecret` y `whatsappVerifyToken` → copia los valores de tu `.env` (`WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`). La firma `x-hub-signature-256` de cada POST al webhook se calcula sola en el pre-request script de la colección.\n   - `channelId` → `phone_number_id` del canal registrado en `tenant_config` (necesario para que los flujos conversacionales encuentren el tenant; sin él, el webhook responde 200 e ignora el mensaje, que es el comportamiento esperado).\n   - `tenantId` → uuid del tenant para los endpoints REST.\n\n## Orden sugerido de ejecución\n\n00 → 01 → 02 → 03 (inicia la solicitud) → 04 (envía los 3 documentos KYC) → 05 (login: guarda `accessToken` y fija `tenantId`) → 06 (crea el crédito y guarda `creditId`) → 07.\n\n## Pipeline antifraude (sin endpoint HTTP propio)\n\nAl aceptarse el TERCER documento (carpeta 04) la solicitud logra completitud y se dispara automáticamente el pipeline antifraude (Etapas 2-4: reglas locales → Minha Receita/BrasilAPI → Serpro opcional). El reporte queda **append-only** en la tabla `document_validation` y el evento `ANTIFRAUD_VALIDATION_COMPLETED` en `credit_application_event`. Verificación:\n\n```sql\nSELECT status, score, jsonb_pretty(alerts), consulted_sources, created_at\nFROM document_validation ORDER BY created_at DESC LIMIT 1;\n```\n\n> Nota sobre media: para que la descarga del binario funcione de verdad, `mediaId*` debe ser un media real de la Graph API (con `WHATSAPP_ACCESS_TOKEN` válido). Con ids de prueba el webhook responde 200 igualmente y el error queda trazado en el log (resiliencia: Meta no debe reintentar).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [
@@ -44,10 +44,15 @@
     { "key": "mediaIdNegocio", "value": "MEDIA_ID_NEGOCIO", "description": "id de media (Graph API) del PDF del registro del negocio (cartão CNPJ)" },
     { "key": "mediaIdRecibo", "value": "MEDIA_ID_RECIBO", "description": "id de media (Graph API) de la imagen del recibo de servicio público" },
     { "key": "mediaIdAudio", "value": "MEDIA_ID_AUDIO", "description": "id de media (Graph API) de una nota de voz" },
-    { "key": "tenantId", "value": "00000000-0000-0000-0000-000000000001", "description": "uuid del tenant para los endpoints REST (x-tenant-id)" },
+    { "key": "tenantId", "value": "00000000-0000-0000-0000-000000000001", "description": "uuid del tenant (x-tenant-id). La carpeta 05·Auth lo sobrescribe con el claim del JWT tras el login, para que coincida con el guard." },
     { "key": "borrowerId", "value": "11111111-1111-4111-8111-111111111111", "description": "uuid del deudor al otorgar un crédito" },
     { "key": "zoneId", "value": "22222222-2222-4222-8222-222222222222", "description": "uuid de la zona de cobranza" },
-    { "key": "creditId", "value": "", "description": "Se llena automáticamente al otorgar un crédito (carpeta 05)" }
+    { "key": "creditId", "value": "", "description": "Se llena automáticamente al otorgar un crédito (carpeta 06)" },
+    { "key": "email", "value": "admin@preztia.test", "description": "Email del usuario sembrado (pnpm --filter api seed:user / SEED_EMAIL)" },
+    { "key": "password", "value": "changeme-123", "description": "Contraseña del usuario sembrado (SEED_PASSWORD)" },
+    { "key": "accessToken", "value": "", "description": "JWT de acceso; lo llena la carpeta 05·Auth tras el login" },
+    { "key": "refreshToken", "value": "", "description": "JWT de refresco; lo llena la carpeta 05·Auth" },
+    { "key": "idempotencyKey", "value": "", "description": "Idempotency-Key del abono en efectivo (se genera en el pre-request del abono)" }
   ],
   "item": [
     {
@@ -449,9 +454,137 @@
       ]
     },
     {
-      "name": "05 · Créditos (REST)",
-      "description": "Otorgamiento de créditos con calendario de cuotas (dinero SIEMPRE en unidades menores/centavos).",
+      "name": "05 · Autenticación (IAM · JWT)",
+      "description": "Login con email/contraseña → access + refresh tokens. El access token se guarda en `{{accessToken}}` y se envía como `Authorization: Bearer` en los endpoints REST protegidos (créditos/pagos). El guard exige además que `x-tenant-id` coincida con el `tenantId` del JWT; por eso el login decodifica el token y fija `{{tenantId}}` con el claim. Requiere un usuario sembrado: `pnpm --filter api seed:user`.",
       "item": [
+        {
+          "name": "Login → 200 (guarda tokens y fija tenantId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('devuelve accessToken y refreshToken', () => {",
+                  "  pm.expect(json.accessToken).to.be.a('string');",
+                  "  pm.expect(json.refreshToken).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "// Decodifica el JWT y fija tenantId con el claim, para que x-tenant-id coincida con el guard.",
+                  "const part = json.accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "const claims = JSON.parse(Buffer.from(part, 'base64').toString('utf8'));",
+                  "pm.test('el JWT trae los claims esperados (sub/tenantId/role/zonePaths/exp)', () => {",
+                  "  pm.expect(claims.sub).to.be.a('string');",
+                  "  pm.expect(claims.tenantId).to.be.a('string');",
+                  "  pm.expect(claims.role).to.be.a('string');",
+                  "  pm.expect(claims.zonePaths).to.be.an('array');",
+                  "  pm.expect(claims.exp).to.be.a('number');",
+                  "});",
+                  "pm.collectionVariables.set('tenantId', claims.tenantId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Autentica y emite el par de tokens. El tenant/rol/zonas viajan en los claims del JWT (no los elige el cliente)."
+          }
+        },
+        {
+          "name": "Credenciales inválidas → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rechaza credenciales inválidas con 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"contrasena-incorrecta\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Refrescar token → 200 (renueva el par)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('devuelve un nuevo par de tokens', () => {",
+                  "  pm.expect(json.accessToken).to.be.a('string');",
+                  "  pm.expect(json.refreshToken).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', json.refreshToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "description": "Renueva el access token a partir del refresh token (typ=refresh)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 · Créditos (REST)",
+      "description": "Listado y otorgamiento de créditos con calendario de cuotas (dinero SIEMPRE en unidades menores/centavos). Protegido por JWT: requiere `Authorization: Bearer {{accessToken}}` y `x-tenant-id` = claim del token (ejecuta antes la carpeta 05·Auth).",
+      "item": [
+        {
+          "name": "Listar créditos (paginado) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('respuesta paginada (items, page, pageSize, total)', () => {",
+                  "  pm.expect(json.items).to.be.an('array');",
+                  "  pm.expect(json.page).to.eql(1);",
+                  "  pm.expect(json.pageSize).to.eql(10);",
+                  "  pm.expect(json.total).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/credits?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["credits"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            },
+            "description": "Lista paginada de créditos del tenant (creditSummary). El nombre del deudor (PII) viaja en `null`; se opera con identificadores y montos."
+          }
+        },
         {
           "name": "Otorgar crédito → 201 (guarda creditId)",
           "event": [
@@ -476,7 +609,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-tenant-id", "value": "{{tenantId}}" }
+              { "key": "x-tenant-id", "value": "{{tenantId}}" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
             ],
             "body": {
               "mode": "raw",
@@ -505,7 +639,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-tenant-id", "value": "{{tenantId}}" }
+              { "key": "x-tenant-id", "value": "{{tenantId}}" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
             ],
             "body": {
               "mode": "raw",
@@ -518,8 +653,8 @@
       ]
     },
     {
-      "name": "06 · Pagos y cartera (REST)",
-      "description": "Consultas de pagos/cartera (paginación obligatoria) y conciliación bancaria. Requiere `creditId` (lo deja la carpeta 05) y `x-tenant-id`.",
+      "name": "07 · Pagos y cartera (REST)",
+      "description": "Consultas de pagos/cartera (paginación obligatoria), registro de abono en efectivo (idempotente) y conciliación bancaria. Requiere `creditId` (lo deja la carpeta 06) y, por el guard JWT, `Authorization: Bearer {{accessToken}}` + `x-tenant-id` (carpeta 05·Auth).",
       "item": [
         {
           "name": "Listar pagos del crédito (paginado) → 200",
@@ -543,7 +678,7 @@
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }],
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
             "url": {
               "raw": "{{baseUrl}}/credits/{{creditId}}/payments?page=1&pageSize=10",
               "host": ["{{baseUrl}}"],
@@ -553,6 +688,90 @@
                 { "key": "pageSize", "value": "10" }
               ]
             }
+          }
+        },
+        {
+          "name": "Registrar abono en efectivo (idempotente) → 201",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Idempotency-Key estable para este abono (se reusa en el reenvío de abajo).",
+                  "pm.collectionVariables.set('idempotencyKey', 'cash-' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('devuelve id, creditId, amountMinor y balanceMinor', () => {",
+                  "  pm.expect(json.id).to.be.a('string');",
+                  "  pm.expect(json.creditId).to.eql(pm.collectionVariables.get('creditId'));",
+                  "  pm.expect(json.amountMinor).to.eql(5000);",
+                  "  pm.expect(json.balanceMinor).to.be.a('number');",
+                  "});",
+                  "pm.collectionVariables.set('firstPaymentId', json.id);",
+                  "pm.collectionVariables.set('firstBalance', String(json.balanceMinor));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-id", "value": "{{tenantId}}" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"amountMinor\": 5000\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/credits/{{creditId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["credits", "{{creditId}}", "payments"]
+            },
+            "description": "Abono en efectivo (cobro de ruta). `amountMinor` en centavos (5000 = R$ 50,00). Atómico: reparte en cascada a la cuota más antigua y actualiza la cartera. La `Idempotency-Key` evita el doble abono."
+          }
+        },
+        {
+          "name": "Reenviar abono (misma Idempotency-Key) → mismo pago",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('idempotente: mismo pago, sin doble abono', () => {",
+                  "  pm.expect(json.id).to.eql(pm.collectionVariables.get('firstPaymentId'));",
+                  "  pm.expect(json.balanceMinor).to.eql(Number(pm.collectionVariables.get('firstBalance')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-id", "value": "{{tenantId}}" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"amountMinor\": 5000\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/credits/{{creditId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["credits", "{{creditId}}", "payments"]
+            },
+            "description": "Reusa la MISMA `Idempotency-Key` del abono anterior: el backend devuelve el pago ya registrado (mismo id, balance sin cambios). Demuestra que un reintento/reenvío no produce doble abono."
           }
         },
         {
@@ -570,13 +789,13 @@
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }],
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
             "url": {
               "raw": "{{baseUrl}}/credits/{{creditId}}/portfolio",
               "host": ["{{baseUrl}}"],
               "path": ["credits", "{{creditId}}", "portfolio"]
             },
-            "description": "Estado de la cartera del crédito creado en la carpeta 05 (invariantes: saldo nunca negativo, Σ abonos ≤ total)."
+            "description": "Estado de la cartera del crédito creado en la carpeta 06 (invariantes: saldo nunca negativo, Σ abonos ≤ total)."
           }
         },
         {
@@ -594,7 +813,7 @@
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }],
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
             "url": {
               "raw": "{{baseUrl}}/credits/99999999-9999-4999-8999-999999999999/portfolio",
               "host": ["{{baseUrl}}"],
@@ -617,20 +836,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }],
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
             "url": { "raw": "{{baseUrl}}/payments/reconcile", "host": ["{{baseUrl}}"], "path": ["payments", "reconcile"] },
             "description": "Reintenta conciliar contra el banco (Inter) los comprobantes PIX pendientes del tenant. Idempotente y seguro de reejecutar."
           }
         },
         {
-          "name": "Sin identidad de tenant → 401",
+          "name": "Sin token JWT → 401",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('rechaza la consulta sin tenant con 401', () => pm.response.to.have.status(401));"
+                  "pm.test('rechaza la consulta sin Authorization con 401', () => pm.response.to.have.status(401));"
                 ]
               }
             }
@@ -647,7 +866,7 @@
                 { "key": "pageSize", "value": "10" }
               ]
             },
-            "description": "Seguridad multi-tenant: sin `x-tenant-id` válido no hay acceso a datos."
+            "description": "Seguridad: el JwtGuard exige `Authorization: Bearer` en credit/payments; sin token no hay acceso (401), antes incluso de mirar el `x-tenant-id`."
           }
         }
       ]

@@ -11,9 +11,9 @@ import {
  */
 @Injectable()
 export class NullBankVerifier implements BankPaymentVerifier {
-  async verify(): Promise<BankVerificationResult> {
-    return {
+  verify(): Promise<BankVerificationResult> {
+    return Promise.resolve({
       verification: { status: 'unavailable', reason: 'banco_no_soportado' },
-    };
+    });
   }
 }

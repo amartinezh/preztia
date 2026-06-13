@@ -4,7 +4,6 @@ import { schema } from '@preztiaos/db';
 import { type PaymentSummary } from '@preztiaos/contracts';
 import {
   portfolioBalanceMinor,
-  type InstallmentStatus,
   type PortfolioInstallment,
 } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
