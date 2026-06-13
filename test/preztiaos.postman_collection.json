@@ -1,0 +1,656 @@
+{
+  "info": {
+    "_postman_id": "7f2a9c4e-1b3d-4e8a-9c6f-preztiaos0001",
+    "name": "PreztiaOS — API completa (E2E)",
+    "description": "Colección para probar el 100% de la superficie HTTP de PreztiaOS: salud, webhook de WhatsApp (verificación, seguridad HMAC, idempotencia), conversación por texto (IA), protocolo KYC de documentos (que dispara el pipeline antifraude documental de 4 etapas), créditos y pagos/cartera.\n\n---\n\n## Requisitos previos\n\n1. Infraestructura y BD: `pnpm db:up && pnpm db:migrate`\n2. API corriendo: `pnpm build && pnpm dev` (puerto 3000 por defecto)\n3. Variables de la colección (pestaña *Variables*):\n   - `whatsappAppSecret` y `whatsappVerifyToken` → copia los valores de tu `.env` (`WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`). La firma `x-hub-signature-256` de cada POST al webhook se calcula sola en el pre-request script de la colección.\n   - `channelId` → `phone_number_id` del canal registrado en `tenant_config` (necesario para que los flujos conversacionales encuentren el tenant; sin él, el webhook responde 200 e ignora el mensaje, que es el comportamiento esperado).\n   - `tenantId` → uuid del tenant para los endpoints REST.\n\n## Orden sugerido de ejecución\n\n00 → 01 → 02 → 03 (inicia la solicitud) → 04 (envía los 3 documentos KYC) → 05 (crea el crédito y guarda `creditId`) → 06.\n\n## Pipeline antifraude (sin endpoint HTTP propio)\n\nAl aceptarse el TERCER documento (carpeta 04) la solicitud logra completitud y se dispara automáticamente el pipeline antifraude (Etapas 2-4: reglas locales → Minha Receita/BrasilAPI → Serpro opcional). El reporte queda **append-only** en la tabla `document_validation` y el evento `ANTIFRAUD_VALIDATION_COMPLETED` en `credit_application_event`. Verificación:\n\n```sql\nSELECT status, score, jsonb_pretty(alerts), consulted_sources, created_at\nFROM document_validation ORDER BY created_at DESC LIMIT 1;\n```\n\n> Nota sobre media: para que la descarga del binario funcione de verdad, `mediaId*` debe ser un media real de la Graph API (con `WHATSAPP_ACCESS_TOKEN` válido). Con ids de prueba el webhook responde 200 igualmente y el error queda trazado en el log (resiliencia: Meta no debe reintentar).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Identificadores frescos por envío: el sistema es idempotente por wamid,",
+          "// así que cada ejecución usa uno nuevo (salvo el test de duplicados, que usa {{wamidFijo}}).",
+          "pm.variables.set('ts', Math.floor(Date.now() / 1000).toString());",
+          "pm.variables.set('wamid', 'wamid.test.' + Date.now() + '.' + Math.random().toString(16).slice(2));",
+          "",
+          "// Firma del webhook tal como la calcula Meta: HMAC-SHA256 del cuerpo crudo",
+          "// con el App Secret, enviada en x-hub-signature-256 como 'sha256=<hex>'.",
+          "const esWebhookPost =",
+          "  pm.request.method === 'POST' &&",
+          "  pm.request.url.toString().includes('/webhooks/whatsapp') &&",
+          "  pm.request.body && pm.request.body.raw;",
+          "if (esWebhookPost) {",
+          "  const raw = pm.variables.replaceIn(pm.request.body.raw);",
+          "  const secret = pm.variables.get('whatsappAppSecret') || '';",
+          "  const hash = CryptoJS.HmacSHA256(raw, secret).toString();",
+          "  pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + hash });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "description": "URL base de la API (apps/api)" },
+    { "key": "whatsappVerifyToken", "value": "cambia-esto", "description": "Debe coincidir con WHATSAPP_VERIFY_TOKEN del .env" },
+    { "key": "whatsappAppSecret", "value": "cambia-esto", "description": "Debe coincidir con WHATSAPP_APP_SECRET del .env (firma HMAC del webhook)" },
+    { "key": "channelId", "value": "123456789012345", "description": "phone_number_id del canal de WhatsApp registrado en tenant_config" },
+    { "key": "wabaId", "value": "102290129340398", "description": "id de la cuenta de WhatsApp Business (entry.id del webhook)" },
+    { "key": "applicantPhone", "value": "5561999998888", "description": "Teléfono del solicitante (E.164 sin '+'); el DDD 61 = DF se cruza en el antifraude" },
+    { "key": "wamidFijo", "value": "wamid.test.duplicado.0001", "description": "wamid constante para probar la idempotencia (enviar 2 veces)" },
+    { "key": "mediaIdIdentidad", "value": "MEDIA_ID_IDENTIDAD", "description": "id de media (Graph API) de la imagen del documento de identidad" },
+    { "key": "mediaIdNegocio", "value": "MEDIA_ID_NEGOCIO", "description": "id de media (Graph API) del PDF del registro del negocio (cartão CNPJ)" },
+    { "key": "mediaIdRecibo", "value": "MEDIA_ID_RECIBO", "description": "id de media (Graph API) de la imagen del recibo de servicio público" },
+    { "key": "mediaIdAudio", "value": "MEDIA_ID_AUDIO", "description": "id de media (Graph API) de una nota de voz" },
+    { "key": "tenantId", "value": "00000000-0000-0000-0000-000000000001", "description": "uuid del tenant para los endpoints REST (x-tenant-id)" },
+    { "key": "borrowerId", "value": "11111111-1111-4111-8111-111111111111", "description": "uuid del deudor al otorgar un crédito" },
+    { "key": "zoneId", "value": "22222222-2222-4222-8222-222222222222", "description": "uuid de la zona de cobranza" },
+    { "key": "creditId", "value": "", "description": "Se llena automáticamente al otorgar un crédito (carpeta 05)" }
+  ],
+  "item": [
+    {
+      "name": "00 · Salud y entorno",
+      "description": "Verifica que la API esté viva antes de correr el resto.",
+      "item": [
+        {
+          "name": "API viva (GET / → 404 controlado de Nest)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// No hay endpoint raíz: si Nest responde su 404 JSON, la API está viva y enrutando.",
+                  "pm.test('la API está arriba (404 controlado de Nest)', () => pm.response.to.have.status(404));",
+                  "pm.test('el cuerpo es el error estándar de Nest', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.message).to.eql('Cannot GET /');",
+                  "  pm.expect(json.statusCode).to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/", "host": ["{{baseUrl}}"], "path": [""] },
+            "description": "Smoke test: la API no expone endpoint raíz, pero su 404 JSON estándar confirma que el servidor está arriba y enrutando. Si falla por conexión, revisa `pnpm dev` y el puerto."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 · Webhook WhatsApp · Verificación (Meta)",
+      "description": "Handshake GET que Meta ejecuta al registrar el webhook.",
+      "item": [
+        {
+          "name": "Handshake OK → devuelve el challenge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve el hub.challenge en texto plano', () => {",
+                  "  pm.expect(pm.response.text()).to.eql('reto-postman-12345');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token={{whatsappVerifyToken}}&hub.challenge=reto-postman-12345",
+              "host": ["{{baseUrl}}"],
+              "path": ["webhooks", "whatsapp"],
+              "query": [
+                { "key": "hub.mode", "value": "subscribe" },
+                { "key": "hub.verify_token", "value": "{{whatsappVerifyToken}}" },
+                { "key": "hub.challenge", "value": "reto-postman-12345" }
+              ]
+            },
+            "description": "Simula el handshake de Meta. Requiere que `whatsappVerifyToken` coincida con `WHATSAPP_VERIFY_TOKEN` del .env."
+          }
+        },
+        {
+          "name": "Handshake con token inválido → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rechaza la verificación con 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=token-incorrecto&hub.challenge=reto",
+              "host": ["{{baseUrl}}"],
+              "path": ["webhooks", "whatsapp"],
+              "query": [
+                { "key": "hub.mode", "value": "subscribe" },
+                { "key": "hub.verify_token", "value": "token-incorrecto" },
+                { "key": "hub.challenge", "value": "reto" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Webhook WhatsApp · Seguridad e idempotencia",
+      "description": "Firma HMAC, eventos no soportados y reentregas duplicadas. El webhook SIEMPRE responde 200 a eventos legítimos aunque internamente falle algo: si devolviera 5xx, Meta lo reentregaría en bucle.",
+      "item": [
+        {
+          "name": "Firma HMAC inválida → 403",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Pisa la firma correcta (calculada por la colección) con una inválida.",
+                  "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + '0'.repeat(64) });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rechaza el evento con 403 (firma no coincide)', () => pm.response.to.have.status(403));",
+                  "// Nota: si WHATSAPP_APP_SECRET no está configurado, la API omite la verificación y responde 200."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamid}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"text\",\n                \"text\": { \"body\": \"mensaje con firma adulterada\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] }
+          }
+        },
+        {
+          "name": "Evento no soportado → 200 (se ignora sin reintento)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200 para que Meta no reintente', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"evento_desconocido\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] },
+            "description": "No coincide con el esquema del contrato: se traza y se responde 200."
+          }
+        },
+        {
+          "name": "Recibo de entrega/lectura (statuses) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"statuses\": [ { \"id\": \"{{wamid}}\", \"status\": \"delivered\", \"timestamp\": \"{{ts}}\" } ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] },
+            "description": "Los recibos de entrega/lectura se ignoran (no son mensajes)."
+          }
+        },
+        {
+          "name": "Mensaje duplicado (mismo wamid) → idempotente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200 también en la reentrega', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamidFijo}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"text\",\n                \"text\": { \"body\": \"¿Cuáles son los requisitos del crédito?\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] },
+            "description": "EJECUTAR DOS VECES: usa el wamid constante `{{wamidFijo}}`. La primera vez se procesa; la segunda, el deduplicador la descarta (sin doble respuesta ni doble consumo de IA). El HTTP es 200 en ambas; la diferencia se ve en los logs de la API."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · Conversación por texto (IA + protocolo)",
+      "description": "Clasificación del mensaje con IA: pregunta de conocimiento, apertura de la solicitud de crédito, reinicio del protocolo y audio. Requiere un tenant en `tenant_config` con `phone_number_id = {{channelId}}`, credencial de IA y base de conocimiento; sin eso, la API responde 200 e ignora (comportamiento esperado).",
+      "item": [
+        {
+          "name": "Pregunta de conocimiento → respuesta de la IA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"contacts\": [ { \"profile\": { \"name\": \"João da Silva\" }, \"wa_id\": \"{{applicantPhone}}\" } ],\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamid}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"text\",\n                \"text\": { \"body\": \"Hola, ¿qué tasas de interés manejan y cada cuánto se paga?\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] }
+          }
+        },
+        {
+          "name": "Solicitar crédito → inicia el protocolo KYC",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"contacts\": [ { \"profile\": { \"name\": \"João da Silva\" }, \"wa_id\": \"{{applicantPhone}}\" } ],\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamid}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"text\",\n                \"text\": { \"body\": \"Quiero solicitar un crédito para mi negocio, ¿qué debo hacer?\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] },
+            "description": "La IA clasifica como `credit_application` y la API abre (o retoma) la solicitud: crea el checklist de documentos y pide el primero por WhatsApp. Después de esto, ejecutar la carpeta 04."
+          }
+        },
+        {
+          "name": "Reiniciar la solicitud (reenviar todos los documentos)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamid}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"text\",\n                \"text\": { \"body\": \"Me equivoqué con los documentos, quiero volver a enviarlos todos desde cero\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] },
+            "description": "La IA clasifica como `restart_application`: todos los documentos vuelven a PENDING (limpiando el KYC previo) y la solicitud regresa a AWAITING_DOCUMENTS, con evento de auditoría."
+          }
+        },
+        {
+          "name": "Nota de voz (dispatcher de audio)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamid}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"audio\",\n                \"audio\": { \"id\": \"{{mediaIdAudio}}\", \"mime_type\": \"audio/ogg; codecs=opus\", \"voice\": true }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · KYC · Documentos de la solicitud (Etapa 1 + antifraude)",
+      "description": "Envío de los 3 documentos del checklist por WhatsApp, EN ORDEN (la API pide uno a la vez). Cada documento aceptado dispara la Etapa 1 del pipeline antifraude: extracción con Gemini + metadata forense del archivo + hash, persistidos en `document_extraction`. Al aceptarse el TERCERO, la solicitud logra completitud y corre el pipeline completo (Etapas 2-4); el reporte queda en `document_validation`.\n\nRequisitos para el flujo real: solicitud activa (carpeta 03 → \"Solicitar crédito\"), `mediaId*` reales de la Graph API y `WHATSAPP_ACCESS_TOKEN` válido. Con ids ficticios la API responde 200 y traza el fallo de descarga (resiliencia).",
+      "item": [
+        {
+          "name": "1) Documento de identidad — imagen (CNH/CIN/RG)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamid}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"image\",\n                \"image\": { \"id\": \"{{mediaIdIdentidad}}\", \"mime_type\": \"image/jpeg\", \"sha256\": \"aWRlbnRpZGFkLXNoYTI1Ni1kZW1v\", \"caption\": \"Mi CNH\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] },
+            "description": "El antifraude estructural valida formato/tamaño/reuso del binario; Gemini identifica el documento y extrae nome, cpf, fechas (Etapa 1); las reglas locales validan mod-11 y coherencia (Etapa 2)."
+          }
+        },
+        {
+          "name": "2) Registro del negocio — PDF (cartão CNPJ)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamid}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"document\",\n                \"document\": { \"id\": \"{{mediaIdNegocio}}\", \"mime_type\": \"application/pdf\", \"filename\": \"cartao-cnpj.pdf\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] },
+            "description": "En la Etapa 3 el CNPJ extraído se cruza campo a campo contra la Receita Federal (Minha Receita): situación cadastral, razón social, QSA, capital, CEP/UF."
+          }
+        },
+        {
+          "name": "3) Recibo de servicio público — imagen (dispara el pipeline)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma la recepción', () => pm.expect(pm.response.json().received).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"{{wabaId}}\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": { \"display_phone_number\": \"5511400000000\", \"phone_number_id\": \"{{channelId}}\" },\n            \"messages\": [\n              {\n                \"from\": \"{{applicantPhone}}\",\n                \"id\": \"{{wamid}}\",\n                \"timestamp\": \"{{ts}}\",\n                \"type\": \"image\",\n                \"image\": { \"id\": \"{{mediaIdRecibo}}\", \"mime_type\": \"image/jpeg\", \"sha256\": \"cmVjaWJvLXNoYTI1Ni1kZW1v\", \"caption\": \"Conta de luz\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/whatsapp", "host": ["{{baseUrl}}"], "path": ["webhooks", "whatsapp"] },
+            "description": "Al aceptarse este tercer documento se logra la completitud y se dispara el pipeline antifraude completo: FEBRABAN + fechas + forense (Etapa 2), CNPJ del emisor/CEP/DDD contra APIs libres (Etapa 3) y Serpro si está configurado (Etapa 4). Verifica el reporte:\n\n```sql\nSELECT status, score, jsonb_pretty(alerts) FROM document_validation ORDER BY created_at DESC LIMIT 1;\n```"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 · Créditos (REST)",
+      "description": "Otorgamiento de créditos con calendario de cuotas (dinero SIEMPRE en unidades menores/centavos).",
+      "item": [
+        {
+          "name": "Otorgar crédito → 201 (guarda creditId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('devuelve el id del crédito y el número de cuotas', () => {",
+                  "  pm.expect(json.id).to.be.a('string');",
+                  "  pm.expect(json.installments).to.be.a('number').and.to.be.above(0);",
+                  "});",
+                  "// Encadena el resto de la colección: pagos y cartera usan este crédito.",
+                  "pm.collectionVariables.set('creditId', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-id", "value": "{{tenantId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"borrowerId\": \"{{borrowerId}}\",\n  \"zoneId\": \"{{zoneId}}\",\n  \"principalMinor\": 100000,\n  \"interestPct\": 10,\n  \"installmentsCount\": 30,\n  \"borrowerPhone\": \"{{applicantPhone}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/credits", "host": ["{{baseUrl}}"], "path": ["credits"] },
+            "description": "Crea el crédito y su calendario de cuotas (invariante: Σ cuotas == total). `principalMinor` son centavos: 100000 = R$ 1.000,00. `borrowerPhone` habilita el abono de pagos PIX por WhatsApp."
+          }
+        },
+        {
+          "name": "Body inválido → error de validación (zod en la frontera)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rechaza la entrada inválida (no 2xx)', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([400, 422, 500]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-id", "value": "{{tenantId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"borrowerId\": \"no-es-un-uuid\",\n  \"zoneId\": \"{{zoneId}}\",\n  \"principalMinor\": -500,\n  \"interestPct\": 10,\n  \"installmentsCount\": 0\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/credits", "host": ["{{baseUrl}}"], "path": ["credits"] },
+            "description": "borrowerId no-uuid, principal negativo y 0 cuotas: la validación zod del contrato debe rechazarlo en la frontera."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 · Pagos y cartera (REST)",
+      "description": "Consultas de pagos/cartera (paginación obligatoria) y conciliación bancaria. Requiere `creditId` (lo deja la carpeta 05) y `x-tenant-id`.",
+      "item": [
+        {
+          "name": "Listar pagos del crédito (paginado) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('respuesta paginada (items, page, pageSize, total)', () => {",
+                  "  pm.expect(json.items).to.be.an('array');",
+                  "  pm.expect(json.page).to.eql(1);",
+                  "  pm.expect(json.pageSize).to.eql(10);",
+                  "  pm.expect(json.total).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/credits/{{creditId}}/payments?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["credits", "{{creditId}}", "payments"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cartera del crédito (cuotas y saldo) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/credits/{{creditId}}/portfolio",
+              "host": ["{{baseUrl}}"],
+              "path": ["credits", "{{creditId}}", "portfolio"]
+            },
+            "description": "Estado de la cartera del crédito creado en la carpeta 05 (invariantes: saldo nunca negativo, Σ abonos ≤ total)."
+          }
+        },
+        {
+          "name": "Crédito inexistente → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 404 para un crédito que no existe', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/credits/99999999-9999-4999-8999-999999999999/portfolio",
+              "host": ["{{baseUrl}}"],
+              "path": ["credits", "99999999-9999-4999-8999-999999999999", "portfolio"]
+            }
+          }
+        },
+        {
+          "name": "Conciliar pagos pendientes (banco) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }],
+            "url": { "raw": "{{baseUrl}}/payments/reconcile", "host": ["{{baseUrl}}"], "path": ["payments", "reconcile"] },
+            "description": "Reintenta conciliar contra el banco (Inter) los comprobantes PIX pendientes del tenant. Idempotente y seguro de reejecutar."
+          }
+        },
+        {
+          "name": "Sin identidad de tenant → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rechaza la consulta sin tenant con 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/credits/99999999-9999-4999-8999-999999999999/payments?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["credits", "99999999-9999-4999-8999-999999999999", "payments"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            },
+            "description": "Seguridad multi-tenant: sin `x-tenant-id` válido no hay acceso a datos."
+          }
+        }
+      ]
+    }
+  ]
+}

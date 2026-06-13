@@ -4,6 +4,7 @@ export * from "./tenant-config";
 export * from "./credit-application";
 export * from "./required-document-catalog";
 export * from "./document-extraction";
+export * from "./document-validation";
 export * from "./conversation-message";
 export * from "./installment";
 export * from "./payment";

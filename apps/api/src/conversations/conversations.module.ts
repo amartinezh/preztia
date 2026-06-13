@@ -25,9 +25,16 @@ import {
   StartCreditApplicationHandler,
   SubmitApplicationDocumentHandler,
   SubmitPaymentReceiptHandler,
+  type CepLookup,
+  type CnpjRegistryLookup,
+  type CpfRegistryVerifier,
+  type DddLookup,
+  type DocumentExtractionReader,
   type TenantAssistantConfigRepository,
   type TenantResolver,
   type TextMessageConsumer,
+  ValidateApplicationDocumentsHandler,
+  type ValidationReportRepository,
 } from '@preztiaos/application';
 import { WhatsappWebhookController } from './whatsapp-webhook.controller';
 import { WhatsappTextConsumer } from './adapters/whatsapp-text.consumer';
@@ -46,7 +53,13 @@ import {
 } from '../payments/payments.tokens';
 import { CreditApplicationDrizzleRepository } from '../credit-application/credit-application.repository';
 import { RequiredDocumentCatalogDrizzleRepository } from '../credit-application/required-document-catalog.repository';
-import { LoggingApplicationCompletionNotifier } from '../credit-application/application-completion.notifier';
+import { AntifraudValidationCompletionNotifier } from '../credit-application/validation/validate-on-completion.notifier';
+import { DrizzleDocumentExtractionReader } from '../credit-application/validation/document-extraction.reader';
+import { DrizzleValidationReportRepository } from '../credit-application/validation/validation-report.repository';
+import { MinhaReceitaCnpjRegistry } from '../credit-application/validation/minha-receita.client';
+import { BrasilApiCepLookup } from '../credit-application/validation/brasilapi-cep.client';
+import { BrasilApiDddLookup } from '../credit-application/validation/brasilapi-ddd.client';
+import { SerproCpfVerifier } from '../credit-application/validation/serpro-cpf.client';
 import { AiDocumentReviewer } from '../credit-application/document-reviewer';
 import { WhatsappMediaDownloader } from '../credit-application/whatsapp-media.downloader';
 import { MinioDocumentStorage } from '../credit-application/minio-document.storage';
@@ -58,12 +71,17 @@ import {
   ANTIFRAUD_SERVICE,
   APPLICATION_COMPLETION_NOTIFIER,
   AUDIO_DISPATCHER,
+  CEP_LOOKUP,
+  CNPJ_REGISTRY_LOOKUP,
   CONFIG_REPOSITORY,
   CONVERSATION_LOG,
+  CPF_REGISTRY_VERIFIER,
   CREDIT_APPLICATION_REPOSITORY,
   CREDIT_APPLICATION_RESTARTER,
   CREDIT_APPLICATION_STARTER,
+  DDD_LOOKUP,
   DOCUMENT_DISPATCHER,
+  DOCUMENT_EXTRACTION_READER,
   DOCUMENT_REVIEWER,
   DOCUMENT_STORAGE,
   IMAGE_DISPATCHER,
@@ -75,6 +93,7 @@ import {
   REQUIRED_DOCUMENT_CATALOG,
   TENANT_RESOLVER,
   TEXT_CONSUMER,
+  VALIDATION_REPORT_REPOSITORY,
 } from './conversations.tokens';
 
 /**
@@ -158,9 +177,49 @@ import {
       provide: REQUIRED_DOCUMENT_CATALOG,
       useClass: RequiredDocumentCatalogDrizzleRepository,
     },
+    // Pipeline de validación documental antifraude: puertos → adaptadores.
+    { provide: DOCUMENT_EXTRACTION_READER, useClass: DrizzleDocumentExtractionReader },
+    { provide: CNPJ_REGISTRY_LOOKUP, useClass: MinhaReceitaCnpjRegistry },
+    { provide: CEP_LOOKUP, useClass: BrasilApiCepLookup },
+    { provide: DDD_LOOKUP, useClass: BrasilApiDddLookup },
+    { provide: CPF_REGISTRY_VERIFIER, useClass: SerproCpfVerifier },
+    { provide: VALIDATION_REPORT_REPOSITORY, useClass: DrizzleValidationReportRepository },
+
+    // Caso de uso: valida los documentos de la solicitud (Etapas 2-4).
+    {
+      provide: ValidateApplicationDocumentsHandler,
+      inject: [
+        DOCUMENT_EXTRACTION_READER,
+        CNPJ_REGISTRY_LOOKUP,
+        CEP_LOOKUP,
+        DDD_LOOKUP,
+        CPF_REGISTRY_VERIFIER,
+        VALIDATION_REPORT_REPOSITORY,
+      ],
+      useFactory: (
+        extractions: DocumentExtractionReader,
+        cnpjRegistry: CnpjRegistryLookup,
+        ceps: CepLookup,
+        ddds: DddLookup,
+        cpfRegistry: CpfRegistryVerifier,
+        reports: ValidationReportRepository,
+      ) =>
+        new ValidateApplicationDocumentsHandler(
+          extractions,
+          cnpjRegistry,
+          ceps,
+          ddds,
+          cpfRegistry,
+          reports,
+        ),
+    },
+
+    // Al lograr la completitud documental se dispara el pipeline antifraude.
     {
       provide: APPLICATION_COMPLETION_NOTIFIER,
-      useClass: LoggingApplicationCompletionNotifier,
+      inject: [ValidateApplicationDocumentsHandler],
+      useFactory: (validate: ValidateApplicationDocumentsHandler) =>
+        new AntifraudValidationCompletionNotifier(validate),
     },
     { provide: DOCUMENT_REVIEWER, useClass: AiDocumentReviewer },
     { provide: MEDIA_DOWNLOADER, useClass: WhatsappMediaDownloader },

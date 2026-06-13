@@ -39,6 +39,8 @@ export const documentExtraction = pgTable(
     confidence: integer("confidence"),
     // Datos extraídos (no estructurados) y respuesta cruda del modelo.
     fields: jsonb("fields").$type<Record<string, unknown>>(),
+    // Metadata técnica del archivo (Producer/fechas; forense de la Etapa 2).
+    fileMetadata: jsonb("file_metadata").$type<Record<string, unknown>>(),
     rawText: text("raw_text"),
     rawResponse: jsonb("raw_response"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

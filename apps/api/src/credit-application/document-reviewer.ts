@@ -15,6 +15,7 @@ import {
 } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { extractWithGemini, type GeminiDocumentExtraction } from './ai/gemini-document.client';
+import { parseFileMetadata } from './validation/file-metadata.parser';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash'; // multimodal (acepta imágenes y PDF)
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -177,6 +178,9 @@ export class AiDocumentReviewer implements DocumentReviewer {
     model: string,
     extraction: GeminiDocumentExtraction,
   ): Promise<void> {
+    // Etapa 1 del pipeline antifraude: junto con los campos de la IA se persiste
+    // la metadata técnica del archivo (Producer/fechas) para el forense local.
+    const fileMetadata = parseFileMetadata(job.media.bytes, job.media.mimeType);
     return withTenantTxFor(job.tenantId, async (tx) => {
       await tx.insert(schema.documentExtraction).values({
         tenantId: job.tenantId,
@@ -190,6 +194,7 @@ export class AiDocumentReviewer implements DocumentReviewer {
         matchesExpected: extraction.matchesExpected,
         confidence: Math.round(extraction.confidence * 100),
         fields: extraction.fields,
+        fileMetadata: fileMetadata ? { ...fileMetadata } : null,
         rawText: extraction.rawText,
         rawResponse: extraction.raw,
       });

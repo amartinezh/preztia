@@ -32,3 +32,13 @@ export const INBOUND_MESSAGE_DEDUPLICATOR = Symbol(
   'InboundMessageDeduplicator',
 );
 export const TENANT_RESOLVER = Symbol('TenantResolver');
+
+// Pipeline de validación documental antifraude (Etapas 2-4).
+export const DOCUMENT_EXTRACTION_READER = Symbol('DocumentExtractionReader');
+export const CNPJ_REGISTRY_LOOKUP = Symbol('CnpjRegistryLookup');
+export const CEP_LOOKUP = Symbol('CepLookup');
+export const DDD_LOOKUP = Symbol('DddLookup');
+export const CPF_REGISTRY_VERIFIER = Symbol('CpfRegistryVerifier');
+export const VALIDATION_REPORT_REPOSITORY = Symbol(
+  'ValidationReportRepository',
+);
