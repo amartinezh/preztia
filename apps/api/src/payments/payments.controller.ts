@@ -52,14 +52,19 @@ export class PaymentsController {
   ) {
     const tenant = requireTenant(tenantId);
     const id = uuid.parse(creditId);
-    const portfolio = await this.queries.getPortfolio({ tenantId: tenant, creditId: id });
+    const portfolio = await this.queries.getPortfolio({
+      tenantId: tenant,
+      creditId: id,
+    });
     if (!portfolio) throw new NotFoundException('Crédito no encontrado');
     return portfolio;
   }
 
   @Post('payments/reconcile')
   @HttpCode(200)
-  async reconcilePayments(@Headers('x-tenant-id') tenantId: string | undefined) {
+  async reconcilePayments(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+  ) {
     const tenant = requireTenant(tenantId);
     return this.reconcile.execute({ tenantId: tenant });
   }
@@ -67,6 +72,7 @@ export class PaymentsController {
 
 function requireTenant(tenantId: string | undefined): string {
   const parsed = uuid.safeParse(tenantId);
-  if (!parsed.success) throw new UnauthorizedException('Falta la identidad del tenant');
+  if (!parsed.success)
+    throw new UnauthorizedException('Falta la identidad del tenant');
   return parsed.data;
 }

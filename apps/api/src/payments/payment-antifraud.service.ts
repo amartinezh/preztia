@@ -60,7 +60,12 @@ export class DuplicateEndToEndRule implements PaymentFraudRule {
       const [row] = await tx
         .select({ id: schema.payment.id })
         .from(schema.payment)
-        .where(and(eq(schema.payment.endToEndId, endToEndId), isNotNull(schema.payment.endToEndId)))
+        .where(
+          and(
+            eq(schema.payment.endToEndId, endToEndId),
+            isNotNull(schema.payment.endToEndId),
+          ),
+        )
         .limit(1);
       return Boolean(row);
     });
@@ -121,7 +126,12 @@ export class PaymentAntifraudComposite implements PaymentAntifraudService {
     }
 
     if (rejects) return { status: 'rejected', score: SCORE_REJECTED, reasons };
-    if (reasons.length) return { status: 'suspicious', score: Math.min(score, SCORE_REJECTED), reasons };
+    if (reasons.length)
+      return {
+        status: 'suspicious',
+        score: Math.min(score, SCORE_REJECTED),
+        reasons,
+      };
     return { status: 'approved', score: 0, reasons: [] };
   }
 }

@@ -178,12 +178,18 @@ import {
       useClass: RequiredDocumentCatalogDrizzleRepository,
     },
     // Pipeline de validación documental antifraude: puertos → adaptadores.
-    { provide: DOCUMENT_EXTRACTION_READER, useClass: DrizzleDocumentExtractionReader },
+    {
+      provide: DOCUMENT_EXTRACTION_READER,
+      useClass: DrizzleDocumentExtractionReader,
+    },
     { provide: CNPJ_REGISTRY_LOOKUP, useClass: MinhaReceitaCnpjRegistry },
     { provide: CEP_LOOKUP, useClass: BrasilApiCepLookup },
     { provide: DDD_LOOKUP, useClass: BrasilApiDddLookup },
     { provide: CPF_REGISTRY_VERIFIER, useClass: SerproCpfVerifier },
-    { provide: VALIDATION_REPORT_REPOSITORY, useClass: DrizzleValidationReportRepository },
+    {
+      provide: VALIDATION_REPORT_REPOSITORY,
+      useClass: DrizzleValidationReportRepository,
+    },
 
     // Caso de uso: valida los documentos de la solicitud (Etapas 2-4).
     {
@@ -246,7 +252,10 @@ import {
       ) => new StartCreditApplicationHandler(repo, sender, catalog),
     },
     // El mismo handler implementa también el reinicio (CreditApplicationRestarter).
-    { provide: CREDIT_APPLICATION_RESTARTER, useExisting: CREDIT_APPLICATION_STARTER },
+    {
+      provide: CREDIT_APPLICATION_RESTARTER,
+      useExisting: CREDIT_APPLICATION_STARTER,
+    },
 
     // Caso de uso: recibe y valida un documento del protocolo.
     {

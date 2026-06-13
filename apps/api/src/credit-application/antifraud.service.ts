@@ -46,7 +46,9 @@ export class StructuralAntifraudService implements AntifraudService {
       reasons.push(`formato no permitido (${input.mimeType})`);
     }
     if (input.sizeBytes > maxBytes)
-      reasons.push(`el archivo supera el tamaño máximo (${maxBytes / (1024 * 1024)} MB)`);
+      reasons.push(
+        `el archivo supera el tamaño máximo (${maxBytes / (1024 * 1024)} MB)`,
+      );
     if (input.sizeBytes < MIN_BYTES)
       reasons.push('el archivo está vacío o es ilegible');
 

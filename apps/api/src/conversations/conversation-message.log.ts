@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { schema } from '@preztiaos/db';
 import { type ConversationLog } from '@preztiaos/application';
 import { type InboundMessage } from '@preztiaos/domain';
-import { resolveTenantByWhatsappPhone, withTenantTxFor } from '../tenancy/unit-of-work';
+import {
+  resolveTenantByWhatsappPhone,
+  withTenantTxFor,
+} from '../tenancy/unit-of-work';
 
 interface MessageRow {
   kind: string;
@@ -86,9 +89,19 @@ export class ConversationMessageLog implements ConversationLog {
 function describeInbound(message: InboundMessage): MessageRow {
   switch (message.kind) {
     case 'text':
-      return { kind: 'text', body: message.body, mediaId: null, mimeType: null };
+      return {
+        kind: 'text',
+        body: message.body,
+        mediaId: null,
+        mimeType: null,
+      };
     case 'audio':
-      return { kind: 'audio', body: null, mediaId: message.media.mediaId, mimeType: message.media.mimeType };
+      return {
+        kind: 'audio',
+        body: null,
+        mediaId: message.media.mediaId,
+        mimeType: message.media.mimeType,
+      };
     case 'image':
       return {
         kind: 'image',

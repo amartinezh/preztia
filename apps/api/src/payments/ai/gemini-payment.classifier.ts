@@ -2,8 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
-import { type DownloadedMedia, type MediaClassifier } from '@preztiaos/application';
-import { type MediaClassification, type PixReceiptData } from '@preztiaos/domain';
+import {
+  type DownloadedMedia,
+  type MediaClassifier,
+} from '@preztiaos/application';
+import {
+  type MediaClassification,
+  type PixReceiptData,
+} from '@preztiaos/domain';
 import { fetchWithRetry } from '../../shared/fetch-retry';
 import { withTenantTxFor } from '../../tenancy/unit-of-work';
 
@@ -70,11 +76,16 @@ const classificationSchema = z.object({
 export class GeminiPaymentClassifier implements MediaClassifier {
   private readonly logger = new Logger('Payments:Classifier');
 
-  async classify(input: { tenantId: string; media: DownloadedMedia }): Promise<MediaClassification> {
+  async classify(input: {
+    tenantId: string;
+    media: DownloadedMedia;
+  }): Promise<MediaClassification> {
     try {
       const apiKey = await this.resolveApiKey(input.tenantId);
       if (!apiKey) {
-        this.logger.warn(`Sin credencial de IA para el tenant ${input.tenantId}; media sin clasificar`);
+        this.logger.warn(
+          `Sin credencial de IA para el tenant ${input.tenantId}; media sin clasificar`,
+        );
         return { kind: 'unknown', confidence: 0 };
       }
       return await this.callGemini(apiKey, input.media);
@@ -87,7 +98,10 @@ export class GeminiPaymentClassifier implements MediaClassifier {
     }
   }
 
-  private async callGemini(apiKey: string, media: DownloadedMedia): Promise<MediaClassification> {
+  private async callGemini(
+    apiKey: string,
+    media: DownloadedMedia,
+  ): Promise<MediaClassification> {
     const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
     const url = `${ENDPOINT}/${model}:generateContent?key=${apiKey}`;
     const base64 = Buffer.from(media.bytes).toString('base64');
@@ -105,16 +119,22 @@ export class GeminiPaymentClassifier implements MediaClassifier {
             ],
           },
         ],
-        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+        },
       }),
     });
     if (!res.ok) {
-      throw new Error(`Gemini (clasificación) respondió ${res.status}: ${await res.text()}`);
+      throw new Error(
+        `Gemini (clasificación) respondió ${res.status}: ${await res.text()}`,
+      );
     }
 
     const data = (await res.json()) as GeminiResponse;
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Gemini no devolvió contenido en la clasificación');
+    if (!text)
+      throw new Error('Gemini no devolvió contenido en la clasificación');
 
     const parsed = classificationSchema.parse(JSON.parse(text));
     if (parsed.kind !== 'payment_receipt') {
@@ -163,7 +183,9 @@ const CENTS_PER_UNIT = 100;
  * Acepta formato pt-BR ("R$ 1.234,56"), formato con punto decimal ("1234.56")
  * y números. Devuelve null si no es interpretable (el dominio lo rechazará).
  */
-export function parseAmountToMinor(value: string | number | null): number | null {
+export function parseAmountToMinor(
+  value: string | number | null,
+): number | null {
   if (value === null) return null;
   if (typeof value === 'number') {
     return Number.isFinite(value) ? Math.round(value * CENTS_PER_UNIT) : null;

@@ -30,7 +30,8 @@ export class MinioDocumentStorage implements DocumentStorage {
     documentType: RequiredDocumentType;
     media: DownloadedMedia;
   }): Promise<StoredDocument> {
-    if (!this.bucketReady) this.bucketReady = ensureBucket(this.client, this.bucket);
+    if (!this.bucketReady)
+      this.bucketReady = ensureBucket(this.client, this.bucket);
     await this.bucketReady;
 
     const storageKey = `${input.tenantId}/${input.applicationId}/${input.documentType}`;

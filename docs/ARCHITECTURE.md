@@ -1,8 +1,10 @@
 # PreztiaOS — Documento de Arquitectura
 
 > **Estado:** documento vivo. Se ajusta conforme se toman decisiones.
-> **Última actualización:** 2026-06-06 (añadidos atributos de calidad y estándares de código — §3)
+> **Última actualización:** 2026-06-13 (separación arquitectura ↔ análisis/diseño: §9/§10/§12/§13/§19 movidas a [DESIGN.md](DESIGN.md); ADR #18–#19; deuda §21 refrescada contra el código).
 > **Ámbito:** plataforma multi-tenant de **préstamos y cobranza** (microcrédito de ruta/gota a gota, cobranza por zonas).
+>
+> 📚 **Conjunto de documentos:** este archivo cubre **arquitectura** (el *cómo*). El **análisis y diseño funcional** (el *qué*, validado contra el código) está en **[DESIGN.md](DESIGN.md)**; el cliente, en **[FRONTEND_ARCHITECTURE.md](FRONTEND_ARCHITECTURE.md)**; el antifraude documental a fondo, en **[analisisPlataformas.md](analisisPlataformas.md)**.
 
 ---
 
@@ -16,17 +18,17 @@
 6. [Estructura del monorepo](#6-estructura-del-monorepo)
 7. [Arquitectura en capas (hexagonal / DDD)](#7-arquitectura-en-capas-hexagonal--ddd)
 8. [Multitenancy y seguridad (RLS)](#8-multitenancy-y-seguridad-rls)
-9. [Modelo de datos](#9-modelo-de-datos)
-10. [Zonificación con `ltree`](#10-zonificación-con-ltree)
+9. [Modelo de datos](#9-modelo-de-datos) — *ver [DESIGN.md](DESIGN.md)*
+10. [Zonificación con `ltree`](#10-zonificación-con-ltree) — *ver [DESIGN.md](DESIGN.md)*
 11. [Contract-first (ts-rest + zod)](#11-contract-first-ts-rest--zod)
-12. [Flujo de un caso de uso: otorgar crédito](#12-flujo-de-un-caso-de-uso-otorgar-crédito)
-13. [El dominio: dinero y calendario de cuotas](#13-el-dominio-dinero-y-calendario-de-cuotas)
+12. [Flujo de un caso de uso: otorgar crédito](#12-flujo-de-un-caso-de-uso-otorgar-crédito) — *ver [DESIGN.md](DESIGN.md)*
+13. [El dominio: dinero y calendario de cuotas](#13-el-dominio-dinero-y-calendario-de-cuotas) — *ver [DESIGN.md](DESIGN.md)*
 14. [Clientes: app móvil/web (Expo)](#14-clientes-app-móvilweb-expo)
 15. [Infraestructura local](#15-infraestructura-local)
 16. [Build, tooling y pipeline](#16-build-tooling-y-pipeline)
 17. [Integración continua (CI)](#17-integración-continua-ci)
 18. [Convenciones del proyecto](#18-convenciones-del-proyecto)
-19. [Bounded contexts y roadmap](#19-bounded-contexts-y-roadmap)
+19. [Bounded contexts y roadmap](#19-bounded-contexts-y-roadmap) — *ver [DESIGN.md](DESIGN.md)*
 20. [Registro de decisiones (ADR)](#20-registro-de-decisiones-adr)
 21. [Deuda técnica y riesgos](#21-deuda-técnica-y-riesgos)
 22. [Glosario](#22-glosario)
@@ -153,7 +155,7 @@ Los §3.1–§3.6 son atributos a **nivel de código**. Esta sección añade los
 |---|---|---|
 | **Seguridad** | aislamiento por RLS `FORCE` + rol `app`; identidad del tenant desde **JWT** (no header spoofable), 401 si falta; authZ por rol y por subárbol de zonas (`ZoneScopeGuard`); secretos solo por entorno; validación en la frontera (zod) | ⚠️ RLS ✅; authN/authZ y tenant-por-JWT pendientes (§8, §21) |
 | **Auditabilidad / trazabilidad** | **todo movimiento de dinero y cambio de estado** se registra en un **audit log append-only** (quién, qué, cuándo, tenant); `correlationId` por petición; nada de borrar/editar historial financiero | ❌ por diseñar |
-| **Confiabilidad / idempotencia** | toda operación de dinero y todo webhook (WhatsApp) es **idempotente** (clave de idempotencia / `dedup`); reintentos seguros; consistencia transaccional (`withTenantTx`); sin doble cobro/abono | ⚠️ transacciones ✅; idempotencia pendiente |
+| **Confiabilidad / idempotencia** | toda operación de dinero y todo webhook (WhatsApp) es **idempotente** (clave de idempotencia / `dedup`); reintentos seguros; consistencia transaccional (`withTenantTx`); sin doble cobro/abono | ⚠️ transacciones ✅; webhooks/PIX idempotentes ✅; `Idempotency-Key` HTTP pendiente (§21) |
 | **Integridad / corrección financiera** | invariantes de agregado (saldo nunca negativo, `Σ abonos ≤ total`, cuadre de caja); dinero en enteros (`Money`); invariantes verificados con pruebas (§3.6) | ⚠️ `Money` + cuadre de cuotas ✅; invariantes de agregado/caja pendientes |
 
 #### Operación
@@ -392,85 +394,13 @@ CREATE POLICY tenant_isolation ON credit
 
 ## 9. Modelo de datos
 
-Estado actual del esquema Drizzle ([packages/db/src/schema](../packages/db/src/schema)). Todas las tablas de negocio llevan `tenant_id` (clave del aislamiento RLS).
-
-```mermaid
-erDiagram
-    ZONE ||--o{ ZONE : "parent_zone_id"
-    ZONE ||--o{ ZONE_COORDINATOR : "asigna"
-    ZONE ||--o{ CREDIT : "ubica"
-
-    ZONE {
-        uuid id PK
-        uuid tenant_id
-        uuid parent_zone_id "FK a ZONE (jerarquía)"
-        ltree path "ruta materializada (GiST)"
-        text name
-        timestamptz created_at
-    }
-
-    ZONE_COORDINATOR {
-        uuid zone_id
-        uuid coordinator_id
-        uuid tenant_id
-    }
-
-    CREDIT {
-        uuid id PK
-        uuid tenant_id
-        uuid borrower_id
-        uuid zone_id
-        bigint principal_minor "capital en centavos"
-        int interest_pct
-        int installments_count
-        enum frequency "DAILY..MONTHLY"
-        text currency
-        date start_date
-        date end_date
-        enum status "PENDING..CANCELLED"
-        timestamptz created_at
-    }
-```
-
-**Enumeraciones** ([credit.ts](../packages/db/src/schema/credit.ts)):
-
-- `credit_status`: `PENDING · ACTIVE · SETTLED · DEFAULTED · CANCELLED`
-- `frequency`: `DAILY · WEEKLY · BIWEEKLY · MONTHLY`
-
-**Extensiones de PostgreSQL** (de [01-init.sql](../docker/initdb/01-init.sql)):
-
-- `ltree` — jerarquía de zonas con consultas de subárbol.
-- `pgcrypto` — `gen_random_uuid()`.
-
-> El tipo `ltree` no es nativo en Drizzle: se declara con `customType` y los índices GiST + RLS se añaden en una **migración personalizada** (`0001`), separada de la generada por `drizzle-kit` (`0000`).
+> El **modelo de datos completo** (las ~18 tablas, 12 enums, invariantes y relaciones) vive ahora en **[DESIGN.md §5](DESIGN.md#5-modelo-de-datos)**. Regla **arquitectónica** que se mantiene aquí: toda tabla de negocio lleva `tenant_id` y queda protegida por RLS `FORCE` (§8); el dinero se guarda en unidades menores enteras (`*_minor`).
 
 ---
 
 ## 10. Zonificación con `ltree`
 
-Las zonas forman un árbol (país → ciudad → barrio → ruta…). Se usa una **ruta materializada** (`path` tipo `ltree`) con índice **GiST** para responder eficientemente “dame todo el subárbol bajo esta zona”.
-
-```mermaid
-flowchart TD
-    R["co (raíz tenant)"]
-    R --> A["co.bogota"]
-    R --> B["co.medellin"]
-    A --> A1["co.bogota.suba"]
-    A --> A2["co.bogota.kennedy"]
-    A1 --> A1a["co.bogota.suba.ruta01"]
-
-    style A1 fill:#ffe,stroke:#cc0
-    style A1a fill:#ffe,stroke:#cc0
-```
-
-Consulta típica (subárbol de una zona del coordinador):
-
-```sql
--- todas las zonas bajo 'co.bogota.suba' (usa el índice GiST zone_path_gist)
-SELECT * FROM zone WHERE path <@ 'co.bogota.suba';
-```
-
-Esto habilita el futuro `ZoneScopeGuard`: un coordinador solo ve/actúa sobre el subárbol que tiene asignado en `zone_coordinator`.
+> El diseño de la jerarquía de zonas (árbol `ltree`, consultas de subárbol, `ZoneScopeGuard`) se documenta en **[DESIGN.md](DESIGN.md#3-mapa-de-bounded-contexts-y-estado-de-implementación)**. Decisión arquitectónica asociada: **ADR #5** (`ltree` + índice GiST para subárbol eficiente).
 
 ---
 
@@ -530,72 +460,21 @@ export const creditContract = c.router({
 
 ## 12. Flujo de un caso de uso: otorgar crédito
 
-End-to-end, atravesando todas las capas:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant UI as Pantalla (mobile)
-    participant RQ as React Query (useMutation)
-    participant TR as ts-rest client
-    participant Ctrl as CreditController
-    participant H as GrantCreditHandler (app)
-    participant D as Dominio (Money/Schedule)
-    participant Repo as CreditDrizzleRepository
-    participant PG as PostgreSQL (RLS)
-
-    UI->>RQ: mutate()
-    RQ->>TR: api.grantCredit({ headers, body })
-    TR->>Ctrl: POST /credits  (x-tenant-id)
-    Ctrl->>Ctrl: grantCreditInput.parse(body)  // zod
-    Ctrl->>H: execute({ ...dto, tenantId, currency:"COP" })
-    H->>D: Money.of() + buildSchedule()
-    D-->>H: cuotas calculadas
-    H->>Repo: save({ id, tenantId, principalMinor, currency })
-    Repo->>PG: withTenantTx → set_config + INSERT
-    PG-->>Repo: ok (RLS WITH CHECK ✓)
-    Repo-->>H: void
-    H-->>Ctrl: { id, installments }
-    Ctrl-->>TR: 201 { id, installments }
-    TR-->>RQ: body tipado
-    RQ-->>UI: render éxito
-```
+> Los **flujos de casos de uso** (otorgar crédito, onboarding KYC por WhatsApp, pagos y conciliación) se documentan en **[DESIGN.md §7](DESIGN.md#7-flujo-principal-whatsapp--solicitud--kyc--pago)** y **[§10](DESIGN.md#10-catálogo-de-casos-de-uso)**. La **estructura de capas** que atraviesan está en §7.
 
 ---
 
 ## 13. El dominio: dinero y calendario de cuotas
 
-### `Money` — valor inmutable en centavos
-
-[money.ts](../packages/domain/src/shared/money.ts) encapsula importes como **enteros** y prohíbe mezclar monedas:
-
-```ts
-Money.of(500_000, "COP")            // 5.000,00 COP
-  .applyInterest(200)               // +20% (base mil: 200 = 20,0%)
-  .add(otra)                        // exige misma moneda, si no → DomainError
-```
-
-### `buildSchedule` — cuotas con cuadre exacto
-
-[schedule.ts](../packages/domain/src/credit/schedule.ts) reparte el total en `n` cuotas iguales y **ajusta el redondeo en la última**, de modo que la suma de cuotas iguala exactamente el total (sin centavos perdidos):
-
-```mermaid
-flowchart LR
-    P["principal 500.000"] --> T["+interés 20% → 600.000"]
-    T --> B["base = floor(600.000/12) = 50.000"]
-    B --> C["cuotas 1..11 = 50.000"]
-    C --> L["cuota 12 = total − acumulado<br/>(absorbe el redondeo)"]
-```
-
-> **Invariante:** `Σ amountDueMinor === total.amountMinor`. Es la primera prueba de dominio del proyecto ([schedule.test.ts](../packages/domain/src/credit/schedule.test.ts)).
-
-> ⚠️ **Convención de interés (base mil):** el dominio interpreta `interestPct` como *base-thousand* (`200` = 20,0%). El nombre del campo sugiere porcentaje simple; ver [Deuda técnica](#21-deuda-técnica-y-riesgos).
+> El **modelo de dominio por contexto** (Money, buildSchedule, cartera, antifraude documental, pagos) vive en **[DESIGN.md §4](DESIGN.md#4-modelo-de-dominio-por-contexto)** y **[§8](DESIGN.md#8-pipeline-antifraude-documental)**. Reglas arquitectónicas asociadas: dinero en enteros (**ADR #6**) y dominio puro/hexagonal (§7, **ADR #4**).
 
 ---
 
 ## 14. Clientes: app móvil/web (Expo)
 
 `apps/mobile` es **una sola base de código** que corre en **iOS, Android y Web** (Expo SDK 56 + Expo Router + `react-native-web`).
+
+> 📐 **Arquitectura de presentación detallada en [FRONTEND_ARCHITECTURE.md](FRONTEND_ARCHITECTURE.md).** El cliente replica la disciplina de capas/SRP del backend: rutas delgadas (`app/`) → pantallas de feature (`features/*/screens`) → hooks de datos (`features/*/api`, React Query sobre el cliente ts-rest) → **capa `core/`** de infraestructura (cliente API con interceptores, sesión/JWT, errores, i18n, logger, offline) → **design system `@preztiaos/ui`** (presentación pura sobre NativeWind). El dinero se captura en unidad mayor y se convierte a `*_minor` en la frontera; la identidad de tenant/rol se deriva de los claims del JWT (no de input del usuario); las mutaciones de dinero son idempotentes (`Idempotency-Key`) y reintentables vía cola offline; cada petición lleva `X-Correlation-Id`. Existe un **slice vertical de referencia** (Crédito & Cobranza: acceso → lista paginada → cartera → otorgar → abonar → pagos) que los demás *bounded contexts* replican.
 
 ```mermaid
 flowchart TB
@@ -748,37 +627,7 @@ Pasos: `install → typecheck → lint → test → build`, con `DATABASE_URL`/`
 
 ## 19. Bounded contexts y roadmap
 
-```mermaid
-flowchart TB
-    IAM["IAM + Tenancy<br/>usuarios, roles, JWT"]
-    ZON["Zoning<br/>árbol ltree, coordinadores"]
-    BOR["Borrowers + KYC<br/>deudores, MinIO, validación"]
-    CRE["Credit & Collections<br/>agregado, abonos, atrasos"]
-    CASH["Cash & Settlement<br/>liquidación, cuadre de caja"]
-    CONV["Conversations<br/>WhatsApp, cron de cobro"]
-    REP["Reporting<br/>read models, dashboards, mapa"]
-
-    IAM --> ZON --> BOR --> CRE --> CASH
-    CRE --> CONV
-    CRE --> REP
-    CASH --> REP
-
-    classDef done fill:#dfd,stroke:#3a3;
-    classDef wip fill:#ffd,stroke:#cc3;
-    class CRE wip;
-```
-
-**Orden de implementación sugerido** (cada uno arranca con spec Gherkin → prueba de dominio → implementación):
-
-1. **IAM + Tenancy completos** — usuarios, roles, login JWT, config de tenant.
-2. **Zoning** — CRUD del árbol con `ltree`, asignación de coordinadores, `ZoneScopeGuard`.
-3. **Borrowers + KYC** — deudores, carga a MinIO, máquina de estados de validación.
-4. **Credit & Collections** — agregado completo, abonos, atrasos, recargos. *(esqueleto actual)*
-5. **Cash & Settlement** — liquidación diaria y cuadre de caja.
-6. **Conversations (WhatsApp)** — webhook idempotente, máquina de estados, cron de cobro.
-7. **Reporting** — read models (CQRS) para dashboards y mapa.
-
-**Leyenda de estado actual:** solo el *slice* de **Credit** existe como esqueleto vertical (contrato → controlador → caso de uso → dominio → repo → RLS), suficiente para validar la arquitectura de punta a punta.
+> El **mapa de bounded contexts, su estado de implementación y el roadmap** se documentan en **[DESIGN.md §3](DESIGN.md#3-mapa-de-bounded-contexts-y-estado-de-implementación)** y **[§11](DESIGN.md#11-roadmap-y-pendientes)** (validados contra el código). Las **fronteras** entre contextos son una decisión de arquitectura; los **límites de dependencia** están en §6.
 
 ---
 
@@ -801,6 +650,12 @@ Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `doc
 | 11 | **Identidad del tenant vía header (esqueleto)** | simplicidad inicial; migrará a JWT/subdominio | 🔄 provisional |
 | 12 | **Atributos de calidad como criterio de aceptación** ([§3](#3-atributos-de-calidad-y-estándares-de-código)) | SRP + código limpio/entendible/mantenible y corrección verificable obligatorios en todo algoritmo futuro | ✅ |
 | 13 | **Pipeline antifraude documental en 4 etapas** (ver [analisisPlataformas.md](analisisPlataformas.md)): extracción persistida (`document_extraction.file_metadata`) → reglas locales puras (`domain/antifraud`) → APIs libres (Minha Receita, BrasilAPI CEP/DDD) → Serpro opcional; se dispara al completar los documentos y persiste el reporte append-only en `document_validation` | la IA solo extrae/cruza (AIForge-Doc); la autenticidad la da la fuente emisora; fuentes externas caídas degradan a alerta BAJA sin bloquear | ✅ |
+| 14 | **Arquitectura de presentación por capas** (rutas → screens → hooks → `core/` → `@preztiaos/ui`), *feature-sliced* ([FRONTEND_ARCHITECTURE.md](FRONTEND_ARCHITECTURE.md)) | mismo SRP/altura de capas que el backend; un slice nuevo replica al de Crédito | ✅ |
+| 15 | **Design system propio `@preztiaos/ui`** sobre NativeWind (tokens + primitivos + componentes accesibles) | presentación pura reutilizable y testeable, sin dependencias de UI nuevas | ✅ |
+| 16 | **Seguridad de cliente:** tenant/rol desde el **JWT** (no del header), `X-Correlation-Id` por petición e `Idempotency-Key` en dinero | materializa los atributos críticos de §3.7 en el cliente; complementa la deuda 🔴 de §21 | ✅ |
+| 17 | **Offline-first con cola de mutaciones persistida** (AsyncStorage) que reusa la clave de idempotencia al reenviar | cobradores de ruta operan sin red sin riesgo de doble abono | ✅ |
+| 18 | **Documentación separada en tres** (ARCHITECTURE.md arquitectura · DESIGN.md análisis/diseño · FRONTEND_ARCHITECTURE.md cliente) | el doc de arquitectura mezclaba el *cómo* con el *qué*/estado, que se desactualizaba; separarlos mantiene cada uno enfocado y vivo | ✅ |
+| 19 | **Contextos ya construidos reflejados en DESIGN.md** (Conversations/IA, Credit Application+KYC, Antifraude documental, Payments & Banking) | el roadmap los marcaba como *futuro* cuando ya están implementados y cableados | ✅ |
 
 ---
 
@@ -812,8 +667,8 @@ Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `doc
 |---|---|---|
 | **Placeholders en el repo de crédito** | [credit.repository.ts](../apps/api/src/credit/credit.repository.ts) usa `borrowerId = zoneId = id` y valores fijos (`interestPct: 200`, fechas hardcodeadas) | propagar el `GrantCreditCommand` completo hasta el insert |
 | 🔴 **Identidad de tenant por header** (seguridad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | `x-tenant-id` es spoofable; el middleware no rechaza si falta. Riesgo de cruce de datos entre tenants | derivar el `tenantId` del **JWT** verificado (no del header del cliente); `tenantMiddleware` responde **401** si no hay tenant válido; mantener el header solo para entornos de prueba detrás de un flag |
-| 🔴 **Idempotencia ausente en dinero y webhooks** (confiabilidad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | reintentos de cliente, reenvíos de WhatsApp o reintentos de cola pueden **duplicar abonos/cobros**; hoy nada lo impide | exigir `Idempotency-Key` en endpoints de dinero y persistir resultado por clave (tabla `idempotency_key` o Redis con TTL); para WhatsApp, *dedup* por `message_id` del proveedor; los webhooks deben ser seguros ante reentrega |
-| 🔴 **Audit log inexistente** (auditabilidad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | no hay traza inmutable de quién hizo qué movimiento de dinero / cambio de estado; obligatorio en fintech | tabla `audit_log` **append-only** (`tenant_id`, actor, acción, entidad, antes/después, `correlation_id`, `ts`); escribir dentro de la misma transacción del cambio (`withTenantTx`); sin `UPDATE`/`DELETE` (revocar el permiso al rol `app`) |
+| 🔴 **Idempotencia de dinero por HTTP** (confiabilidad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | ✅ webhooks de WhatsApp dedup por `wamid` (`processed_inbound_message`) y PIX único por `end_to_end_id`; **falta** la clave `Idempotency-Key` en los endpoints de dinero del API (el cliente ya la envía, ver [DESIGN.md §11](DESIGN.md#11-roadmap-y-pendientes)) | persistir resultado por `Idempotency-Key` (tabla `idempotency_key` o Redis con TTL) en los handlers de dinero del API |
+| **Audit log global** (auditabilidad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | ✅ existen bitácoras append-only **por contexto** (`credit_application_event`, `payment_event`); **falta** un `audit_log` transversal con actor + `correlation_id` y la revocación de `UPDATE/DELETE` al rol `app` | unificar en `audit_log` append-only (`tenant_id`, actor, acción, entidad, antes/después, `correlation_id`, `ts`); escribir dentro de `withTenantTx`; revocar `UPDATE/DELETE` al rol `app` |
 | **Semántica de `interestPct`** | el dominio lo trata como *base-mil* (200=20%), el nombre sugiere % simple | renombrar a `interestBaseThousand` o normalizar en la frontera |
 | **`tx: any` en `withTenantTx`** | se pierde el tipado de Drizzle dentro de la transacción | tipar con el tipo de transacción de Drizzle |
 | **RLS por tabla manual** | cada tabla nueva debe repetir el bloque `ENABLE/FORCE/POLICY` | helper SQL o generador para no olvidarlo |

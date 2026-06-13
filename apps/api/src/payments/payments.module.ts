@@ -42,7 +42,9 @@ const DEFAULT_RECONCILIATION_MAX_ATTEMPTS = 5;
 
 function reconciliationMaxAttempts(): number {
   const n = Number(process.env.RECONCILIATION_MAX_ATTEMPTS);
-  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : DEFAULT_RECONCILIATION_MAX_ATTEMPTS;
+  return Number.isFinite(n) && n >= 1
+    ? Math.floor(n)
+    : DEFAULT_RECONCILIATION_MAX_ATTEMPTS;
 }
 
 /**
@@ -54,11 +56,20 @@ function reconciliationMaxAttempts(): number {
   controllers: [PaymentsController],
   providers: [
     // Puertos del slice → adaptadores.
-    { provide: CREDIT_PORTFOLIO_REPOSITORY, useClass: CreditPortfolioDrizzleRepository },
+    {
+      provide: CREDIT_PORTFOLIO_REPOSITORY,
+      useClass: CreditPortfolioDrizzleRepository,
+    },
     { provide: MEDIA_CLASSIFIER, useClass: GeminiPaymentClassifier },
     { provide: PAYMENT_RECEIPT_STORAGE, useClass: MinioPaymentReceiptStorage },
-    { provide: TENANT_BANK_ACCOUNT_REPOSITORY, useClass: TenantBankAccountDrizzleRepository },
-    { provide: RECONCILIATION_REPOSITORY, useClass: PaymentReconciliationDrizzleRepository },
+    {
+      provide: TENANT_BANK_ACCOUNT_REPOSITORY,
+      useClass: TenantBankAccountDrizzleRepository,
+    },
+    {
+      provide: RECONCILIATION_REPOSITORY,
+      useClass: PaymentReconciliationDrizzleRepository,
+    },
     PaymentsQueryRepository,
     TenantBankAccountDrizzleRepository,
 

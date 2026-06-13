@@ -14,7 +14,10 @@ import {
   isAcceptable,
 } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
-import { extractWithGemini, type GeminiDocumentExtraction } from './ai/gemini-document.client';
+import {
+  extractWithGemini,
+  type GeminiDocumentExtraction,
+} from './ai/gemini-document.client';
 import { parseFileMetadata } from './validation/file-metadata.parser';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash'; // multimodal (acepta imágenes y PDF)
@@ -80,11 +83,15 @@ export class AiDocumentReviewer implements DocumentReviewer {
   }
 
   // Extrae e identifica con IA y persiste la extracción (trazabilidad). null si falla.
-  private async identify(job: DocumentReviewJob): Promise<GeminiDocumentExtraction | null> {
+  private async identify(
+    job: DocumentReviewJob,
+  ): Promise<GeminiDocumentExtraction | null> {
     try {
       const credentials = await this.resolveCredentials(job.tenantId);
       if (!credentials) {
-        this.logger.warn(`Sin credencial de IA para el tenant ${job.tenantId}; se omite la identificación`);
+        this.logger.warn(
+          `Sin credencial de IA para el tenant ${job.tenantId}; se omite la identificación`,
+        );
         return null;
       }
       const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
@@ -105,7 +112,10 @@ export class AiDocumentReviewer implements DocumentReviewer {
 
   private clearlyIdentified(extraction: GeminiDocumentExtraction): boolean {
     const minConfidence = this.minConfidence() / 100;
-    return extraction.identifiedType !== null && extraction.confidence >= minConfidence;
+    return (
+      extraction.identifiedType !== null &&
+      extraction.confidence >= minConfidence
+    );
   }
 
   private maxAttempts(): number {
@@ -115,7 +125,9 @@ export class AiDocumentReviewer implements DocumentReviewer {
 
   private minConfidence(): number {
     const n = Number(process.env.KYC_MIN_IDENTIFICATION_CONFIDENCE);
-    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : DEFAULT_MIN_CONFIDENCE;
+    return Number.isFinite(n) && n >= 0 && n <= 100
+      ? n
+      : DEFAULT_MIN_CONFIDENCE;
   }
 
   // Cuántas veces este documento ya fue identificado como NO coincidente (bajo RLS).
@@ -135,7 +147,9 @@ export class AiDocumentReviewer implements DocumentReviewer {
     });
   }
 
-  private resolveCredentials(tenantId: string): Promise<TenantAiCredentials | null> {
+  private resolveCredentials(
+    tenantId: string,
+  ): Promise<TenantAiCredentials | null> {
     return withTenantTxFor(tenantId, async (tx) => {
       const [row] = await tx
         .select({

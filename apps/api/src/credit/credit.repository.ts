@@ -52,9 +52,16 @@ export class CreditDrizzleRepository implements CreditRepository {
       if (contact) {
         await tx
           .insert(schema.borrowerContact)
-          .values({ tenantId: c.tenantId, borrowerId: c.borrowerId, phone: contact.phone })
+          .values({
+            tenantId: c.tenantId,
+            borrowerId: c.borrowerId,
+            phone: contact.phone,
+          })
           .onConflictDoUpdate({
-            target: [schema.borrowerContact.tenantId, schema.borrowerContact.phone],
+            target: [
+              schema.borrowerContact.tenantId,
+              schema.borrowerContact.phone,
+            ],
             set: { borrowerId: c.borrowerId },
           });
       }

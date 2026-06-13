@@ -6,7 +6,10 @@ import {
   type CreditPortfolioRepository,
   type PaymentOutcome,
 } from '@preztiaos/application';
-import { type InstallmentStatus, type PaymentAllocation } from '@preztiaos/domain';
+import {
+  type InstallmentStatus,
+  type PaymentAllocation,
+} from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 
 /**
@@ -38,7 +41,10 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
         .select({ id: schema.credit.id, currency: schema.credit.currency })
         .from(schema.credit)
         .where(
-          and(eq(schema.credit.borrowerId, contact.borrowerId), eq(schema.credit.status, 'ACTIVE')),
+          and(
+            eq(schema.credit.borrowerId, contact.borrowerId),
+            eq(schema.credit.status, 'ACTIVE'),
+          ),
         );
       if (!creditRow) return null;
 
@@ -51,14 +57,16 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
       return {
         creditId: creditRow.id,
         currency: creditRow.currency,
-        installments: rows.map((row: typeof schema.installment.$inferSelect) => ({
-          id: row.id,
-          seq: row.seq,
-          dueDate: row.dueDate,
-          amountDueMinor: row.amountDueMinor,
-          paidMinor: row.paidMinor,
-          status: row.status as InstallmentStatus,
-        })),
+        installments: rows.map(
+          (row: typeof schema.installment.$inferSelect) => ({
+            id: row.id,
+            seq: row.seq,
+            dueDate: row.dueDate,
+            amountDueMinor: row.amountDueMinor,
+            paidMinor: row.paidMinor,
+            status: row.status,
+          }),
+        ),
       };
     });
   }
@@ -97,7 +105,9 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
 
       // Mismo end_to_end_id ya registrado: no-op idempotente, solo se audita.
       if (!inserted) {
-        this.logger.warn('Pago PIX duplicado ignorado (end_to_end_id ya registrado)');
+        this.logger.warn(
+          'Pago PIX duplicado ignorado (end_to_end_id ya registrado)',
+        );
         await tx.insert(schema.paymentEvent).values({
           tenantId: p.tenantId,
           paymentId: null,
@@ -109,7 +119,12 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
       }
 
       const paymentId = inserted.id;
-      await this.applyAllocations(tx, p.tenantId, paymentId, outcome.allocations);
+      await this.applyAllocations(
+        tx,
+        p.tenantId,
+        paymentId,
+        outcome.allocations,
+      );
 
       if (outcome.creditSettled && p.creditId) {
         await tx

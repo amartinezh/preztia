@@ -68,14 +68,16 @@ export class PaymentsQueryRepository {
         .where(eq(schema.installment.creditId, input.creditId))
         .orderBy(asc(schema.installment.seq));
 
-      const installments: PortfolioInstallment[] = rows.map((row: typeof schema.installment.$inferSelect) => ({
-        id: row.id,
-        seq: row.seq,
-        dueDate: row.dueDate,
-        amountDueMinor: row.amountDueMinor,
-        paidMinor: row.paidMinor,
-        status: row.status as InstallmentStatus,
-      }));
+      const installments: PortfolioInstallment[] = rows.map(
+        (row: typeof schema.installment.$inferSelect) => ({
+          id: row.id,
+          seq: row.seq,
+          dueDate: row.dueDate,
+          amountDueMinor: row.amountDueMinor,
+          paidMinor: row.paidMinor,
+          status: row.status,
+        }),
+      );
       return {
         creditId: creditRow.id,
         currency: creditRow.currency,

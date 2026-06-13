@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { type BankPaymentVerifier, type BankVerificationResult } from '@preztiaos/application';
+import {
+  type BankPaymentVerifier,
+  type BankVerificationResult,
+} from '@preztiaos/application';
 
 /**
  * Verificador nulo: responde siempre "unavailable". Permite operar (con
@@ -9,6 +12,8 @@ import { type BankPaymentVerifier, type BankVerificationResult } from '@preztiao
 @Injectable()
 export class NullBankVerifier implements BankPaymentVerifier {
   async verify(): Promise<BankVerificationResult> {
-    return { verification: { status: 'unavailable', reason: 'banco_no_soportado' } };
+    return {
+      verification: { status: 'unavailable', reason: 'banco_no_soportado' },
+    };
   }
 }

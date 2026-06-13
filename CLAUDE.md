@@ -1,6 +1,6 @@
 # CLAUDE.md — PreztiaOS
 
-Guía para generar y modificar código en este repositorio. La **fuente única de verdad** de la arquitectura es [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); este archivo resume lo que **siempre** debe respetarse al escribir código.
+Guía para generar y modificar código en este repositorio. La **fuente única de verdad** de la arquitectura (el *cómo*) es [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); el **análisis y diseño funcional** (el *qué*, validado contra el código: bounded contexts, modelo de datos/dominio, máquinas de estado, flujos) vive en [docs/DESIGN.md](docs/DESIGN.md); el cliente, en [docs/FRONTEND_ARCHITECTURE.md](docs/FRONTEND_ARCHITECTURE.md). Este archivo resume lo que **siempre** debe respetarse al escribir código.
 
 PreztiaOS es una plataforma **multi-tenant** de préstamos y cobranza (gota a gota / cobranza por zonas). Monorepo **pnpm + Turborepo**, scope `@preztiaos/*`.
 

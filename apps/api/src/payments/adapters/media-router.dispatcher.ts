@@ -13,8 +13,12 @@ import { MEDIA_ROUTER } from '../payments.tokens';
  * y la recepción de pagos (reemplaza el despacho directo al caso de uso KYC).
  */
 @Injectable()
-export class MediaRouterDispatcher implements ImageMessageDispatcher, DocumentMessageDispatcher {
-  constructor(@Inject(MEDIA_ROUTER) private readonly router: RouteInboundMediaHandler) {}
+export class MediaRouterDispatcher
+  implements ImageMessageDispatcher, DocumentMessageDispatcher
+{
+  constructor(
+    @Inject(MEDIA_ROUTER) private readonly router: RouteInboundMediaHandler,
+  ) {}
 
   async dispatch(message: ImageMessage | DocumentMessage): Promise<void> {
     await this.router.execute(message);

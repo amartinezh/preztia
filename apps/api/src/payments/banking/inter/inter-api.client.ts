@@ -21,8 +21,13 @@ export interface InterPixQueryResponse {
 @Injectable()
 export class InterApiClient {
   /** Consulta un PIX recibido por su identificador end-to-end (e2eid). */
-  async queryReceivedPix(input: { endToEndId: string; apiKey: string }): Promise<InterPixQueryResponse> {
-    const baseUrl = process.env.INTER_API_BASE_URL ?? 'https://cdpj.partners.bancointer.com.br';
+  async queryReceivedPix(input: {
+    endToEndId: string;
+    apiKey: string;
+  }): Promise<InterPixQueryResponse> {
+    const baseUrl =
+      process.env.INTER_API_BASE_URL ??
+      'https://cdpj.partners.bancointer.com.br';
     const url = `${baseUrl}/pix/v2/pix/${encodeURIComponent(input.endToEndId)}`;
 
     const controller = new AbortController();
@@ -37,7 +42,8 @@ export class InterApiClient {
         signal: controller.signal,
       });
 
-      if (res.status === 404) return { found: false, status: res.status, body: null };
+      if (res.status === 404)
+        return { found: false, status: res.status, body: null };
       if (!res.ok) {
         throw new Error(`Inter API respondió ${res.status}`);
       }

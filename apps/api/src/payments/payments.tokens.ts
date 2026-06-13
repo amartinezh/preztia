@@ -6,6 +6,8 @@ export const MEDIA_CLASSIFIER = Symbol('MediaClassifier');
 export const PAYMENT_ANTIFRAUD_SERVICE = Symbol('PaymentAntifraudService');
 export const BANK_PAYMENT_VERIFIER = Symbol('BankPaymentVerifier');
 export const PAYMENT_RECEIPT_STORAGE = Symbol('PaymentReceiptStorage');
-export const TENANT_BANK_ACCOUNT_REPOSITORY = Symbol('TenantBankAccountRepository');
+export const TENANT_BANK_ACCOUNT_REPOSITORY = Symbol(
+  'TenantBankAccountRepository',
+);
 export const RECONCILIATION_REPOSITORY = Symbol('ReconciliationRepository');
 export const MEDIA_ROUTER = Symbol('RouteInboundMediaHandler');

@@ -6,7 +6,11 @@ import {
   type PaymentReceiptStorage,
   type StoredDocument,
 } from '@preztiaos/application';
-import { buildMinioClient, encryptAtRest, ensureBucket } from '../shared/minio-encrypted-storage';
+import {
+  buildMinioClient,
+  encryptAtRest,
+  ensureBucket,
+} from '../shared/minio-encrypted-storage';
 
 /**
  * Adaptador del puerto PaymentReceiptStorage: guarda el comprobante de pago en
@@ -24,7 +28,8 @@ export class MinioPaymentReceiptStorage implements PaymentReceiptStorage {
     creditId: string | null;
     media: DownloadedMedia;
   }): Promise<StoredDocument> {
-    if (!this.bucketReady) this.bucketReady = ensureBucket(this.client, this.bucket);
+    if (!this.bucketReady)
+      this.bucketReady = ensureBucket(this.client, this.bucket);
     await this.bucketReady;
 
     // Cada comprobante es un objeto propio (puede haber varios por crédito).

@@ -15,7 +15,9 @@ import { type PixReceiptData } from '@preztiaos/domain';
  */
 @Injectable()
 export class BankVerifierRegistry implements BankPaymentVerifier {
-  constructor(private readonly verifiers: ReadonlyMap<string, BankPaymentVerifier>) {}
+  constructor(
+    private readonly verifiers: ReadonlyMap<string, BankPaymentVerifier>,
+  ) {}
 
   async verify(input: {
     tenantId: string;
@@ -23,9 +25,13 @@ export class BankVerifierRegistry implements BankPaymentVerifier {
     bankCode: string;
     pix: PixReceiptData;
   }): Promise<BankVerificationResult> {
-    const verifier = this.verifiers.get(`${input.countryCode}:${input.bankCode}`);
+    const verifier = this.verifiers.get(
+      `${input.countryCode}:${input.bankCode}`,
+    );
     if (!verifier) {
-      return { verification: { status: 'unavailable', reason: 'banco_no_soportado' } };
+      return {
+        verification: { status: 'unavailable', reason: 'banco_no_soportado' },
+      };
     }
     return verifier.verify(input);
   }

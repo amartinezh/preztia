@@ -48,7 +48,8 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
       }));
       return {
         items,
-        nextCursor: rows.length === input.limit ? rows[rows.length - 1]!.id : null,
+        nextCursor:
+          rows.length === input.limit ? rows[rows.length - 1]!.id : null,
       };
     });
   }
@@ -61,7 +62,12 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
       const [creditRow] = await tx
         .select({ id: schema.credit.id, currency: schema.credit.currency })
         .from(schema.credit)
-        .where(and(eq(schema.credit.id, input.creditId), eq(schema.credit.status, 'ACTIVE')));
+        .where(
+          and(
+            eq(schema.credit.id, input.creditId),
+            eq(schema.credit.status, 'ACTIVE'),
+          ),
+        );
       if (!creditRow) return null;
 
       const rows = await tx
@@ -72,14 +78,16 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
       return {
         creditId: creditRow.id,
         currency: creditRow.currency,
-        installments: rows.map((row: typeof schema.installment.$inferSelect) => ({
-          id: row.id,
-          seq: row.seq,
-          dueDate: row.dueDate,
-          amountDueMinor: row.amountDueMinor,
-          paidMinor: row.paidMinor,
-          status: row.status as InstallmentStatus,
-        })),
+        installments: rows.map(
+          (row: typeof schema.installment.$inferSelect) => ({
+            id: row.id,
+            seq: row.seq,
+            dueDate: row.dueDate,
+            amountDueMinor: row.amountDueMinor,
+            paidMinor: row.paidMinor,
+            status: row.status,
+          }),
+        ),
       };
     });
   }
@@ -102,8 +110,16 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
           verifiedAt: new Date(),
           lastReconciliationAt: new Date(),
         })
-        .where(and(eq(schema.payment.id, input.paymentId), eq(schema.payment.status, 'UNVERIFIED')))
-        .returning({ id: schema.payment.id, creditId: schema.payment.creditId });
+        .where(
+          and(
+            eq(schema.payment.id, input.paymentId),
+            eq(schema.payment.status, 'UNVERIFIED'),
+          ),
+        )
+        .returning({
+          id: schema.payment.id,
+          creditId: schema.payment.creditId,
+        });
       if (!transitioned.length) return; // otro proceso ya lo verificó
 
       const creditId = transitioned[0]!.creditId;
@@ -170,7 +186,9 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         .set({
           lastReconciliationAt: new Date(),
           ...(input.countAttempt
-            ? { reconciliationAttempts: sql`${schema.payment.reconciliationAttempts} + 1` }
+            ? {
+                reconciliationAttempts: sql`${schema.payment.reconciliationAttempts} + 1`,
+              }
             : {}),
         })
         .where(eq(schema.payment.id, input.paymentId));
@@ -190,7 +208,12 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
           bankStatus: 'NOT_FOUND',
           lastReconciliationAt: new Date(),
         })
-        .where(and(eq(schema.payment.id, input.paymentId), eq(schema.payment.status, 'UNVERIFIED')))
+        .where(
+          and(
+            eq(schema.payment.id, input.paymentId),
+            eq(schema.payment.status, 'UNVERIFIED'),
+          ),
+        )
         .returning({ creditId: schema.payment.creditId });
       if (!flagged.length) return;
 

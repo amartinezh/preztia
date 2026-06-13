@@ -31,12 +31,16 @@ export function encryptAtRest(plaintext: Uint8Array): Buffer {
 }
 
 /** Crea el bucket la primera vez; ignora si ya existe (idempotente). */
-export async function ensureBucket(client: S3Client, bucket: string): Promise<void> {
+export async function ensureBucket(
+  client: S3Client,
+  bucket: string,
+): Promise<void> {
   try {
     await client.send(new CreateBucketCommand({ Bucket: bucket }));
   } catch (err) {
     const name = (err as { name?: string }).name;
-    const owned = name === 'BucketAlreadyOwnedByYou' || name === 'BucketAlreadyExists';
+    const owned =
+      name === 'BucketAlreadyOwnedByYou' || name === 'BucketAlreadyExists';
     if (!owned) throw err;
   }
 }

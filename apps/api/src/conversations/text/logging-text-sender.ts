@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { type OutboundRecipient, type OutboundTextSender } from '@preztiaos/application';
+import {
+  type OutboundRecipient,
+  type OutboundTextSender,
+} from '@preztiaos/application';
 import { WhatsappTextSender } from './whatsapp-text-sender';
 import { ConversationMessageLog } from '../conversation-message.log';
 

@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { type RequiredDocumentSpec, type RequiredDocumentType } from '@preztiaos/domain';
+import {
+  type RequiredDocumentSpec,
+  type RequiredDocumentType,
+} from '@preztiaos/domain';
 import { fetchWithRetry } from '../../shared/fetch-retry';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -100,12 +103,17 @@ export async function extractWithGemini(input: {
           ],
         },
       ],
-      generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
     }),
   });
 
   if (!res.ok) {
-    throw new Error(`Gemini (extracción) respondió ${res.status}: ${await res.text()}`);
+    throw new Error(
+      `Gemini (extracción) respondió ${res.status}: ${await res.text()}`,
+    );
   }
 
   const data = (await res.json()) as GeminiResponse;

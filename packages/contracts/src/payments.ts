@@ -59,6 +59,19 @@ export const reconcileOutput = z.object({
 
 const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 
+// Registro de un abono en efectivo (cobro de ruta). El monto va en unidades menores enteras.
+export const registerCashPaymentInput = z.object({
+  amountMinor: z.number().int().positive(),
+});
+export type RegisterCashPaymentInput = z.infer<typeof registerCashPaymentInput>;
+
+export const registerCashPaymentOutput = z.object({
+  id: z.string().uuid(),
+  creditId: z.string().uuid(),
+  amountMinor: z.number().int(),
+  balanceMinor: z.number().int(),
+});
+
 // Contrato ts-rest del slice de pagos: misma fuente de verdad para API y clientes.
 export const paymentsContract = c.router({
   listCreditPayments: {
@@ -77,6 +90,15 @@ export const paymentsContract = c.router({
     headers: tenantHeaders,
     responses: { 200: portfolioOutput },
     summary: "Cartera de cuotas y saldo de un crédito",
+  },
+  registerCashPayment: {
+    method: "POST",
+    path: "/credits/:creditId/payments",
+    pathParams: z.object({ creditId: z.string().uuid() }),
+    headers: tenantHeaders,
+    body: registerCashPaymentInput,
+    responses: { 201: registerCashPaymentOutput },
+    summary: "Registra un abono en efectivo (idempotente vía Idempotency-Key)",
   },
   reconcilePayments: {
     method: "POST",

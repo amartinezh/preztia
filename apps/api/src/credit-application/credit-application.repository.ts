@@ -91,7 +91,10 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
     });
   }
 
-  async reset(input: { tenantId: string; applicationId: string }): Promise<void> {
+  async reset(input: {
+    tenantId: string;
+    applicationId: string;
+  }): Promise<void> {
     await withTenantTxFor(input.tenantId, async (tx) => {
       // Vuelve todos los documentos a PENDING, limpiando los datos KYC previos.
       await tx
@@ -107,7 +110,12 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
           manualReview: false,
           updatedAt: new Date(),
         })
-        .where(eq(schema.creditApplicationDocument.applicationId, input.applicationId));
+        .where(
+          eq(
+            schema.creditApplicationDocument.applicationId,
+            input.applicationId,
+          ),
+        );
 
       await tx
         .update(schema.creditApplication)

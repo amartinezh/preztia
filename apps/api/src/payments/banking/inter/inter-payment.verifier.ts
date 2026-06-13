@@ -39,13 +39,23 @@ export class InterPaymentVerifier implements BankPaymentVerifier {
   }): Promise<BankVerificationResult> {
     if (!input.pix.endToEndId) {
       // Sin e2eid no hay forma de consultar: queda para conciliación/analista.
-      return { verification: { status: 'unavailable', reason: 'comprobante_sin_end_to_end_id' } };
+      return {
+        verification: {
+          status: 'unavailable',
+          reason: 'comprobante_sin_end_to_end_id',
+        },
+      };
     }
 
     try {
       const apiKey = await this.accounts.findApiKey(input);
       if (!apiKey) {
-        return { verification: { status: 'unavailable', reason: 'sin_credencial_bancaria' } };
+        return {
+          verification: {
+            status: 'unavailable',
+            reason: 'sin_credencial_bancaria',
+          },
+        };
       }
 
       const response = await this.client.queryReceivedPix({
@@ -53,14 +63,22 @@ export class InterPaymentVerifier implements BankPaymentVerifier {
         apiKey,
       });
       if (!response.found) {
-        return { verification: { status: 'not_found' }, rawResponse: response.body };
+        return {
+          verification: { status: 'not_found' },
+          rawResponse: response.body,
+        };
       }
 
       const parsed = interPixSchema.safeParse(response.body);
       if (!parsed.success) {
-        this.logger.warn('Respuesta de Inter con forma inesperada; pago queda en conciliación');
+        this.logger.warn(
+          'Respuesta de Inter con forma inesperada; pago queda en conciliación',
+        );
         return {
-          verification: { status: 'unavailable', reason: 'respuesta_bancaria_inesperada' },
+          verification: {
+            status: 'unavailable',
+            reason: 'respuesta_bancaria_inesperada',
+          },
           rawResponse: response.body,
         };
       }
@@ -78,7 +96,9 @@ export class InterPaymentVerifier implements BankPaymentVerifier {
         'Fallo consultando el Banco Inter',
         err instanceof Error ? err.stack : String(err),
       );
-      return { verification: { status: 'unavailable', reason: 'banco_no_disponible' } };
+      return {
+        verification: { status: 'unavailable', reason: 'banco_no_disponible' },
+      };
     }
   }
 }
