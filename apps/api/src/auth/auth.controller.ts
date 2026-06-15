@@ -30,7 +30,9 @@ export class AuthController {
     if (!ok) throw new UnauthorizedException('Credenciales inválidas');
     return issuePair({
       sub: user.id,
-      tenantId: user.tenantId,
+      // El SUPER_ADMIN no tiene tenant: el claim viaja como cadena vacía (el
+      // SuperAdminGuard no exige `x-tenant-id`). Los demás roles SIEMPRE tienen tenant.
+      tenantId: user.tenantId ?? '',
       role: user.role,
       zonePaths: user.zonePaths,
     });

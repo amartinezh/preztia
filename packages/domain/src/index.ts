@@ -1,4 +1,7 @@
 export * from "./shared/money";
+export * from "./iam/role";
+export * from "./iam/zone-path";
+export * from "./iam/tenant";
 export * from "./credit/schedule";
 export * from "./credit/application/required-document";
 export * from "./credit/application/fraud";

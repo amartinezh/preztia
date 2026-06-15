@@ -5,18 +5,48 @@ import type { SessionClaims, UserRole } from "./jwt";
  * (esa la imponen el backend y RLS); solo evita ofrecer acciones que el backend negaría.
  */
 
+// Espejo de `packages/domain/src/iam/role.ts` (fuente única). Si cambia el dominio, ajustar
+// aquí. El plano de control (tenants/admins) es del SUPER_ADMIN; la administración del tenant
+// (usuarios/zonas) del ADMIN; la operación por zonas del COORDINATOR; el COLLECTOR solo cobra.
 export type Permission =
+  | "tenant:manage"
+  | "tenant-admin:manage"
+  | "user:manage"
+  | "zone:manage"
+  | "collector:manage"
+  | "client:assign"
+  | "client:read"
   | "credit:create"
   | "credit:read"
   | "payment:register"
   | "payment:reconcile"
-  | "zone:manage";
+  | "application:review";
 
-// Capacidades por rol. ADMIN supervisa; COORDINATOR/COLLECTOR operan la ruta.
 const ROLE_PERMISSIONS: Record<UserRole, ReadonlySet<Permission>> = {
-  ADMIN: new Set(["credit:create", "credit:read", "payment:register", "payment:reconcile", "zone:manage"]),
-  COORDINATOR: new Set(["credit:create", "credit:read", "payment:register", "payment:reconcile"]),
-  COLLECTOR: new Set(["credit:read", "payment:register"]),
+  SUPER_ADMIN: new Set(["tenant:manage", "tenant-admin:manage"]),
+  ADMIN: new Set([
+    "user:manage",
+    "zone:manage",
+    "collector:manage",
+    "client:assign",
+    "client:read",
+    "credit:create",
+    "credit:read",
+    "payment:register",
+    "payment:reconcile",
+    "application:review",
+  ]),
+  COORDINATOR: new Set([
+    "collector:manage",
+    "client:assign",
+    "client:read",
+    "credit:create",
+    "credit:read",
+    "payment:register",
+    "payment:reconcile",
+    "application:review",
+  ]),
+  COLLECTOR: new Set(["client:read", "credit:read", "payment:register"]),
 };
 
 export function can(role: UserRole | null, permission: Permission): boolean {
@@ -26,11 +56,11 @@ export function can(role: UserRole | null, permission: Permission): boolean {
 
 /**
  * Verifica que una zona (path ltree) cae dentro del subárbol asignado al usuario.
- * ADMIN no está acotado por zonas. Replica el criterio del futuro `ZoneScopeGuard` (§10).
+ * ADMIN/SUPER_ADMIN no están acotados por zonas. Replica el criterio del `ZoneScopeGuard`.
  */
 export function isZoneInScope(claims: SessionClaims | null, zonePath: string): boolean {
   if (!claims) return false;
-  if (claims.role === "ADMIN") return true;
+  if (claims.role === "ADMIN" || claims.role === "SUPER_ADMIN") return true;
   return claims.zonePaths.some(
     (scope) => zonePath === scope || zonePath.startsWith(`${scope}.`),
   );

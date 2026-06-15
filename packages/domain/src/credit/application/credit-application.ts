@@ -2,7 +2,7 @@
 // recolección documental (KYC). Es PURO: sin I/O, sin framework. Cada operación
 // devuelve una nueva instancia (inmutabilidad) y preserva los invariantes.
 
-import { DomainError } from "../../shared/money";
+import { ConflictError, DomainError } from "../../shared/money";
 import { type FraudAssessment, isAcceptable } from "./fraud";
 import { type RequiredDocumentType } from "./required-document";
 
@@ -93,4 +93,49 @@ export function recordDocumentOutcome(
   assessment: FraudAssessment,
 ): CreditApplication {
   return recordDocumentResult(app, type, isAcceptable(assessment));
+}
+
+/** Decisión manual del coordinador sobre el expediente completo. */
+export type ReviewDecision = "APPROVE" | "REJECT";
+
+const DECISION_TARGET: Record<ReviewDecision, CreditApplicationStatus> = {
+  APPROVE: "APPROVED",
+  REJECT: "REJECTED",
+};
+
+/**
+ * Regla pura de la transición manual a nivel de estado: dado el estado actual y la decisión
+ * del coordinador, devuelve el estado resultante. Es el único lugar donde vive la regla.
+ *
+ * - Permitida solo desde estados en curso (`AWAITING_DOCUMENTS`, `IN_REVIEW`): el coordinador
+ *   puede aprobar aun cuando un documento marcado dejó la solicitud esperando.
+ * - Idempotente: si ya está en el estado destino, lo devuelve sin cambios (doble pulsación o
+ *   reintento no rompe nada).
+ * - Si ya fue resuelta hacia el OTRO estado terminal, es un conflicto: `DomainError`.
+ */
+export function nextDecisionStatus(
+  current: CreditApplicationStatus,
+  decision: ReviewDecision,
+): CreditApplicationStatus {
+  const target = DECISION_TARGET[decision];
+  if (current === target) return current; // idempotente
+  if (current === "APPROVED" || current === "REJECTED") {
+    throw new ConflictError(
+      `La solicitud ya fue resuelta como ${current}; no puede cambiarse a ${target}`,
+    );
+  }
+  return target;
+}
+
+/**
+ * Resuelve manualmente la solicitud por decisión discrecional del coordinador: la aprueba
+ * (para generar el crédito) o la rechaza, aunque el pipeline antifraude la haya marcado como
+ * mala. Es una transición de la máquina de estados; el historial de fraude no se altera.
+ */
+export function decideApplicationReview(
+  app: CreditApplication,
+  decision: ReviewDecision,
+): CreditApplication {
+  const status = nextDecisionStatus(app.status, decision);
+  return status === app.status ? app : { ...app, status };
 }

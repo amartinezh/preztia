@@ -11,3 +11,5 @@ export * from "./payment";
 export * from "./borrower-contact";
 export * from "./tenant-bank-account";
 export * from "./app-user";
+export * from "./tenant";
+export * from "./collector-client";

@@ -1,5 +1,14 @@
 export class DomainError extends Error {}
 
+/** El recurso de dominio no existe (se traduce a HTTP 404 en la frontera). */
+export class NotFoundError extends DomainError {}
+
+/** La operación contradice el estado actual del agregado (HTTP 409 en la frontera). */
+export class ConflictError extends DomainError {}
+
+/** El actor no tiene permiso para la operación (HTTP 403 en la frontera). */
+export class ForbiddenError extends DomainError {}
+
 export class Money {
   private constructor(public readonly amountMinor: number, public readonly currency: string) {
     if (!Number.isInteger(amountMinor)) throw new DomainError("Money debe ser entero (centavos)");

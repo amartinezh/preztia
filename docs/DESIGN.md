@@ -1,7 +1,7 @@
 # PreztiaOS — Análisis y Diseño
 
 > **Estado:** documento vivo. **Refleja lo que el código ya construye** (validado contra `apps/api`, `packages/{domain,application,db,contracts}`).
-> **Última actualización:** 2026-06-13.
+> **Última actualización:** 2026-06-14 (IAM por roles + Tenancy + Zoning implementados: tablas `tenant`/`collector_client`, enums `user_role`/`tenant_status`, casos de uso §10, roadmap §11).
 > **Relación con los otros documentos:**
 > - **[ARCHITECTURE.md](ARCHITECTURE.md)** → *cómo* construimos (principios, capas, RLS, contract-first, build/CI). Atemporal.
 > - **Este documento (DESIGN.md)** → *qué* es y hace el sistema: alcance funcional, modelo de dominio, modelo de datos, máquinas de estado y flujos. Vivo.
@@ -54,6 +54,19 @@ gota a gota) con **onboarding y cobranza por WhatsApp asistidos por IA**. El rec
 País objetivo inicial: **Brasil** (CPF/CNPJ, CEP, DDD, FEBRABAN, PIX). El diseño deja los catálogos
 de documentos y proveedores **configurables por tenant**.
 
+### Roles y menús (IAM)
+
+Cuatro roles, dos planos. El **menú por rol** lo deciden el dominio (`domain/iam/role`) y su espejo
+en el cliente (`core/auth/authorization`); la autoridad real la imponen el backend (`requireRole`/
+`SuperAdminGuard` + RLS) y, por cliente, el alcance de zonas.
+
+| Rol | Plano | Puede | Menú (app Expo, responsiva web) |
+|---|---|---|---|
+| **SUPER_ADMIN** | control (sin tenant) | CRUD de **tenants** y provisión de **admins** de cada tenant (no crea usuarios sin tenant) | Tenants |
+| **ADMIN** | datos (su tenant) | TODO su tenant: usuarios, zonas, coordinadores, operación | Créditos · Pagos · Revisión · Usuarios · Zonas |
+| **COORDINATOR** | datos (su subárbol) | operar su(s) zona(s); crear **cobradores** y asignarles clientes | Créditos · Pagos · Revisión · Cobradores |
+| **COLLECTOR** | datos (clientes asignados) | ver/cobrar **solo** los clientes que le asignó su coordinador | Créditos · Mis clientes |
+
 ---
 
 ## 3. Mapa de bounded contexts y estado de implementación
@@ -80,15 +93,14 @@ flowchart TB
     classDef done fill:#dfd,stroke:#3a3;
     classDef wip fill:#ffd,stroke:#cc3;
     classDef todo fill:#fdd,stroke:#c33;
-    class CONV,APP,AF,PAY,CRE done;
-    class ZON wip;
-    class IAM,REP todo;
+    class IAM,ZON,CONV,APP,AF,PAY,CRE done;
+    class REP todo;
 ```
 
 | Contexto | Qué hace | Estado | Dónde vive |
 |---|---|---|---|
-| **IAM + Tenancy** | identidad del tenant + RLS; config por tenant (`tenant_config`) | ⚠️ tenant resuelto por `whatsapp_phone_number_id`/header; **JWT pendiente** (§21 ARCH) | `apps/api/tenancy`, `tenant-config` |
-| **Zoning** | árbol de zonas `ltree` + coordinadores | ⚠️ esquema + consultas; CRUD/`ZoneScopeGuard` pendientes | `db/schema/zone`, §10 ARCH |
+| **IAM + Tenancy** | roles (`SUPER_ADMIN/ADMIN/COORDINATOR/COLLECTOR`), login JWT, CRUD de tenants (plano de control) y de usuarios del tenant; config por tenant (`tenant_config`) | ✅ implementado (dominio `iam` + handlers + plano de control/datos en API, verificado E2E) | `domain/iam`, `application/iam`, `apps/api/{platform,iam,auth}` |
+| **Zoning** | árbol de zonas `ltree` + coordinadores; CRUD y alcance por subárbol | ✅ CRUD de zonas + asignación de coordinador + `zone-scope` (predicado ltree); `ZoneScopeGuard` materializado en consultas | `domain/iam/zone-path`, `apps/api/iam/zones*`, `db/schema/zone` |
 | **Conversations (WhatsApp + IA)** | webhook idempotente, clasificación IA (Gemini), enrutamiento texto/media, transcript | ✅ implementado | `apps/api/conversations`, `domain/conversations`, `application/conversations` |
 | **Credit Application + KYC** | solicitud por chat, checklist configurable, recepción y revisión de documentos, máquina de estados, eventos | ✅ implementado | `domain/credit/application`, `application/credit/application`, `apps/api/credit-application` |
 | **Antifraude documental** | 9 familias de reglas locales + cruce con fuentes oficiales; veredicto con score; reporte append-only | ✅ implementado (con pruebas) | `domain/antifraud`, `application/credit/validation`, `apps/api/credit-application/validation` |
@@ -185,12 +197,16 @@ erDiagram
 | `tenant_config` | config por tenant: `whatsapp_phone_number_id`, `knowledge_base`, `ai_provider`/`ai_api_key` | PK `tenant_id`; resuelve tenant desde el webhook |
 | `tenant_bank_account` | cuenta recaudadora por `(país, banco)`; `pix_key`, `api_key`, `unverified_policy` | único `(tenant, country, bank)` |
 | `borrower_contact` | vínculo teléfono → deudor (búsqueda de pagos) | único `(tenant, phone)` |
+| `tenant` | **tabla GLOBAL** del plano de control (su `id` ES el tenant); la gobierna el super admin | único `slug`; RLS `id = current_tenant` (un admin lee su propia fila; el control-plane BYPASSRLS gestiona todas) |
+| `app_user` | usuario operador (IAM); `role` ∈ `user_role`, `zone_paths` para alcance | `email` único GLOBAL; `tenant_id` **nullable** (NULL = `SUPER_ADMIN`, plano de control) |
+| `collector_client` | asignación cobrador → cliente (deudor); el cobrador solo ve sus clientes | único `(tenant, collector_id, borrower_id)`; alcance por cliente = authZ de aplicación |
 
 ### Enums (12)
 
 `credit_status`, `frequency`, `installment_status`, `required_document`, `credit_application_status`,
 `document_status`, `payment_status`, `bank_verification_status`, `validation_status`,
-`conversation_direction`, `ai_provider`, `unverified_payment_policy`.
+`conversation_direction`, `ai_provider`, `unverified_payment_policy`, `user_role`
+(`SUPER_ADMIN/ADMIN/COORDINATOR/COLLECTOR`), `tenant_status` (`ACTIVE/SUSPENDED`).
 
 ---
 
@@ -312,6 +328,11 @@ parcial); los `payment_event` son la traza inmutable.
 
 | Caso de uso (`@preztiaos/application`) | Resumen |
 |---|---|
+| `CreateTenantHandler` / `UpdateTenantHandler` / `DeleteTenantHandler` | CRUD de tenants (plano de control, super admin) |
+| `CreateTenantAdminHandler` | provisiona un ADMIN vinculado a un tenant (nunca un usuario sin tenant) |
+| `CreateUserHandler` / `UpdateUserHandler` / `DeactivateUserHandler` | CRUD de usuarios del tenant con jerarquía de provisión y alcance por zonas |
+| `CreateZoneHandler` / `UpdateZoneHandler` / `DeleteZoneHandler` / `AssignCoordinatorHandler` | CRUD del árbol de zonas (ltree) y asignación de coordinadores |
+| `AssignCollectorClientsHandler` | el coordinador reemplaza la cartera de clientes de un cobrador |
 | `GrantCreditHandler` | otorga un crédito y genera el cronograma de cuotas |
 | `StartCreditApplicationHandler` | abre/reanuda/reinicia una solicitud por chat y pide el primer documento |
 | `SubmitApplicationDocumentHandler` | recibe un documento, lo revisa con IA, corre antifraude estructural, lo guarda y avanza el checklist |
@@ -328,13 +349,12 @@ parcial); los `payment_event` son la traza inmutable.
 
 Orden sugerido (cada uno: spec Gherkin → prueba de dominio → implementación):
 
-1. **IAM + Tenancy completos** — usuarios, roles, **login JWT** (deriva tenant/rol/zonas), config de tenant. 🔴 crítico (§21 ARCH).
-2. **Zoning** — CRUD del árbol `ltree`, asignación de coordinadores, `ZoneScopeGuard`.
-3. **Endpoints del cliente** que el front ya consume y faltan en el backend: `auth.login`/`refresh`, `listCredits`, `registerCashPayment`.
-4. **Reporting** — read models (CQRS) para dashboards y mapa.
-5. **Idempotencia/audit transversales** — `Idempotency-Key` en endpoints de dinero y `audit_log` global (más allá de los `*_event` por contexto).
+1. **Reporting** — read models (CQRS) para dashboards y mapa.
+2. **Idempotencia/audit transversales** — `Idempotency-Key` en endpoints de dinero y `audit_log` global (más allá de los `*_event` por contexto).
+3. **`tenantMiddleware` por JWT** — derivar el `tenantId` del token en el middleware (hoy lo liga el `JwtGuard`).
+4. **Pruebas de aislamiento de tenant** (Testcontainers) como status check de CI.
 
-Implementado y operativo: Conversations, Credit Application + KYC, Antifraude documental, Payments & Banking, Credit & Portfolio (dominio + repos).
+Implementado y operativo: **IAM por roles + Tenancy** (super admin/admin/coordinador/cobrador, login JWT, CRUD de tenants/usuarios/zonas, asignación cobrador→clientes), **Zoning** (CRUD ltree + coordinadores + alcance), Conversations, Credit Application + KYC, Antifraude documental, Payments & Banking, Credit & Portfolio.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **Estado:** documento vivo. Complementa [ARCHITECTURE.md](ARCHITECTURE.md) (fuente de verdad del sistema).
 > **Ámbito:** la app cliente `apps/mobile` (Expo SDK 56 + Expo Router + NativeWind v4) y el design system `@preztiaos/ui`.
-> **Última actualización:** 2026-06-13 (arquitectura de presentación por capas + slice Crédito/Cobranza).
+> **Última actualización:** 2026-06-14 (IAM por roles en el cliente: slices `tenants/users/zones/collectors/clients`, menú role-aware en `(tabs)/_layout.tsx`, primitivos `Select`/`Switch`).
 
 Esta guía define **cómo se escribe el frontend** para cumplir —y demostrar— los atributos de
 calidad vinculantes de [§3](ARCHITECTURE.md#3-atributos-de-calidad-y-estándares-de-código) y
@@ -30,7 +30,7 @@ Una sola base de código corre en **iOS, Android y Web** (ADR #7).
 
 | Pieza | **Sí** hace | **No** hace |
 |---|---|---|
-| **Ruta** (`src/app/**`) | compone pantalla + layout; decide guard de auth/rol | fetch, reglas, estilos ad-hoc |
+| **Ruta** (`src/app/**`) | compone pantalla + layout; `(tabs)/_layout.tsx` decide el **menú por rol** (`can(role, …)`) | fetch, reglas, estilos ad-hoc |
 | **Screen** (`features/*/screens`) | orquesta hooks de datos + componentes de UI | transporte HTTP, headers, validación cruda |
 | **Hook de datos** (`features/*/api`) | React Query: query/mutation, caché, clave de idempotencia | render, navegación |
 | **Cliente API** (`core/api`) | transporte: `Authorization`, `correlationId`, `Idempotency-Key`, timeout, backoff | reglas de negocio, UI |
@@ -68,7 +68,8 @@ apps/mobile/src/
     form/     # useZodForm (contract-first sin libs nuevas)
     env/      # configuración EXPO_PUBLIC_*
   features/                       # un folder por bounded context
-    auth/ credit/ payments/ settings/   # api/ · schemas/ · components/ · screens/
+    auth/ credit/ payments/ settings/ applications-review/   # api/ · schemas/ · components/ · screens/
+    tenants/ users/ zones/ collectors/ clients/             # IAM (slices por rol)
 ```
 
 **Grafo de dependencias (hacia abajo):** `mobile/app → features → core → contracts`;
@@ -80,7 +81,7 @@ apps/mobile/src/
 
 | Atributo | Dónde vive en el front |
 |---|---|
-| **Seguridad** | `core/auth/jwt.ts` deriva tenant/rol/zonas de los claims; `core/api/fetcher.ts` envía `Authorization: Bearer` y, en 401, `core/auth/session.tsx` cierra sesión y limpia caché; `core/auth/authorization.ts` (rol + subárbol de zonas) oculta/inhabilita acciones; token en `expo-secure-store` (nativo) / `localStorage` (web). |
+| **Seguridad** | `core/auth/jwt.ts` deriva tenant/rol/zonas de los claims (el `SUPER_ADMIN` viaja con `tenantId` vacío); `core/api/fetcher.ts` envía `Authorization: Bearer` y, en 401, `core/auth/session.tsx` cierra sesión y limpia caché; `core/auth/authorization.ts` (espejo de `domain/iam/role`) decide el **menú por rol** y oculta/inhabilita acciones; el **plano de control** (tenants) no envía `x-tenant-id`; token en `expo-secure-store` (nativo) / `localStorage` (web). |
 | **Auditabilidad** | `core/api/fetcher.ts` añade `X-Correlation-Id` por petición; se muestra en banners de error y se incluye en los logs del cliente. |
 | **Idempotencia** | `core/ids.ts` + `core/api/request-context.ts`: cada mutación de dinero lleva `Idempotency-Key` estable; la cola offline persiste la MISMA clave para reenvíos (sin doble abono). |
 | **Observabilidad** | `core/logger/index.ts`: JSON con `tenantId`+`correlationId`, **redacción de PII** (nombre/CPF/token). |

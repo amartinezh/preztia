@@ -51,7 +51,8 @@ export async function resolveTenantByWhatsappPhone(
 /** Fila mínima del usuario para autenticar y construir el JWT. */
 export interface LoginUserRow {
   id: string;
-  tenantId: string;
+  /** `null` para el SUPER_ADMIN (plano de control, sin tenant). */
+  tenantId: string | null;
   passwordHash: string;
   role: string;
   zonePaths: string[];
@@ -72,7 +73,7 @@ export async function findAppUserForLogin(
         FROM find_app_user_for_login(${email})`,
   )) as Array<{
     id: string;
-    tenant_id: string;
+    tenant_id: string | null;
     password_hash: string;
     role: string;
     zone_paths: string[];

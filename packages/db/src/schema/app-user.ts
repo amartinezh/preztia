@@ -11,8 +11,14 @@ import {
 
 // Rol del usuario operador (espejo del UserRole del cliente). Define qué puede
 // hacer y se incluye como claim en el JWT; la autoridad real la imponen el
-// backend y RLS.
-export const userRole = pgEnum("user_role", ["ADMIN", "COORDINATOR", "COLLECTOR"]);
+// backend y RLS. SUPER_ADMIN es el rol del plano de control (cruza tenants, sin
+// tenant_id); el resto vive dentro de un tenant.
+export const userRole = pgEnum("user_role", [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "COORDINATOR",
+  "COLLECTOR",
+]);
 
 // Usuario operador de un tenant (IAM). El login deriva el tenant/rol/zonas de los
 // claims del JWT firmado a partir de esta fila; nunca de input del cliente.
@@ -22,7 +28,9 @@ export const appUser = pgTable(
   "app_user",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
+    // Nullable: el SUPER_ADMIN (plano de control) no pertenece a ningún tenant.
+    // El resto de roles SIEMPRE lleva tenant_id (lo valida la capa de aplicación).
+    tenantId: uuid("tenant_id"),
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     role: userRole("role").notNull(),

@@ -52,7 +52,19 @@
     { "key": "password", "value": "changeme-123", "description": "Contraseña del usuario sembrado (SEED_PASSWORD)" },
     { "key": "accessToken", "value": "", "description": "JWT de acceso; lo llena la carpeta 05·Auth tras el login" },
     { "key": "refreshToken", "value": "", "description": "JWT de refresco; lo llena la carpeta 05·Auth" },
-    { "key": "idempotencyKey", "value": "", "description": "Idempotency-Key del abono en efectivo (se genera en el pre-request del abono)" }
+    { "key": "idempotencyKey", "value": "", "description": "Idempotency-Key del abono en efectivo (se genera en el pre-request del abono)" },
+    { "key": "superEmail", "value": "super@preztia.test", "description": "Email del SUPER_ADMIN sembrado (SEED_SUPER_ADMIN_EMAIL)" },
+    { "key": "superPassword", "value": "changeme-super-123", "description": "Contraseña del SUPER_ADMIN (SEED_SUPER_ADMIN_PASSWORD)" },
+    { "key": "superToken", "value": "", "description": "JWT del super admin; lo llena la carpeta 08" },
+    { "key": "newTenantId", "value": "", "description": "Tenant creado por el super admin (carpeta 08)" },
+    { "key": "coordEmail", "value": "coord1@preztia.test", "description": "Email del coordinador creado en la carpeta 09" },
+    { "key": "coordPassword", "value": "changeme-123", "description": "Contraseña del coordinador/cobrador de prueba" },
+    { "key": "coordToken", "value": "", "description": "JWT del coordinador; lo llena la carpeta 10" },
+    { "key": "coordId", "value": "", "description": "uuid del coordinador creado (carpeta 09)" },
+    { "key": "collectorEmail", "value": "cob1@preztia.test", "description": "Email del cobrador creado en la carpeta 10" },
+    { "key": "collectorToken", "value": "", "description": "JWT del cobrador; lo llena la carpeta 10" },
+    { "key": "collectorId", "value": "", "description": "uuid del cobrador creado (carpeta 10)" },
+    { "key": "newZoneId", "value": "", "description": "uuid de la zona raíz creada (carpeta 09)" }
   ],
   "item": [
     {
@@ -867,6 +879,266 @@
               ]
             },
             "description": "Seguridad: el JwtGuard exige `Authorization: Bearer` en credit/payments; sin token no hay acceso (401), antes incluso de mirar el `x-tenant-id`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 · Super Admin (IAM · plano de control)",
+      "description": "CRUD de tenants y provisión de admins por el SUPER_ADMIN. Estos endpoints NO llevan `x-tenant-id`: el super admin cruza tenants y la autorización la impone el SuperAdminGuard (rol del JWT). Requiere `pnpm --filter api seed:user` (siembra el super admin).",
+      "item": [
+        {
+          "name": "Login super admin → guarda superToken",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.collectionVariables.set('superToken', j.accessToken);",
+            "const part = j.accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');",
+            "const claims = JSON.parse(Buffer.from(part,'base64').toString('utf8'));",
+            "pm.test('el rol del claim es SUPER_ADMIN', () => pm.expect(claims.role).to.eql('SUPER_ADMIN'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{superEmail}}\",\n  \"password\": \"{{superPassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Crear tenant → guarda newTenantId",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "pm.expect(j.id).to.be.a('string');",
+            "pm.collectionVariables.set('newTenantId', j.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Microcreditos\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/tenants", "host": ["{{baseUrl}}"], "path": ["admin", "tenants"] }
+          }
+        },
+        {
+          "name": "Listar tenants (paginado) → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.expect(j.items).to.be.an('array');",
+            "pm.expect(j.total).to.be.a('number');"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/tenants?page=1&pageSize=10", "host": ["{{baseUrl}}"], "path": ["admin", "tenants"], "query": [{ "key": "page", "value": "1" }, { "key": "pageSize", "value": "10" }] }
+          }
+        },
+        {
+          "name": "Provisionar ADMIN del tenant → 201",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.expect(pm.response.json().id).to.be.a('string');"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@acme.test\",\n  \"password\": \"changeme-123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/tenants/{{newTenantId}}/admins", "host": ["{{baseUrl}}"], "path": ["admin", "tenants", "{{newTenantId}}", "admins"] }
+          }
+        },
+        {
+          "name": "NEGATIVO: token de admin en el plano de control → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('el SuperAdminGuard rechaza al admin con 403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/tenants", "host": ["{{baseUrl}}"], "path": ["admin", "tenants"] },
+            "description": "Reusa el accessToken de un ADMIN (carpeta 05·Auth). El plano de control es exclusivo del SUPER_ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 · Admin del tenant (usuarios y zonas)",
+      "description": "El ADMIN gobierna su tenant: CRUD de zonas (árbol ltree), de usuarios (coordinadores) y asignación de coordinadores. Requiere `Authorization: Bearer {{accessToken}}` + `x-tenant-id` (carpeta 05·Auth).",
+      "item": [
+        {
+          "name": "Crear zona raíz → guarda newZoneId",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "const j = pm.response.json();",
+            "pm.test('devuelve el path ltree de la zona', () => pm.expect(j.path).to.be.a('string'));",
+            "pm.collectionVariables.set('newZoneId', j.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Antioquia\"\n}" },
+            "url": { "raw": "{{baseUrl}}/zones", "host": ["{{baseUrl}}"], "path": ["zones"] }
+          }
+        },
+        {
+          "name": "Crear subzona (bajo la raíz) → 201",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.test('el path encadena al padre', () => pm.expect(pm.response.json().path).to.include('.'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Medellin\",\n  \"parentZoneId\": \"{{newZoneId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/zones", "host": ["{{baseUrl}}"], "path": ["zones"] }
+          }
+        },
+        {
+          "name": "Listar árbol de zonas → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().items).to.be.an('array');"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/zones", "host": ["{{baseUrl}}"], "path": ["zones"] }
+          }
+        },
+        {
+          "name": "Crear COORDINATOR → guarda coordId",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('coordId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{coordEmail}}\",\n  \"password\": \"{{coordPassword}}\",\n  \"role\": \"COORDINATOR\",\n  \"zonePaths\": [\"antioquia\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "Asignar coordinador a la zona → 204",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 204', () => pm.response.to.have.status(204));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"coordinatorId\": \"{{coordId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/zones/{{newZoneId}}/coordinators", "host": ["{{baseUrl}}"], "path": ["zones", "{{newZoneId}}", "coordinators"] }
+          }
+        },
+        {
+          "name": "Listar usuarios del tenant → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().items).to.be.an('array');"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/users?page=1&pageSize=20", "host": ["{{baseUrl}}"], "path": ["users"], "query": [{ "key": "page", "value": "1" }, { "key": "pageSize", "value": "20" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 · Coordinador (cobradores y clientes)",
+      "description": "El COORDINATOR crea cobradores y les asigna un conjunto de clientes (deudores) de su alcance; el COBRADOR solo ve esos clientes. Ejecutar la carpeta 09 primero (crea el coordinador). El cliente (deudor) sale de un crédito existente (carpeta 06).",
+      "item": [
+        {
+          "name": "Login coordinador → guarda coordToken (+ tenantId)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.collectionVariables.set('coordToken', j.accessToken);",
+            "const part = j.accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');",
+            "const claims = JSON.parse(Buffer.from(part,'base64').toString('utf8'));",
+            "pm.collectionVariables.set('tenantId', claims.tenantId);",
+            "pm.test('el rol del claim es COORDINATOR', () => pm.expect(claims.role).to.eql('COORDINATOR'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{coordEmail}}\",\n  \"password\": \"{{coordPassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Crear COBRADOR (dentro del alcance) → guarda collectorId",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('collectorId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{coordToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{collectorEmail}}\",\n  \"password\": \"{{coordPassword}}\",\n  \"role\": \"COLLECTOR\",\n  \"zonePaths\": [\"antioquia.medellin\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "NEGATIVO: cobrador con zona fuera del alcance → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('el alcance del coordinador se respeta (403)', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{coordToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"fuera@preztia.test\",\n  \"password\": \"changeme-123\",\n  \"role\": \"COLLECTOR\",\n  \"zonePaths\": [\"valle\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "Listar clientes asignables (en alcance) → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().items).to.be.an('array');"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{coordToken}}" }],
+            "url": { "raw": "{{baseUrl}}/collectors/{{collectorId}}/assignable-clients?page=1&pageSize=20", "host": ["{{baseUrl}}"], "path": ["collectors", "{{collectorId}}", "assignable-clients"], "query": [{ "key": "page", "value": "1" }, { "key": "pageSize", "value": "20" }] }
+          }
+        },
+        {
+          "name": "Asignar clientes al cobrador → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.expect(pm.response.json().assigned).to.be.a('number');"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{coordToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"borrowerIds\": [\"{{borrowerId}}\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/collectors/{{collectorId}}/clients", "host": ["{{baseUrl}}"], "path": ["collectors", "{{collectorId}}", "clients"] }
+          }
+        },
+        {
+          "name": "Login cobrador → guarda collectorToken",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('collectorToken', pm.response.json().accessToken);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{collectorEmail}}\",\n  \"password\": \"{{coordPassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Cobrador: SOLO sus clientes asignados → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "const j = pm.response.json();",
+            "pm.test('respuesta paginada de su cartera', () => pm.expect(j.items).to.be.an('array'));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-id", "value": "{{tenantId}}" }, { "key": "Authorization", "value": "Bearer {{collectorToken}}" }],
+            "url": { "raw": "{{baseUrl}}/me/clients?page=1&pageSize=20", "host": ["{{baseUrl}}"], "path": ["me", "clients"], "query": [{ "key": "page", "value": "1" }, { "key": "pageSize", "value": "20" }] }
           }
         }
       ]

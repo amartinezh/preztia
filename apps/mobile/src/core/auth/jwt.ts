@@ -6,7 +6,7 @@
  * claims para decidir qué mostrar; la autoridad real la impone la API + RLS.
  */
 
-export type UserRole = "ADMIN" | "COORDINATOR" | "COLLECTOR";
+export type UserRole = "SUPER_ADMIN" | "ADMIN" | "COORDINATOR" | "COLLECTOR";
 
 export type SessionClaims = {
   /** Identificador del usuario (subject). */
@@ -32,7 +32,12 @@ function base64UrlDecode(input: string): string {
   throw new Error("No base64 decoder available");
 }
 
-const VALID_ROLES: ReadonlySet<string> = new Set(["ADMIN", "COORDINATOR", "COLLECTOR"]);
+const VALID_ROLES: ReadonlySet<string> = new Set([
+  "SUPER_ADMIN",
+  "ADMIN",
+  "COORDINATOR",
+  "COLLECTOR",
+]);
 
 /** Decodifica y valida la forma de los claims. Devuelve `null` si el token es inválido. */
 export function decodeSessionClaims(accessToken: string): SessionClaims | null {

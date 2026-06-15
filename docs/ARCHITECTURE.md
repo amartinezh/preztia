@@ -1,7 +1,7 @@
 # PreztiaOS — Documento de Arquitectura
 
 > **Estado:** documento vivo. Se ajusta conforme se toman decisiones.
-> **Última actualización:** 2026-06-13 (separación arquitectura ↔ análisis/diseño: §9/§10/§12/§13/§19 movidas a [DESIGN.md](DESIGN.md); ADR #18–#19; deuda §21 refrescada contra el código).
+> **Última actualización:** 2026-06-14 (IAM por roles + plano de control del super admin: ADR #20–#21; tabla de conexiones §8 con rol `platform`; §3.7 Seguridad y §21 refrescadas).
 > **Ámbito:** plataforma multi-tenant de **préstamos y cobranza** (microcrédito de ruta/gota a gota, cobranza por zonas).
 >
 > 📚 **Conjunto de documentos:** este archivo cubre **arquitectura** (el *cómo*). El **análisis y diseño funcional** (el *qué*, validado contra el código) está en **[DESIGN.md](DESIGN.md)**; el cliente, en **[FRONTEND_ARCHITECTURE.md](FRONTEND_ARCHITECTURE.md)**; el antifraude documental a fondo, en **[analisisPlataformas.md](analisisPlataformas.md)**.
@@ -153,7 +153,7 @@ Los §3.1–§3.6 son atributos a **nivel de código**. Esta sección añade los
 
 | Atributo | Qué exigimos (reglas accionables) | Estado / referencia |
 |---|---|---|
-| **Seguridad** | aislamiento por RLS `FORCE` + rol `app`; identidad del tenant desde **JWT** (no header spoofable), 401 si falta; authZ por rol y por subárbol de zonas (`ZoneScopeGuard`); secretos solo por entorno; validación en la frontera (zod) | ⚠️ RLS ✅; authN/authZ y tenant-por-JWT pendientes (§8, §21) |
+| **Seguridad** | aislamiento por RLS `FORCE` + rol `app`; identidad del tenant desde **JWT** (no header spoofable), 401 si falta; authZ por rol y por subárbol de zonas (`ZoneScopeGuard`); secretos solo por entorno; validación en la frontera (zod) | ✅ RLS; ✅ authN (login JWT) y **authZ por rol** (`requireRole`/`SuperAdminGuard`, 403) + alcance por zonas (`zone-scope`); ✅ `JwtGuard` liga `x-tenant-id` al claim (ADR #20–#21) |
 | **Auditabilidad / trazabilidad** | **todo movimiento de dinero y cambio de estado** se registra en un **audit log append-only** (quién, qué, cuándo, tenant); `correlationId` por petición; nada de borrar/editar historial financiero | ❌ por diseñar |
 | **Confiabilidad / idempotencia** | toda operación de dinero y todo webhook (WhatsApp) es **idempotente** (clave de idempotencia / `dedup`); reintentos seguros; consistencia transaccional (`withTenantTx`); sin doble cobro/abono | ⚠️ transacciones ✅; webhooks/PIX idempotentes ✅; `Idempotency-Key` HTTP pendiente (§21) |
 | **Integridad / corrección financiera** | invariantes de agregado (saldo nunca negativo, `Σ abonos ≤ total`, cuadre de caja); dinero en enteros (`Money`); invariantes verificados con pruebas (§3.6) | ⚠️ `Money` + cuadre de cuotas ✅; invariantes de agregado/caja pendientes |
@@ -383,10 +383,13 @@ CREATE POLICY tenant_isolation ON credit
 
 | Variable | Rol | Uso |
 |---|---|---|
-| `DATABASE_URL` | `preztia` (dueño del esquema) | **migraciones** (DDL) |
-| `APP_DATABASE_URL` | `app` (sin bypass de RLS) | **runtime de la aplicación** |
+| `DATABASE_URL` | `preztia` (dueño del esquema, superusuario) | **migraciones** (DDL) |
+| `APP_DATABASE_URL` | `app` (`NOBYPASSRLS`) | **runtime del plano de datos** (todos los tenants) |
+| `PLATFORM_DATABASE_URL` | `platform` (`BYPASSRLS`) | **plano de control del super admin** (CRUD de tenants + provisión de admins), SOLO tras el `SuperAdminGuard` |
 
-> ⚠️ Si la app se conecta por error con el rol dueño, RLS `FORCE` igual aplica, pero la regla operativa es: **runtime siempre con `app`**.
+> ⚠️ Si la app se conecta por error con el rol dueño, RLS `FORCE` igual aplica, pero la regla operativa es: **el plano de datos siempre con `app`**.
+
+> 🛂 **Plano de control (super admin).** El `SUPER_ADMIN` no tiene `tenant_id` y opera *cruzando* tenants. Para no relajar RLS en el plano de datos, su CRUD de la tabla **global `tenant`** y la provisión de admins van por una conexión dedicada (`platform`, `BYPASSRLS`), alcanzable **solo** por los endpoints con `SuperAdminGuard` (`apps/api/platform/*`, `withPlatformTx`). Todo lo demás (usuarios, zonas, cobradores, clientes) sigue por el rol `app` + RLS + `JwtGuard` (ADR #21).
 
 > 🔒 **Red de seguridad pendiente (CI):** pruebas de aislamiento con Testcontainers como *status check* obligatorio — insertar con tenant A y verificar que una consulta con `app.current_tenant = B` no lo ve.
 
@@ -656,6 +659,8 @@ Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `doc
 | 17 | **Offline-first con cola de mutaciones persistida** (AsyncStorage) que reusa la clave de idempotencia al reenviar | cobradores de ruta operan sin red sin riesgo de doble abono | ✅ |
 | 18 | **Documentación separada en tres** (ARCHITECTURE.md arquitectura · DESIGN.md análisis/diseño · FRONTEND_ARCHITECTURE.md cliente) | el doc de arquitectura mezclaba el *cómo* con el *qué*/estado, que se desactualizaba; separarlos mantiene cada uno enfocado y vivo | ✅ |
 | 19 | **Contextos ya construidos reflejados en DESIGN.md** (Conversations/IA, Credit Application+KYC, Antifraude documental, Payments & Banking) | el roadmap los marcaba como *futuro* cuando ya están implementados y cableados | ✅ |
+| 20 | **IAM por roles** (`SUPER_ADMIN` · `ADMIN` · `COORDINATOR` · `COLLECTOR`) con dominio puro como fuente única de capacidades (`domain/iam/role`) | autorización verificable, espejada por backend (`requireRole`) y cliente (menús); jerarquía de provisión sin escalada | ✅ |
+| 21 | **Plano de control vs plano de datos para el super admin** (conexión `platform` con BYPASSRLS detrás del `SuperAdminGuard`, tabla global `tenant`) | el super admin cruza tenants (CRUD de tenants + provisión de admins) sin relajar RLS en el plano de datos, que sigue 100% con el rol `app` (NOBYPASSRLS) | ✅ |
 
 ---
 
@@ -666,7 +671,7 @@ Resumen de decisiones tomadas. Cada una puede expandirse a un ADR propio en `doc
 | Ítem | Detalle | Acción sugerida |
 |---|---|---|
 | **Placeholders en el repo de crédito** | [credit.repository.ts](../apps/api/src/credit/credit.repository.ts) usa `borrowerId = zoneId = id` y valores fijos (`interestPct: 200`, fechas hardcodeadas) | propagar el `GrantCreditCommand` completo hasta el insert |
-| 🔴 **Identidad de tenant por header** (seguridad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | `x-tenant-id` es spoofable; el middleware no rechaza si falta. Riesgo de cruce de datos entre tenants | derivar el `tenantId` del **JWT** verificado (no del header del cliente); `tenantMiddleware` responde **401** si no hay tenant válido; mantener el header solo para entornos de prueba detrás de un flag |
+| ⚠️ **Identidad de tenant por header** (seguridad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | ✅ mitigado: el `JwtGuard` exige `x-tenant-id == claim.tenantId` (header no spoofable en endpoints autenticados) y los slices IAM aplican `requireRole`/`SuperAdminGuard` (403). **Falta** que el `tenantMiddleware` derive el tenant directamente del JWT (hoy lo toma del header ya verificado por el guard) | derivar el `tenantId` del **JWT** en el middleware y responder 401 si falta; mantener el header solo detrás de un flag de pruebas |
 | 🔴 **Idempotencia de dinero por HTTP** (confiabilidad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | ✅ webhooks de WhatsApp dedup por `wamid` (`processed_inbound_message`) y PIX único por `end_to_end_id`; **falta** la clave `Idempotency-Key` en los endpoints de dinero del API (el cliente ya la envía, ver [DESIGN.md §11](DESIGN.md#11-roadmap-y-pendientes)) | persistir resultado por `Idempotency-Key` (tabla `idempotency_key` o Redis con TTL) en los handlers de dinero del API |
 | **Audit log global** (auditabilidad, [§3.7](#37-atributos-de-calidad-del-sistema--ilities)) | ✅ existen bitácoras append-only **por contexto** (`credit_application_event`, `payment_event`); **falta** un `audit_log` transversal con actor + `correlation_id` y la revocación de `UPDATE/DELETE` al rol `app` | unificar en `audit_log` append-only (`tenant_id`, actor, acción, entidad, antes/después, `correlation_id`, `ts`); escribir dentro de `withTenantTx`; revocar `UPDATE/DELETE` al rol `app` |
 | **Semántica de `interestPct`** | el dominio lo trata como *base-mil* (200=20%), el nombre sugiere % simple | renombrar a `interestBaseThousand` o normalizar en la frontera |

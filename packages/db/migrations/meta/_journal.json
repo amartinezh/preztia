@@ -127,6 +127,20 @@
       "when": 1781385783200,
       "tag": "0017_app_user_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781446650524,
+      "tag": "0018_overrated_doomsday",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1781446710524,
+      "tag": "0019_iam_rls",
+      "breakpoints": true
     }
   ]
 }

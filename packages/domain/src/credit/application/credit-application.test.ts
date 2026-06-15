@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   createCreditApplication,
+  decideApplicationReview,
   isComplete,
   nextPendingDocument,
   recordDocumentOutcome,
@@ -70,5 +71,35 @@ describe("recordDocumentOutcome", () => {
 
   it("rechaza un documento ajeno al checklist", () => {
     expect(() => recordDocumentOutcome(fresh(), "BANK_STATEMENT", approved)).toThrow(DomainError);
+  });
+});
+
+describe("decideApplicationReview", () => {
+  // Lleva la solicitud a IN_REVIEW validando todos los documentos.
+  const inReview = (): CreditApplication =>
+    REQUESTED_DOCUMENTS.reduce((app, type) => recordDocumentOutcome(app, type, approved), fresh());
+
+  it("aprueba desde IN_REVIEW → APPROVED", () => {
+    expect(decideApplicationReview(inReview(), "APPROVE").status).toBe("APPROVED");
+  });
+
+  it("aprueba desde AWAITING_DOCUMENTS aunque un documento quedó marcado", () => {
+    const flagged = recordDocumentOutcome(fresh(), FIRST, rejected);
+    expect(flagged.status).toBe("AWAITING_DOCUMENTS");
+    expect(decideApplicationReview(flagged, "APPROVE").status).toBe("APPROVED");
+  });
+
+  it("rechaza desde IN_REVIEW → REJECTED", () => {
+    expect(decideApplicationReview(inReview(), "REJECT").status).toBe("REJECTED");
+  });
+
+  it("es idempotente: re-decidir hacia el mismo estado no cambia nada", () => {
+    const approvedApp = decideApplicationReview(inReview(), "APPROVE");
+    expect(decideApplicationReview(approvedApp, "APPROVE")).toBe(approvedApp);
+  });
+
+  it("es un conflicto cambiar de un estado terminal al otro", () => {
+    const approvedApp = decideApplicationReview(inReview(), "APPROVE");
+    expect(() => decideApplicationReview(approvedApp, "REJECT")).toThrow(DomainError);
   });
 });

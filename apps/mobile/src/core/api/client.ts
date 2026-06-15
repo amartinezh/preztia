@@ -1,5 +1,14 @@
 import { initClient } from "@ts-rest/core";
-import { authContract, creditContract, paymentsContract } from "@preztiaos/contracts";
+import {
+  authContract,
+  collectorsContract,
+  creditApplicationReviewContract,
+  creditContract,
+  iamUsersContract,
+  paymentsContract,
+  tenantsContract,
+  zonesContract,
+} from "@preztiaos/contracts";
 
 import { env } from "../env";
 import { authState } from "../auth/auth-state";
@@ -11,7 +20,16 @@ import { normalizeHttpError, type ApiError } from "../errors";
  * el fetcher transversal. La identidad (token/tenant) y el cierre de sesión por 401 se
  * leen del snapshot síncrono de la sesión (`authState`).
  */
-const contract = { ...authContract, ...creditContract, ...paymentsContract };
+const contract = {
+  ...authContract,
+  ...tenantsContract,
+  ...iamUsersContract,
+  ...zonesContract,
+  ...collectorsContract,
+  ...creditContract,
+  ...creditApplicationReviewContract,
+  ...paymentsContract,
+};
 
 export const api = initClient(contract, {
   baseUrl: env.apiUrl,
