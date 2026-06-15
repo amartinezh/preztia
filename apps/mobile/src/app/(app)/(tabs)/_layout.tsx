@@ -30,6 +30,8 @@ export default function TabsLayout() {
   const isSuperAdmin = role === "SUPER_ADMIN";
   const showUsers = can(role, "user:manage");
   const showZones = can(role, "zone:manage");
+  const showBorrowers = can(role, "borrower:manage");
+  const showOperations = can(role, "borrower:manage");
   const isCoordinator = role === "COORDINATOR";
   const isCollector = role === "COLLECTOR";
 
@@ -53,9 +55,30 @@ export default function TabsLayout() {
         </NativeTabs.Trigger>
       ) : null}
 
+      {showCredits ? (
+        <NativeTabs.Trigger name="accounts">
+          <NativeTabs.Trigger.Label>{t("accounts.tab")}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
+        </NativeTabs.Trigger>
+      ) : null}
+
+      {showCredits ? (
+        <NativeTabs.Trigger name="cash">
+          <NativeTabs.Trigger.Label>{t("cash.tab")}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
+        </NativeTabs.Trigger>
+      ) : null}
+
       {isCollector ? (
         <NativeTabs.Trigger name="clients">
           <NativeTabs.Trigger.Label>{t("clients.tab")}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
+        </NativeTabs.Trigger>
+      ) : null}
+
+      {showBorrowers ? (
+        <NativeTabs.Trigger name="borrowers">
+          <NativeTabs.Trigger.Label>{t("borrowers.tab")}</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
         </NativeTabs.Trigger>
       ) : null}
@@ -84,6 +107,13 @@ export default function TabsLayout() {
       {showUsers ? (
         <NativeTabs.Trigger name="users">
           <NativeTabs.Trigger.Label>{t("users.tab")}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
+        </NativeTabs.Trigger>
+      ) : null}
+
+      {showOperations ? (
+        <NativeTabs.Trigger name="operations">
+          <NativeTabs.Trigger.Label>{t("operations.tab")}</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
         </NativeTabs.Trigger>
       ) : null}

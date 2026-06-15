@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
+  ConflictError,
   Money,
+  NotFoundError,
   buildSchedule,
+  canReceiveCredit,
   scheduleDueDates,
+  CREDIT_DENIED_BLOCKED,
   type Installment,
   type ScheduleFrequency,
 } from "@preztiaos/domain";
@@ -34,6 +38,18 @@ export interface CreditRepository {
   ): Promise<void>;
 }
 
+// Puerto opcional: política de crédito del cliente (cupo + bloqueo) y su saldo vigente. Cuando
+// se inyecta, el handler exige que el cliente esté registrado y respeta el cupo/bloqueo del
+// legado. Si no se inyecta, el otorgamiento conserva el comportamiento previo (back-compat).
+export interface BorrowerCreditPolicyPort {
+  find(input: { tenantId: string; borrowerId: string }): Promise<{
+    creditBlocked: boolean;
+    creditLimitMinor: number;
+    /** Saldo pendiente del cliente en créditos vigentes (unidades menores). */
+    outstandingMinor: number;
+  } | null>;
+}
+
 export interface GrantCreditCommand {
   tenantId: string; borrowerId: string; zoneId: string;
   principalMinor: number; interestPct: number; installmentsCount: number; currency: string;
@@ -43,8 +59,12 @@ export interface GrantCreditCommand {
 }
 
 export class GrantCreditHandler {
-  constructor(private readonly credits: CreditRepository) {}
+  constructor(
+    private readonly credits: CreditRepository,
+    private readonly borrowerPolicy?: BorrowerCreditPolicyPort,
+  ) {}
   async execute(cmd: GrantCreditCommand): Promise<{ id: string; installments: number }> {
+    await this.assertWithinCreditPolicy(cmd);
     const principal = Money.of(cmd.principalMinor, cmd.currency);
     const schedule = buildSchedule(principal, cmd.interestPct, cmd.installmentsCount);
     const frequency = cmd.frequency ?? "DAILY";
@@ -74,5 +94,26 @@ export class GrantCreditHandler {
       cmd.borrowerPhone ? { phone: cmd.borrowerPhone } : undefined,
     );
     return { id, installments: schedule.length };
+  }
+
+  /** Verifica cupo y bloqueo del cliente cuando hay puerto de política (regla del legado). */
+  private async assertWithinCreditPolicy(cmd: GrantCreditCommand): Promise<void> {
+    if (!this.borrowerPolicy) return;
+    const policy = await this.borrowerPolicy.find({
+      tenantId: cmd.tenantId,
+      borrowerId: cmd.borrowerId,
+    });
+    if (!policy) throw new NotFoundError("El cliente no está registrado");
+    const decision = canReceiveCredit(
+      { creditBlocked: policy.creditBlocked, creditLimitMinor: policy.creditLimitMinor },
+      { requestedMinor: cmd.principalMinor, outstandingMinor: policy.outstandingMinor },
+    );
+    if (!decision.allowed) {
+      throw new ConflictError(
+        decision.reason === CREDIT_DENIED_BLOCKED
+          ? "El cliente está bloqueado para nuevos créditos"
+          : "El crédito solicitado excede el cupo del cliente",
+      );
+    }
   }
 }

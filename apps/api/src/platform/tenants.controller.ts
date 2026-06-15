@@ -15,17 +15,20 @@ import {
   CreateTenantAdminHandler,
   CreateTenantHandler,
   DeleteTenantHandler,
+  UpdateTenantAdminHandler,
   UpdateTenantHandler,
 } from '@preztiaos/application';
 import {
   createTenantAdminInput,
   createTenantInput,
   paginationQuery,
+  updateTenantAdminInput,
   updateTenantInput,
 } from '@preztiaos/contracts';
 import { SuperAdminGuard } from './super-admin.guard';
 import { TenantDrizzleRepository } from './tenants.repository';
 import { TenantsQueryRepository } from './tenants-query.repository';
+import { TenantAdminsQueryRepository } from './tenant-admins-query.repository';
 import { PlatformUserRepository } from './platform-user.repository';
 import { ScryptPasswordHasher } from '../auth/password-hasher';
 
@@ -43,10 +46,12 @@ export class TenantsController {
   private readonly updateHandler: UpdateTenantHandler;
   private readonly deleteHandler: DeleteTenantHandler;
   private readonly createAdminHandler: CreateTenantAdminHandler;
+  private readonly updateAdminHandler: UpdateTenantAdminHandler;
 
   constructor(
     private readonly tenants: TenantDrizzleRepository,
     private readonly queries: TenantsQueryRepository,
+    private readonly adminQueries: TenantAdminsQueryRepository,
     private readonly users: PlatformUserRepository,
     private readonly hasher: ScryptPasswordHasher,
   ) {
@@ -54,6 +59,11 @@ export class TenantsController {
     this.updateHandler = new UpdateTenantHandler(this.tenants);
     this.deleteHandler = new DeleteTenantHandler(this.tenants);
     this.createAdminHandler = new CreateTenantAdminHandler(
+      this.tenants,
+      this.users,
+      this.hasher,
+    );
+    this.updateAdminHandler = new UpdateTenantAdminHandler(
       this.tenants,
       this.users,
       this.hasher,
@@ -92,6 +102,34 @@ export class TenantsController {
     const dto = createTenantAdminInput.parse(body);
     return this.createAdminHandler.execute({
       tenantId: uuid.parse(id),
+      ...dto,
+    });
+  }
+
+  @Get('admin/tenants/:id/admins')
+  async listAdmins(
+    @Param('id') id: string,
+    @Query() query: Record<string, string>,
+  ) {
+    const { page, pageSize } = paginationQuery.parse(query);
+    const { items, total } = await this.adminQueries.listTenantAdmins({
+      tenantId: uuid.parse(id),
+      page,
+      pageSize,
+    });
+    return { items, page, pageSize, total };
+  }
+
+  @Patch('admin/tenants/:id/admins/:adminId')
+  async updateAdmin(
+    @Param('id') id: string,
+    @Param('adminId') adminId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = updateTenantAdminInput.parse(body);
+    return this.updateAdminHandler.execute({
+      tenantId: uuid.parse(id),
+      adminId: uuid.parse(adminId),
       ...dto,
     });
   }

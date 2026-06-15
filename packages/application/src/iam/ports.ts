@@ -71,12 +71,13 @@ export interface UserRecord {
 export interface UserStore {
   /** Inserta el usuario; lanza `ConflictError` si el email (único GLOBAL) ya existe. */
   create(user: NewUser): Promise<void>;
-  /** Actualiza zonas/estado; `null` si el usuario no existe en el tenant. */
+  /** Actualiza zonas/estado/contraseña; `null` si el usuario no existe en el tenant. */
   update(input: {
     tenantId: string;
     userId: string;
     zonePaths?: readonly string[];
     active?: boolean;
+    passwordHash?: string;
   }): Promise<UserRecord | null>;
   findById(input: { tenantId: string; userId: string }): Promise<UserRecord | null>;
 }

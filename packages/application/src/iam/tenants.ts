@@ -99,3 +99,54 @@ export class CreateTenantAdminHandler {
     return { id };
   }
 }
+
+export interface UpdateTenantAdminCommand {
+  tenantId: string;
+  adminId: string;
+  /** Activa/desactiva el acceso del admin (no se borra: trazabilidad). */
+  active?: boolean;
+  /** Nueva contraseña en claro; se hashea antes de persistir. */
+  password?: string;
+}
+
+/**
+ * Gestiona un ADMIN existente de un tenant: activar/desactivar o restablecer su contraseña.
+ * Solo opera sobre usuarios con rol ADMIN del tenant indicado (no toca coordinadores ni
+ * cobradores). Falla rápido si el tenant o el admin no existen.
+ */
+export class UpdateTenantAdminHandler {
+  constructor(
+    private readonly tenants: TenantStore,
+    private readonly users: UserStore,
+    private readonly hasher: PasswordHasher,
+  ) {}
+
+  async execute(cmd: UpdateTenantAdminCommand): Promise<TenantAdminRecord> {
+    const tenant = await this.tenants.findById(cmd.tenantId);
+    if (!tenant) throw new NotFoundError("El tenant no existe");
+    const existing = await this.users.findById({
+      tenantId: cmd.tenantId,
+      userId: cmd.adminId,
+    });
+    if (!existing || existing.role !== "ADMIN") {
+      throw new NotFoundError("El admin no existe");
+    }
+    const passwordHash = cmd.password
+      ? await this.hasher.hash(cmd.password)
+      : undefined;
+    const updated = await this.users.update({
+      tenantId: cmd.tenantId,
+      userId: cmd.adminId,
+      ...(cmd.active !== undefined ? { active: cmd.active } : {}),
+      ...(passwordHash !== undefined ? { passwordHash } : {}),
+    });
+    if (!updated) throw new NotFoundError("El admin no existe");
+    return { id: updated.id, email: updated.email, active: updated.active };
+  }
+}
+
+export interface TenantAdminRecord {
+  readonly id: string;
+  readonly email: string;
+  readonly active: boolean;
+}

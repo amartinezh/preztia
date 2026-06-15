@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_config" ADD COLUMN "operational_settings" jsonb DEFAULT '{"rechargesEnabled":false,"manualRoute":false,"blockOverdueDatesForSales":true,"blockInterestChange":true,"commissionPctBaseThousand":0,"defaultCreditLimitMinor":0,"applyColorByOverdue":false}'::jsonb NOT NULL;

@@ -12,7 +12,11 @@ import type {
   ZoneRecord,
   ZoneStore,
 } from "./ports";
-import { CreateTenantHandler, CreateTenantAdminHandler } from "./tenants";
+import {
+  CreateTenantHandler,
+  CreateTenantAdminHandler,
+  UpdateTenantAdminHandler,
+} from "./tenants";
 import { CreateUserHandler } from "./users";
 import { CreateZoneHandler } from "./zones";
 import { AssignCollectorClientsHandler } from "./collectors";
@@ -34,6 +38,13 @@ function coordinatorActor(over: Partial<ActorContext> = {}): ActorContext {
 
 class FakeUserStore implements UserStore {
   readonly created: NewUser[] = [];
+  readonly updates: Array<{
+    tenantId: string;
+    userId: string;
+    zonePaths?: readonly string[];
+    active?: boolean;
+    passwordHash?: string;
+  }> = [];
   constructor(private readonly byId: Record<string, UserRecord> = {}) {}
   async create(user: NewUser): Promise<void> {
     if (this.created.some((u) => u.email === user.email)) {
@@ -41,8 +52,21 @@ class FakeUserStore implements UserStore {
     }
     this.created.push(user);
   }
-  async update(): Promise<UserRecord | null> {
-    return null;
+  async update(input: {
+    tenantId: string;
+    userId: string;
+    zonePaths?: readonly string[];
+    active?: boolean;
+    passwordHash?: string;
+  }): Promise<UserRecord | null> {
+    this.updates.push(input);
+    const existing = this.byId[input.userId];
+    if (!existing) return null;
+    return {
+      ...existing,
+      ...(input.active !== undefined ? { active: input.active } : {}),
+      ...(input.zonePaths !== undefined ? { zonePaths: input.zonePaths } : {}),
+    };
   }
   async findById(input: { tenantId: string; userId: string }): Promise<UserRecord | null> {
     return this.byId[input.userId] ?? null;
@@ -117,6 +141,69 @@ describe("CreateTenantAdminHandler", () => {
         password: "changeme-123",
       }),
     ).rejects.toBeInstanceOf(ConflictError);
+  });
+});
+
+describe("UpdateTenantAdminHandler", () => {
+  const activeTenant: TenantRecord = { id: "t1", name: "Acme", slug: "acme", status: "ACTIVE" };
+  const tenants: TenantStore = {
+    create: async () => undefined,
+    update: async () => null,
+    remove: async () => false,
+    findById: async () => activeTenant,
+  };
+  const adminRecord: UserRecord = {
+    id: "u1",
+    tenantId: "t1",
+    email: "admin@acme.test",
+    role: "ADMIN",
+    zonePaths: [],
+    active: true,
+  };
+
+  it("desactiva un admin sin borrarlo", async () => {
+    const users = new FakeUserStore({ u1: adminRecord });
+    const out = await new UpdateTenantAdminHandler(tenants, users, hasher).execute({
+      tenantId: "t1",
+      adminId: "u1",
+      active: false,
+    });
+    expect(out).toEqual({ id: "u1", email: "admin@acme.test", active: false });
+    expect(users.updates[0]).toMatchObject({ userId: "u1", active: false });
+    expect(users.updates[0]?.passwordHash).toBeUndefined();
+  });
+
+  it("restablece la contraseña hasheándola antes de persistir", async () => {
+    const users = new FakeUserStore({ u1: adminRecord });
+    await new UpdateTenantAdminHandler(tenants, users, hasher).execute({
+      tenantId: "t1",
+      adminId: "u1",
+      password: "new-password-9",
+    });
+    expect(users.updates[0]?.passwordHash).toBe("hash:new-password-9");
+  });
+
+  it("falla si el tenant no existe", async () => {
+    const missingTenant: TenantStore = { ...tenants, findById: async () => null };
+    await expect(
+      new UpdateTenantAdminHandler(missingTenant, new FakeUserStore(), hasher).execute({
+        tenantId: "missing",
+        adminId: "u1",
+        active: false,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("no toca usuarios que no son ADMIN del tenant", async () => {
+    const users = new FakeUserStore({ u1: { ...adminRecord, role: "COORDINATOR" } });
+    await expect(
+      new UpdateTenantAdminHandler(tenants, users, hasher).execute({
+        tenantId: "t1",
+        adminId: "u1",
+        active: false,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(users.updates).toHaveLength(0);
   });
 });
 

@@ -1,12 +1,18 @@
 import { useMemo, useState } from "react";
-import { FlatList } from "react-native";
+import { FlatList, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import type { TenantOutput } from "@preztiaos/contracts";
-import { createTenantInput } from "@preztiaos/contracts";
+import type { TenantAdminOutput, TenantOutput } from "@preztiaos/contracts";
+import {
+  createTenantAdminInput,
+  createTenantInput,
+  updateTenantAdminInput,
+} from "@preztiaos/contracts";
 import {
   Badge,
   Banner,
   Button,
+  Card,
+  EmptyState,
   Field,
   Input,
   ListItem,
@@ -24,8 +30,10 @@ import {
   useCreateTenant,
   useCreateTenantAdmin,
   useDeleteTenant,
+  useTenantAdminsList,
   useTenantsList,
   useUpdateTenant,
+  useUpdateTenantAdmin,
 } from "../api/queries";
 
 /** Pantalla del super admin: CRUD de tenants y provisión de su admin. Responsiva (móvil/web). */
@@ -138,65 +146,330 @@ function CreateTenantModal({ visible, onClose }: { visible: boolean; onClose: ()
 function TenantDetailModal({ tenant, onClose }: { tenant: TenantOutput; onClose: () => void }) {
   const { t } = useT();
   const update = useUpdateTenant();
-  const remove = useDeleteTenant();
-  const createAdmin = useCreateTenantAdmin(tenant.id);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const active = tenant.status === "ACTIVE";
 
   return (
-    <Modal visible onClose={onClose} title={tenant.name}>
-      <Stack gap="md" className="p-4">
-        {feedback ? <Banner tone="info" title={feedback} /> : null}
+    <>
+      <Modal visible onClose={onClose} title={tenant.name}>
+        <ScrollView contentContainerClassName="p-4">
+          <Stack gap="lg">
+            {/* Estado del tenant */}
+            <Stack gap="sm">
+              <Text variant="label" tone="muted">
+                {t("tenants.section.status")}
+              </Text>
+              {statusError ? <Banner tone="danger" title={statusError} /> : null}
+              <Switch
+                label={active ? t("tenants.status.active") : t("tenants.status.suspended")}
+                value={active}
+                disabled={update.isPending}
+                onValueChange={(v) => {
+                  setStatusError(null);
+                  update.mutate(
+                    { id: tenant.id, status: v ? "ACTIVE" : "SUSPENDED" },
+                    {
+                      onError: (err) =>
+                        setStatusError(
+                          isApiError(err) ? t(err.messageKey) : t("errors.unknown"),
+                        ),
+                    },
+                  );
+                }}
+              />
+            </Stack>
 
-        <Switch
-          label={active ? t("tenants.status.active") : t("tenants.status.suspended")}
-          value={active}
-          onValueChange={(v) =>
-            update.mutate(
-              { id: tenant.id, status: v ? "ACTIVE" : "SUSPENDED" },
-              { onSuccess: onClose },
-            )
-          }
+            <AdminsSection tenant={tenant} />
+
+            {/* Zona de peligro */}
+            <Button
+              label={t("tenants.delete.title")}
+              variant="danger"
+              block
+              onPress={() => setConfirmingDelete(true)}
+            />
+          </Stack>
+        </ScrollView>
+      </Modal>
+
+      {confirmingDelete ? (
+        <DeleteTenantConfirmModal
+          tenant={tenant}
+          onClose={() => setConfirmingDelete(false)}
+          onDeleted={onClose}
         />
+      ) : null}
+    </>
+  );
+}
 
+/** Lista de admins del tenant + alta de nuevos. Varios admins por tenant. */
+function AdminsSection({ tenant }: { tenant: TenantOutput }) {
+  const { t } = useT();
+  const query = useTenantAdminsList(tenant.id);
+  const [adding, setAdding] = useState(false);
+
+  const admins = useMemo<TenantAdminOutput[]>(
+    () => query.data?.pages.flatMap((p) => p.items) ?? [],
+    [query.data],
+  );
+
+  return (
+    <Stack gap="sm">
+      <Row className="justify-between">
         <Text variant="label" tone="muted">
-          {t("tenants.admin.title")}
+          {t("tenants.admins.title")}
         </Text>
-        <Field label={t("users.new.email")} required>
-          <Input autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-        </Field>
-        <Field label={t("users.new.password")} required>
-          <Input secureTextEntry value={password} onChangeText={setPassword} />
-        </Field>
-        <Button
-          label={t("tenants.admin.submit")}
-          variant="secondary"
-          loading={createAdmin.isPending}
-          block
-          onPress={() =>
-            createAdmin.mutate(
-              { email: email.trim(), password },
-              {
-                onSuccess: () => {
-                  setEmail("");
-                  setPassword("");
-                  setFeedback(`${t("tenants.admin.submit")} ✓`);
-                },
-              },
-            )
-          }
-        />
+        {!adding ? (
+          <Button
+            label={t("tenants.admins.add")}
+            size="sm"
+            variant="secondary"
+            onPress={() => setAdding(true)}
+          />
+        ) : null}
+      </Row>
 
-        <Button
-          label={t("tenants.action.delete")}
-          variant="danger"
-          loading={remove.isPending}
-          block
-          onPress={() => remove.mutate(tenant.id, { onSuccess: onClose })}
+      {query.isPending ? (
+        <Spinner label={t("common.loading")} />
+      ) : admins.length === 0 && !adding ? (
+        <EmptyState title={t("tenants.admins.empty")} />
+      ) : (
+        <Stack gap="sm">
+          {admins.map((admin) => (
+            <AdminRow key={admin.id} tenantId={tenant.id} admin={admin} />
+          ))}
+        </Stack>
+      )}
+
+      {adding ? (
+        <AddAdminForm tenantId={tenant.id} onDone={() => setAdding(false)} />
+      ) : null}
+    </Stack>
+  );
+}
+
+/** Una fila de admin: estado, activar/desactivar y restablecer contraseña. */
+function AdminRow({ tenantId, admin }: { tenantId: string; admin: TenantAdminOutput }) {
+  const { t } = useT();
+  const update = useUpdateTenantAdmin(tenantId);
+  const [resetting, setResetting] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const submitReset = () => {
+    setError(null);
+    const parsed = updateTenantAdminInput.safeParse({ password });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? t("errors.unknown"));
+      return;
+    }
+    update.mutate(
+      { adminId: admin.id, password },
+      {
+        onSuccess: () => {
+          setPassword("");
+          setResetting(false);
+          setFeedback(t("tenants.admins.passwordReset"));
+        },
+        onError: (err) =>
+          setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+      },
+    );
+  };
+
+  return (
+    <Card className="gap-3">
+      <Row className="justify-between">
+        <Text variant="body" className="flex-1 pr-2">
+          {admin.email}
+        </Text>
+        <Badge
+          tone={admin.active ? "success" : "neutral"}
+          label={admin.active ? t("tenants.admins.statusActive") : t("tenants.admins.statusInactive")}
         />
+      </Row>
+
+      {feedback ? <Banner tone="info" title={feedback} /> : null}
+
+      <Row className="justify-between">
+        <Switch
+          label={admin.active ? t("tenants.admins.deactivate") : t("tenants.admins.activate")}
+          value={admin.active}
+          disabled={update.isPending}
+          onValueChange={(v) => {
+            setError(null);
+            setFeedback(null);
+            update.mutate(
+              { adminId: admin.id, active: v },
+              {
+                onError: (err) =>
+                  setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+              },
+            );
+          }}
+        />
+        {!resetting ? (
+          <Button
+            label={t("tenants.admins.resetPassword")}
+            size="sm"
+            variant="ghost"
+            onPress={() => {
+              setFeedback(null);
+              setResetting(true);
+            }}
+          />
+        ) : null}
+      </Row>
+
+      {resetting ? (
+        <Stack gap="sm">
+          {error ? <Banner tone="danger" title={error} /> : null}
+          <Field label={t("tenants.admins.newPassword")} required>
+            <Input secureTextEntry value={password} onChangeText={setPassword} invalid={!!error} />
+          </Field>
+          <Row className="gap-2">
+            <Button
+              label={t("tenants.admins.cancel")}
+              variant="secondary"
+              size="sm"
+              onPress={() => {
+                setResetting(false);
+                setPassword("");
+                setError(null);
+              }}
+            />
+            <Button
+              label={t("tenants.admins.save")}
+              size="sm"
+              loading={update.isPending}
+              onPress={submitReset}
+            />
+          </Row>
+        </Stack>
+      ) : null}
+    </Card>
+  );
+}
+
+/** Formulario de alta de un admin para el tenant (permite crear varios). */
+function AddAdminForm({ tenantId, onDone }: { tenantId: string; onDone: () => void }) {
+  const { t } = useT();
+  const createAdmin = useCreateTenantAdmin(tenantId);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const submit = () => {
+    setSubmitError(null);
+    setFeedback(null);
+    const parsed = createTenantAdminInput.safeParse({ email: email.trim(), password });
+    if (!parsed.success) {
+      const next: { email?: string; password?: string } = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0] as "email" | "password" | undefined;
+        if (key && !next[key]) next[key] = issue.message;
+      }
+      setErrors(next);
+      return;
+    }
+    setErrors({});
+    createAdmin.mutate(parsed.data, {
+      onSuccess: () => {
+        setEmail("");
+        setPassword("");
+        setFeedback(t("tenants.admins.created"));
+      },
+      onError: (err) =>
+        setSubmitError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+    });
+  };
+
+  return (
+    <Card className="gap-3">
+      <Text variant="label" tone="muted">
+        {t("tenants.admins.addTitle")}
+      </Text>
+      {feedback ? <Banner tone="info" title={feedback} /> : null}
+      {submitError ? <Banner tone="danger" title={submitError} /> : null}
+      <Field label={t("users.new.email")} error={errors.email} required>
+        <Input
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+          invalid={!!errors.email}
+        />
+      </Field>
+      <Field label={t("users.new.password")} error={errors.password} required>
+        <Input secureTextEntry value={password} onChangeText={setPassword} invalid={!!errors.password} />
+      </Field>
+      <Row className="gap-2">
+        <Button label={t("tenants.admins.cancel")} variant="secondary" size="sm" onPress={onDone} />
+        <Button
+          label={t("tenants.admins.add")}
+          size="sm"
+          loading={createAdmin.isPending}
+          onPress={submit}
+        />
+      </Row>
+    </Card>
+  );
+}
+
+/** Confirmación segura: exige escribir el nombre exacto del tenant para borrarlo. */
+function DeleteTenantConfirmModal({
+  tenant,
+  onClose,
+  onDeleted,
+}: {
+  tenant: TenantOutput;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const { t } = useT();
+  const remove = useDeleteTenant();
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const matches = confirmation.trim() === tenant.name;
+
+  return (
+    <Modal visible onClose={onClose} title={t("tenants.delete.title")}>
+      <Stack gap="md" className="p-4">
+        <Banner tone="danger" title={t("tenants.delete.warning")} />
+        {error ? <Banner tone="danger" title={error} /> : null}
+        <Field label={t("tenants.delete.confirmPrompt")} required>
+          <Input
+            autoCapitalize="none"
+            value={confirmation}
+            onChangeText={setConfirmation}
+            placeholder={tenant.name}
+          />
+        </Field>
+        <Row className="gap-2">
+          <Button label={t("tenants.admins.cancel")} variant="secondary" block onPress={onClose} />
+          <Button
+            label={t("tenants.delete.confirm")}
+            variant="danger"
+            block
+            disabled={!matches || remove.isPending}
+            loading={remove.isPending}
+            onPress={() => {
+              setError(null);
+              remove.mutate(tenant.id, {
+                onSuccess: onDeleted,
+                onError: (err) =>
+                  setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+              });
+            }}
+          />
+        </Row>
       </Stack>
     </Modal>
   );

@@ -1,8 +1,30 @@
-import { pgTable, uuid, text, timestamp, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 
 // Proveedor de IA usado para atender el chat por texto. Por ahora se usa GEMINI
 // (capa gratuita); OPENAI y CLAUDE quedan disponibles para el futuro.
 export const aiProvider = pgEnum("ai_provider", ["GEMINI", "OPENAI", "CLAUDE"]);
+
+// Ajustes operativos configurables por tenant (los toggles de "Configuración de cobro" del
+// legado). Dinero en unidades menores; comisión en base-mil (200 = 20%) como el interés.
+export interface OperationalSettings {
+  readonly rechargesEnabled: boolean; // Activar Recargos
+  readonly manualRoute: boolean; // Ruta Manual
+  readonly blockOverdueDatesForSales: boolean; // Bloquear Fechas Atrasadas Para Ventas
+  readonly blockInterestChange: boolean; // Bloquear Cambio De Interés
+  readonly commissionPctBaseThousand: number; // Porcentaje Comisión (base-mil)
+  readonly defaultCreditLimitMinor: number; // Cupo por Defecto
+  readonly applyColorByOverdue: boolean; // Aplicar color a clientes con atrasos
+}
+
+export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
+  rechargesEnabled: false,
+  manualRoute: false,
+  blockOverdueDatesForSales: true,
+  blockInterestChange: true,
+  commissionPctBaseThousand: 0,
+  defaultCreditLimitMinor: 0,
+  applyColorByOverdue: false,
+};
 
 // Configuración por tenant. Una fila por empresa (tenant_id es la PK y la clave RLS).
 export const tenantConfig = pgTable(
@@ -18,6 +40,11 @@ export const tenantConfig = pgTable(
     // Proveedor y credencial de IA para analizar/responder el texto entrante.
     aiProvider: aiProvider("ai_provider").notNull().default("GEMINI"),
     aiApiKey: text("ai_api_key"),
+    // Ajustes operativos (toggles de configuración de cobro). Default = DEFAULT_OPERATIONAL_SETTINGS.
+    operationalSettings: jsonb("operational_settings")
+      .$type<OperationalSettings>()
+      .notNull()
+      .default(DEFAULT_OPERATIONAL_SETTINGS),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

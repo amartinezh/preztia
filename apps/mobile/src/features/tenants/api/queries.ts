@@ -6,6 +6,7 @@ import {
 import type {
   CreateTenantInput,
   TenantStatus,
+  UpdateTenantAdminInput,
 } from "@preztiaos/contracts";
 
 import { api, unwrap } from "@/core/api/client";
@@ -18,6 +19,7 @@ const PAGE_SIZE = 20;
 export const tenantKeys = {
   all: ["tenants"] as const,
   list: () => [...tenantKeys.all, "list"] as const,
+  admins: (tenantId: string) => [...tenantKeys.all, "admins", tenantId] as const,
 };
 
 export function useTenantsList() {
@@ -66,9 +68,46 @@ export function useDeleteTenant() {
   });
 }
 
+export function useTenantAdminsList(tenantId: string) {
+  return useInfiniteQuery({
+    queryKey: tenantKeys.admins(tenantId),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) =>
+      unwrap(
+        await api.listTenantAdmins({
+          params: { id: tenantId },
+          query: { page: pageParam, pageSize: PAGE_SIZE },
+        }),
+      ),
+    getNextPageParam: (last) =>
+      last.page * last.pageSize < last.total ? last.page + 1 : undefined,
+  });
+}
+
 export function useCreateTenantAdmin(tenantId: string) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { email: string; password: string }) =>
       unwrap(await api.createTenantAdmin({ params: { id: tenantId }, body: input })),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: tenantKeys.admins(tenantId) }),
+  });
+}
+
+export function useUpdateTenantAdmin(tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { adminId: string } & UpdateTenantAdminInput) =>
+      unwrap(
+        await api.updateTenantAdmin({
+          params: { id: tenantId, adminId: input.adminId },
+          body: {
+            ...(input.active !== undefined ? { active: input.active } : {}),
+            ...(input.password !== undefined ? { password: input.password } : {}),
+          },
+        }),
+      ),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: tenantKeys.admins(tenantId) }),
   });
 }

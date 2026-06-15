@@ -32,6 +32,7 @@ export class PlatformUserRepository implements UserStore {
     userId: string;
     zonePaths?: readonly string[];
     active?: boolean;
+    passwordHash?: string;
   }): Promise<UserRecord | null> {
     return withPlatformTx(async (tx) => {
       const [row] = await tx
@@ -41,6 +42,9 @@ export class PlatformUserRepository implements UserStore {
             ? { zonePaths: [...input.zonePaths] }
             : {}),
           ...(input.active !== undefined ? { active: input.active } : {}),
+          ...(input.passwordHash !== undefined
+            ? { passwordHash: input.passwordHash }
+            : {}),
           updatedAt: new Date(),
         })
         .where(

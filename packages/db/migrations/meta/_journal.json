@@ -141,6 +141,55 @@
       "when": 1781446710524,
       "tag": "0019_iam_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1781498006487,
+      "tag": "0020_unusual_redwing",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781531084597,
+      "tag": "0021_good_thundra",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1781533429730,
+      "tag": "0022_equal_sleepwalker",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781534473199,
+      "tag": "0023_careless_nighthawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781535630376,
+      "tag": "0024_massive_power_pack",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781535698283,
+      "tag": "0025_thin_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1781548862945,
+      "tag": "0026_superb_annihilus",
+      "breakpoints": true
     }
   ]
 }
