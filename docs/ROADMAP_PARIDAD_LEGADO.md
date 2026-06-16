@@ -120,9 +120,18 @@ pruebas unitarias de dominio y **smoke E2E verde** por fase.
 
 **Transversales críticos RESUELTOS** (ADR #29, deuda §21): `audit_log` append-only +
 `Idempotency-Key` HTTP (interceptores globales en `apps/api/observability`; migración 0026; smoke
-E2E verde). Pendientes transversales restantes: enforcement de recargos/comisión en el cuadre de
-caja y bloqueos en ventas; pruebas de aislamiento RLS (Testcontainers); y las mejoras que requieren
-**autorizar dependencias** (mapas/`expo-location`, PDF/Excel, `expo-file-system`/`expo-sharing`).
+E2E verde).
+
+**Fase 9 — WhatsApp/Solicitudes por ZONA (ADR #30):** `whatsapp_channel` (número→zona), `zone_path`
+estampado en conversaciones/solicitudes, **bandeja de conversaciones** (vista 1) y **revisión de
+solicitudes** (vistas 2/3, ya existentes con antifraude/imágenes/aprobar-rechazar) **scopeadas por
+zona** (ADMIN/COORDINATOR), filtro en-proceso/completas, y **histórico de rechazos**
+(`credit_application_rejection`, motivo obligatorio). Migración 0027; smoke E2E backend 12/12.
+
+Pendientes transversales restantes: enforcement de recargos/comisión en el cuadre de caja y bloqueos
+en ventas; pruebas de aislamiento RLS (Testcontainers); scope del documento original por zona; y las
+mejoras que requieren **autorizar dependencias** (mapas/`expo-location`, PDF/Excel,
+`expo-file-system`/`expo-sharing`).
 
 ## 7. Estructura por slice (réplica del slice de Crédito)
 

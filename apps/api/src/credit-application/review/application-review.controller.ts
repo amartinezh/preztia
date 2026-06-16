@@ -19,6 +19,7 @@ import {
 } from '@preztiaos/application';
 import {
   approveApplicationInput,
+  listApplicationsQuery,
   paginationQuery,
   rejectApplicationInput,
   requiredDocumentType,
@@ -58,11 +59,29 @@ export class ApplicationReviewController {
     @Headers('authorization') authorization: string | undefined,
     @Query() query: Record<string, string>,
   ) {
-    const tenant = requireTenant(tenantId);
-    requireReviewer(authorization);
-    const { page, pageSize } = paginationQuery.parse(query);
+    requireTenant(tenantId);
+    const reviewer = requireReviewer(authorization);
+    const { page, pageSize, status } = listApplicationsQuery.parse(query);
     const { items, total } = await this.queries.listApplications({
-      tenantId: tenant,
+      session: reviewer,
+      page,
+      pageSize,
+      ...(status ? { status } : {}),
+    });
+    return { items, page, pageSize, total };
+  }
+
+  @Get('applications-rejections')
+  async rejections(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: Record<string, string>,
+  ) {
+    requireTenant(tenantId);
+    const reviewer = requireReviewer(authorization);
+    const { page, pageSize } = paginationQuery.parse(query);
+    const { items, total } = await this.queries.listRejections({
+      session: reviewer,
       page,
       pageSize,
     });
@@ -75,10 +94,10 @@ export class ApplicationReviewController {
     @Headers('x-tenant-id') tenantId: string | undefined,
     @Headers('authorization') authorization: string | undefined,
   ) {
-    const tenant = requireTenant(tenantId);
-    requireReviewer(authorization);
+    requireTenant(tenantId);
+    const reviewer = requireReviewer(authorization);
     const detail = await this.queries.getApplicationReview({
-      tenantId: tenant,
+      session: reviewer,
       applicationId: uuid.parse(id),
     });
     if (!detail) throw new NotFoundException('Expediente no encontrado');
@@ -91,10 +110,10 @@ export class ApplicationReviewController {
     @Headers('x-tenant-id') tenantId: string | undefined,
     @Headers('authorization') authorization: string | undefined,
   ) {
-    const tenant = requireTenant(tenantId);
-    requireReviewer(authorization);
+    requireTenant(tenantId);
+    const reviewer = requireReviewer(authorization);
     const result = await this.queries.getConversation({
-      tenantId: tenant,
+      session: reviewer,
       applicationId: uuid.parse(id),
     });
     if (!result) throw new NotFoundException('Expediente no encontrado');

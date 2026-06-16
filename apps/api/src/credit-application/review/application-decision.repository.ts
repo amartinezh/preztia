@@ -76,6 +76,13 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
         reason: input.reason,
         decidedBy: input.decidedBy,
       });
+      // Histórico de rechazos (gestión + retroalimentación con motivo obligatorio).
+      await tx.insert(schema.creditApplicationRejection).values({
+        tenantId: input.tenantId,
+        applicationId: input.applicationId,
+        reason: input.reason,
+        decidedBy: input.decidedBy,
+      });
     });
   }
 

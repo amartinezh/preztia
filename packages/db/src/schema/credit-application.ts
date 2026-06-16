@@ -12,6 +12,7 @@ import {
   index,
   primaryKey,
 } from "drizzle-orm/pg-core";
+import { ltree } from "./zone";
 
 // Totalidad de documentos del proceso KYC (debe coincidir con RequiredDocumentType
 // del dominio). Solo un subconjunto se solicita hoy; el enum admite los futuros.
@@ -47,6 +48,9 @@ export const creditApplication = pgTable(
     channelId: text("channel_id").notNull(),
     // teléfono del solicitante (E.164 sin '+').
     applicantPhone: text("applicant_phone").notNull(),
+    // Zona del canal (ltree), para scopear por alcance del usuario. Null si el canal no está
+    // mapeado a una zona; solo el ADMIN (sin filtro) la ve en ese caso.
+    zonePath: ltree("zone_path"),
     status: creditApplicationStatus("status").notNull().default("AWAITING_DOCUMENTS"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

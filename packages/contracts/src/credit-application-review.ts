@@ -57,6 +57,29 @@ export const listApplicationsOutput = z.object({
   total: z.number().int(),
 });
 
+// Filtro del listado por estado (en proceso = AWAITING_DOCUMENTS, completas = IN_REVIEW, etc.).
+export const listApplicationsQuery = paginationQuery.extend({
+  status: creditApplicationStatus.optional(),
+});
+
+// ── Histórico de rechazos ───────────────────────────────────────────────────
+export const rejectionSummary = z.object({
+  id: z.string().uuid(),
+  applicationId: z.string().uuid(),
+  applicantPhoneMasked: z.string(),
+  reason: z.string(),
+  decidedBy: z.string().uuid(),
+  createdAt: z.string(),
+});
+export type RejectionSummary = z.infer<typeof rejectionSummary>;
+
+export const listRejectionsOutput = z.object({
+  items: z.array(rejectionSummary),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  total: z.number().int(),
+});
+
 // ── Detalle: alerta del pipeline atribuida a un documento ───────────────────
 export const validationAlertView = z.object({
   documento: z.string(),
@@ -151,9 +174,17 @@ export const creditApplicationReviewContract = c.router({
     method: "GET",
     path: "/applications",
     headers: tenantHeaders,
-    query: paginationQuery,
+    query: listApplicationsQuery,
     responses: { 200: listApplicationsOutput },
-    summary: "Lista paginada de intentos de solicitud con su veredicto antifraude",
+    summary: "Lista paginada de intentos de solicitud con su veredicto antifraude (filtrable por estado)",
+  },
+  listRejections: {
+    method: "GET",
+    path: "/applications-rejections",
+    headers: tenantHeaders,
+    query: paginationQuery,
+    responses: { 200: listRejectionsOutput },
+    summary: "Histórico de rechazos de solicitudes (motivo + quién + cuándo)",
   },
   getApplicationReview: {
     method: "GET",

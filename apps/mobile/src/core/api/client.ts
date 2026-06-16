@@ -6,8 +6,10 @@ import {
   borrowersContract,
   changeRequestsContract,
   collectorsContract,
+  conversationsInboxContract,
   creditApplicationReviewContract,
   creditContract,
+  creditDocumentRequirementsContract,
   dailyReportContract,
   expensesContract,
   iamUsersContract,
@@ -18,6 +20,7 @@ import {
   tenantConfigContract,
   tenantsContract,
   trackingContract,
+  whatsappChannelsContract,
   zonesContract,
 } from "@preztiaos/contracts";
 
@@ -49,7 +52,10 @@ const contract = {
   ...borrowerListsContract,
   ...tenantConfigContract,
   ...reportingContract,
+  ...conversationsInboxContract,
+  ...whatsappChannelsContract,
   ...creditApplicationReviewContract,
+  ...creditDocumentRequirementsContract,
   ...paymentsContract,
 };
 

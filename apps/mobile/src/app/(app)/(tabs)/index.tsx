@@ -1,3 +1,3 @@
-import { CreditListScreen } from "@/features/credit/screens/credit-list-screen";
+import { PortfolioScreen } from "@/features/portfolio/screens/portfolio-screen";
 
-export default CreditListScreen;
+export default PortfolioScreen;

@@ -30,6 +30,9 @@ export default function AppLayout() {
       ) : null}
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="conversations" options={{ title: t("inbox.title") }} />
+        <Stack.Screen name="zones" options={{ title: t("zones.tab") }} />
+        <Stack.Screen name="users" options={{ title: t("users.tab") }} />
         <Stack.Screen name="credit/new" options={{ title: t("credit.new.title"), presentation: "modal" }} />
         <Stack.Screen name="credit/[id]" options={{ title: t("credit.list.title") }} />
         <Stack.Screen name="payment/[creditId]" options={{ title: t("payments.register"), presentation: "modal" }} />

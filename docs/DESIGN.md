@@ -118,6 +118,13 @@ flowchart TB
 > que importa `PaymentsModule` y registra los proveedores de Credit Application y Antifraude. No hay
 > aún un `CreditApplicationModule` propio; `CreditController` expone el otorgamiento.
 
+> **Conversaciones y solicitudes por ZONA (Fase 9):** un número de WhatsApp se vincula a una zona
+> (`whatsapp_channel`); al crearse, cada `conversation_message` y `credit_application` se estampa con
+> `zone_path` (ltree). La **bandeja de conversaciones** (`apps/api/whatsapp`, vista 1) y la **revisión
+> de solicitudes** (en proceso / completas / detalle antifraude / aprobar-rechazar) se **scopean por
+> el alcance del usuario** (`zoneScopePredicate`: ADMIN todo el tenant, COORDINATOR su subárbol).
+> Los **rechazos** quedan en `credit_application_rejection` (histórico con motivo obligatorio).
+
 ---
 
 ## 4. Modelo de dominio por contexto

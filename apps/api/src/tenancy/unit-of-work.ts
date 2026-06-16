@@ -48,6 +48,20 @@ export async function resolveTenantByWhatsappPhone(
   return rows[0]?.tenant_id ?? null;
 }
 
+/**
+ * Resuelve el `zone_path` (ltree) del canal de WhatsApp por su phone_number_id, para estampar
+ * la zona en conversaciones y solicitudes. SECURITY DEFINER (previa al contexto de tenant).
+ * `null` si el canal no está mapeado a una zona.
+ */
+export async function resolveZonePathByWhatsappPhone(
+  phoneNumberId: string,
+): Promise<string | null> {
+  const rows = (await db.execute(
+    sql`SELECT resolve_zone_path_by_whatsapp_phone(${phoneNumberId})::text AS zone_path`,
+  )) as Array<{ zone_path: string | null }>;
+  return rows[0]?.zone_path ?? null;
+}
+
 /** Fila mínima del usuario para autenticar y construir el JWT. */
 export interface LoginUserRow {
   id: string;

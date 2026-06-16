@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
+import { ltree } from "./zone";
 
 // Sentido del mensaje en la conversación de WhatsApp.
 export const conversationDirection = pgEnum("conversation_direction", [
@@ -18,6 +19,9 @@ export const conversationMessage = pgTable(
     channelId: text("channel_id").notNull(),
     // teléfono del cliente (E.164 sin '+').
     applicantPhone: text("applicant_phone").notNull(),
+    // Zona del canal (ltree), para scopear por el alcance del usuario. Null si el canal no está
+    // mapeado a una zona todavía (solo el ADMIN, sin filtro, las ve).
+    zonePath: ltree("zone_path"),
     direction: conversationDirection("direction").notNull(),
     // Tipo de mensaje: text | audio | image | document.
     kind: text("kind").notNull(),

@@ -4,6 +4,7 @@ import { type ConversationLog } from '@preztiaos/application';
 import { type InboundMessage } from '@preztiaos/domain';
 import {
   resolveTenantByWhatsappPhone,
+  resolveZonePathByWhatsappPhone,
   withTenantTxFor,
 } from '../tenancy/unit-of-work';
 
@@ -63,11 +64,14 @@ export class ConversationMessageLog implements ConversationLog {
     try {
       const tenantId = await resolveTenantByWhatsappPhone(input.channelId);
       if (!tenantId) return; // canal sin tenant: no hay dónde registrar
+      // Zona del canal (un número = una zona): estampa la conversación para scopearla.
+      const zonePath = await resolveZonePathByWhatsappPhone(input.channelId);
       await withTenantTxFor(tenantId, async (tx) => {
         await tx.insert(schema.conversationMessage).values({
           tenantId,
           channelId: input.channelId,
           applicantPhone: input.applicantPhone,
+          zonePath,
           direction: input.direction,
           kind: input.kind,
           body: input.body,

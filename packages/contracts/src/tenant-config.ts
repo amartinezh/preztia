@@ -21,6 +21,29 @@ export type OperationalSettings = z.infer<typeof operationalSettings>;
 export const updateOperationalSettingsInput = operationalSettings.partial();
 export type UpdateOperationalSettingsInput = z.infer<typeof updateOperationalSettingsInput>;
 
+// ── Configuración del asistente de WhatsApp por tenant (base de conocimiento + IA) ──────────
+// Espeja el enum `ai_provider` de la BD. Hoy solo GEMINI está implementado en el servidor.
+export const assistantAiProvider = z.enum(["GEMINI", "OPENAI", "CLAUDE"]);
+export type AssistantAiProvider = z.infer<typeof assistantAiProvider>;
+
+// Vista de lectura del asistente. SEGURIDAD: NUNCA expone la API key (secreto, §3.7); solo
+// informa si hay una configurada (`hasApiKey`).
+export const assistantConfigView = z.object({
+  knowledgeBase: z.string(),
+  aiProvider: assistantAiProvider,
+  hasApiKey: z.boolean(),
+});
+export type AssistantConfigView = z.infer<typeof assistantConfigView>;
+
+// Actualización parcial. `aiApiKey` solo viaja al ESCRIBIR; si se omite, no se toca; si llega
+// vacío, se borra la credencial. Solo el ADMIN puede editarla.
+export const updateAssistantConfigInput = z.object({
+  knowledgeBase: z.string().max(20000).optional(),
+  aiProvider: assistantAiProvider.optional(),
+  aiApiKey: z.string().max(400).optional(),
+});
+export type UpdateAssistantConfigInput = z.infer<typeof updateAssistantConfigInput>;
+
 const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 
 export const tenantConfigContract = c.router({
@@ -38,5 +61,20 @@ export const tenantConfigContract = c.router({
     body: updateOperationalSettingsInput,
     responses: { 200: operationalSettings },
     summary: "Actualiza los ajustes operativos del tenant (ADMIN)",
+  },
+  getAssistantConfig: {
+    method: "GET",
+    path: "/tenant-config/assistant",
+    headers: tenantHeaders,
+    responses: { 200: assistantConfigView },
+    summary: "Configuración del asistente de WhatsApp (sin exponer la API key)",
+  },
+  updateAssistantConfig: {
+    method: "PATCH",
+    path: "/tenant-config/assistant",
+    headers: tenantHeaders,
+    body: updateAssistantConfigInput,
+    responses: { 200: assistantConfigView },
+    summary: "Actualiza base de conocimiento, proveedor y API key del asistente (ADMIN)",
   },
 });

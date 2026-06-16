@@ -8,6 +8,8 @@ export * from "./borrowers/borrowers";
 export * from "./borrowers/change-requests";
 export * from "./borrowers/lists";
 export * from "./tenant/settings";
+export * from "./tenant/assistant-config";
+export * from "./tenant/document-requirements";
 export * from "./cash/ports";
 export * from "./cash/expenses";
 export * from "./cash/settlements";

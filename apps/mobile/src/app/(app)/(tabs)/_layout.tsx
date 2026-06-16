@@ -1,134 +1,93 @@
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { useColorScheme, View } from "react-native";
+import { Tabs, TabList, TabSlot, TabTrigger } from "expo-router/ui";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { semanticColors, useBreakpoint } from "@preztiaos/ui";
 
-import { useColorScheme } from "react-native";
-import { semanticColors } from "@preztiaos/ui";
-
-import { useSession } from "@/core/auth/session";
-import { can } from "@/core/auth/authorization";
-import { useT } from "@/core/i18n";
+import { BrandMark } from "@/components/app-shell/brand-mark";
+import { NavItem } from "@/components/app-shell/nav-item";
+import { UserMenu } from "@/components/app-shell/user-menu";
+import { useNavGroups } from "@/components/app-shell/use-nav-groups";
 
 /**
- * Pestañas conscientes del rol. Cada rol ve SOLO su menú:
- * - SUPER_ADMIN → Tenants (plano de control).
- * - ADMIN → Créditos, Pagos, Revisión, Usuarios, Zonas.
- * - COORDINATOR → Créditos, Pagos, Revisión, Cobradores.
- * - COLLECTOR → Créditos, Mis clientes.
- * Ajustes para todos. La autoridad real la imponen el backend y RLS; esto solo decide qué se ofrece.
+ * Shell de navegación responsivo (reemplaza a `NativeTabs`, que se desbordaba en web con 11
+ * pestañas). En `lg+` (web/tablet) la navegación va en una barra SUPERIOR con marca + menú de
+ * usuario; en móvil va en tabs INFERIORES con un encabezado superior ligero. Usamos los Tabs
+ * "headless" de expo-router/ui: `<TabList>` registra/renderiza las pestañas y cada `<TabTrigger
+ * asChild>` delega su pintado al `NavItem`. La barra forma parte del flujo del layout, así que
+ * el contenido ya no queda tapado.
  */
 export default function TabsLayout() {
+  const { isDesktop } = useBreakpoint();
+  const insets = useSafeAreaInsets();
   const scheme = useColorScheme();
   const colors = semanticColors[scheme === "dark" ? "dark" : "light"];
-  const { role } = useSession();
-  const { t } = useT();
+  const groups = useNavGroups();
+  // La pestaña inicial es la primera del rol (p. ej. SUPER_ADMIN abre en "tenants", no en Cartera).
+  const initialRouteName = groups[0]?.name;
 
-  const primaryIcon = require("@/assets/images/tabIcons/home.png");
-  const exploreIcon = require("@/assets/images/tabIcons/explore.png");
+  const triggers = groups.map((g) => (
+    <TabTrigger key={g.name} name={g.name} href={g.href} asChild>
+      <NavItem label={g.label} orientation={isDesktop ? "horizontal" : "vertical"} />
+    </TabTrigger>
+  ));
 
-  const showCredits = can(role, "credit:read");
-  const showPayments = can(role, "payment:reconcile");
-  const showReview = can(role, "application:review");
-  const isSuperAdmin = role === "SUPER_ADMIN";
-  const showUsers = can(role, "user:manage");
-  const showZones = can(role, "zone:manage");
-  const showBorrowers = can(role, "borrower:manage");
-  const showOperations = can(role, "borrower:manage");
-  const isCoordinator = role === "COORDINATOR";
-  const isCollector = role === "COLLECTOR";
+  if (isDesktop) {
+    return (
+      <Tabs options={{ initialRouteName }}>
+        <TabList
+          style={{
+            alignItems: "center",
+            justifyContent: "flex-start",
+            gap: 4,
+            paddingTop: insets.top,
+            paddingHorizontal: 16,
+            borderBottomWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+          }}
+        >
+          <BrandMark />
+          {/* Fragment: el escáner de triggers recorre fragments, pero NO Views arbitrarios. */}
+          <>{triggers}</>
+          <View style={{ marginLeft: "auto" }}>
+            <UserMenu />
+          </View>
+        </TabList>
+        <TabSlot style={{ flex: 1 }} />
+      </Tabs>
+    );
+  }
 
   return (
-    <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.surfaceMuted}
-      labelStyle={{ selected: { color: colors.text } }}
-    >
-      {isSuperAdmin ? (
-        <NativeTabs.Trigger name="tenants">
-          <NativeTabs.Trigger.Label>{t("tenants.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={primaryIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showCredits ? (
-        <NativeTabs.Trigger name="index">
-          <NativeTabs.Trigger.Label>{t("credit.list.title")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={primaryIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showCredits ? (
-        <NativeTabs.Trigger name="accounts">
-          <NativeTabs.Trigger.Label>{t("accounts.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showCredits ? (
-        <NativeTabs.Trigger name="cash">
-          <NativeTabs.Trigger.Label>{t("cash.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {isCollector ? (
-        <NativeTabs.Trigger name="clients">
-          <NativeTabs.Trigger.Label>{t("clients.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showBorrowers ? (
-        <NativeTabs.Trigger name="borrowers">
-          <NativeTabs.Trigger.Label>{t("borrowers.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showPayments ? (
-        <NativeTabs.Trigger name="payments">
-          <NativeTabs.Trigger.Label>{t("payments.title")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showReview ? (
-        <NativeTabs.Trigger name="applications">
-          <NativeTabs.Trigger.Label>{t("review.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {isCoordinator ? (
-        <NativeTabs.Trigger name="collectors">
-          <NativeTabs.Trigger.Label>{t("collectors.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showUsers ? (
-        <NativeTabs.Trigger name="users">
-          <NativeTabs.Trigger.Label>{t("users.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showOperations ? (
-        <NativeTabs.Trigger name="operations">
-          <NativeTabs.Trigger.Label>{t("operations.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      {showZones ? (
-        <NativeTabs.Trigger name="zones">
-          <NativeTabs.Trigger.Label>{t("zones.tab")}</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-        </NativeTabs.Trigger>
-      ) : null}
-
-      <NativeTabs.Trigger name="settings">
-        <NativeTabs.Trigger.Label>Ajustes</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon src={exploreIcon} renderingMode="template" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <Tabs options={{ initialRouteName }}>
+      <View
+        style={{
+          paddingTop: insets.top,
+          paddingHorizontal: 16,
+          paddingBottom: 8,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottomWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+        }}
+      >
+        <BrandMark />
+        <UserMenu compact />
+      </View>
+      <TabSlot style={{ flex: 1 }} />
+      <TabList
+        style={{
+          justifyContent: "space-around",
+          paddingBottom: insets.bottom,
+          borderTopWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+        }}
+      >
+        {triggers}
+      </TabList>
+    </Tabs>
   );
 }

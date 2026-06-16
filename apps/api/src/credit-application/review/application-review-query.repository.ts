@@ -1,13 +1,22 @@
 import { Injectable } from '@nestjs/common';
-import { asc, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type {
   ApplicationReviewDetail,
   ApplicationReviewSummary,
   ConversationEntry,
+  CreditApplicationStatus,
+  RejectionSummary,
   ValidationRunView,
 } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../../tenancy/unit-of-work';
+import { zoneScopePredicate } from '../../iam/zone-scope';
+import type { Session } from '../../auth/require-role';
+
+// Predicado de alcance por zona sobre `credit_application.zone_path` (ADMIN: sin filtro).
+function applicationScope(session: Session): SQL | undefined {
+  return zoneScopePredicate(session, sql`${schema.creditApplication.zonePath}`);
+}
 
 // Tope de mensajes del transcript para no traer conversaciones ilimitadas (rendimiento).
 const CONVERSATION_LIMIT = 500;
@@ -22,14 +31,24 @@ const CONVERSATION_LIMIT = 500;
 @Injectable()
 export class ApplicationReviewQueryRepository {
   async listApplications(input: {
-    tenantId: string;
+    session: Session;
     page: number;
     pageSize: number;
+    status?: CreditApplicationStatus;
   }): Promise<{ items: ApplicationReviewSummary[]; total: number }> {
-    return withTenantTxFor(input.tenantId, async (tx) => {
+    return withTenantTxFor(input.session.tenantId, async (tx) => {
+      const conditions = [
+        applicationScope(input.session),
+        input.status
+          ? eq(schema.creditApplication.status, input.status)
+          : undefined,
+      ].filter((c): c is SQL => c !== undefined);
+      const where = conditions.length ? and(...conditions) : undefined;
+
       const [totalRow] = await tx
         .select({ value: count() })
-        .from(schema.creditApplication);
+        .from(schema.creditApplication)
+        .where(where);
 
       const apps = await tx
         .select({
@@ -39,6 +58,7 @@ export class ApplicationReviewQueryRepository {
           createdAt: schema.creditApplication.createdAt,
         })
         .from(schema.creditApplication)
+        .where(where)
         .orderBy(desc(schema.creditApplication.createdAt))
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize);
@@ -66,10 +86,10 @@ export class ApplicationReviewQueryRepository {
   }
 
   async getApplicationReview(input: {
-    tenantId: string;
+    session: Session;
     applicationId: string;
   }): Promise<ApplicationReviewDetail | null> {
-    return withTenantTxFor(input.tenantId, async (tx) => {
+    return withTenantTxFor(input.session.tenantId, async (tx) => {
       const [app] = await tx
         .select({
           id: schema.creditApplication.id,
@@ -78,7 +98,12 @@ export class ApplicationReviewQueryRepository {
           createdAt: schema.creditApplication.createdAt,
         })
         .from(schema.creditApplication)
-        .where(eq(schema.creditApplication.id, input.applicationId))
+        .where(
+          and(
+            eq(schema.creditApplication.id, input.applicationId),
+            applicationScope(input.session),
+          ),
+        )
         .limit(1);
       if (!app) return null;
 
@@ -158,14 +183,19 @@ export class ApplicationReviewQueryRepository {
   }
 
   async getConversation(input: {
-    tenantId: string;
+    session: Session;
     applicationId: string;
   }): Promise<{ entries: ConversationEntry[] } | null> {
-    return withTenantTxFor(input.tenantId, async (tx) => {
+    return withTenantTxFor(input.session.tenantId, async (tx) => {
       const [app] = await tx
         .select({ applicantPhone: schema.creditApplication.applicantPhone })
         .from(schema.creditApplication)
-        .where(eq(schema.creditApplication.id, input.applicationId))
+        .where(
+          and(
+            eq(schema.creditApplication.id, input.applicationId),
+            applicationScope(input.session),
+          ),
+        )
         .limit(1);
       if (!app) return null;
 
@@ -192,6 +222,62 @@ export class ApplicationReviewQueryRepository {
         createdAt: r.createdAt.toISOString(),
       }));
       return { entries };
+    });
+  }
+
+  async listRejections(input: {
+    session: Session;
+    page: number;
+    pageSize: number;
+  }): Promise<{ items: RejectionSummary[]; total: number }> {
+    return withTenantTxFor(input.session.tenantId, async (tx) => {
+      // Join a la solicitud para scopear por zona y enmascarar el teléfono.
+      const where = applicationScope(input.session);
+      const base = tx
+        .select({
+          id: schema.creditApplicationRejection.id,
+          applicationId: schema.creditApplicationRejection.applicationId,
+          reason: schema.creditApplicationRejection.reason,
+          decidedBy: schema.creditApplicationRejection.decidedBy,
+          createdAt: schema.creditApplicationRejection.createdAt,
+          applicantPhone: schema.creditApplication.applicantPhone,
+        })
+        .from(schema.creditApplicationRejection)
+        .innerJoin(
+          schema.creditApplication,
+          eq(
+            schema.creditApplication.id,
+            schema.creditApplicationRejection.applicationId,
+          ),
+        )
+        .where(where);
+
+      const [totalRow] = await tx
+        .select({ value: count() })
+        .from(schema.creditApplicationRejection)
+        .innerJoin(
+          schema.creditApplication,
+          eq(
+            schema.creditApplication.id,
+            schema.creditApplicationRejection.applicationId,
+          ),
+        )
+        .where(where);
+
+      const rows = await base
+        .orderBy(desc(schema.creditApplicationRejection.createdAt))
+        .limit(input.pageSize)
+        .offset((input.page - 1) * input.pageSize);
+
+      const items: RejectionSummary[] = rows.map((r) => ({
+        id: r.id,
+        applicationId: r.applicationId,
+        applicantPhoneMasked: maskPhone(r.applicantPhone),
+        reason: r.reason,
+        decidedBy: r.decidedBy,
+        createdAt: r.createdAt.toISOString(),
+      }));
+      return { items, total: Number(totalRow?.value ?? 0) };
     });
   }
 

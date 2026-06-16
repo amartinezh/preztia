@@ -1,5 +1,9 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ApproveApplicationInput, RejectApplicationInput } from "@preztiaos/contracts";
+import type {
+  ApproveApplicationInput,
+  CreditApplicationStatus,
+  RejectApplicationInput,
+} from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
 import { authState } from "@/core/auth/auth-state";
@@ -10,18 +14,36 @@ const PAGE_SIZE = 20;
 
 export const reviewKeys = {
   all: ["applications-review"] as const,
-  list: () => [...reviewKeys.all, "list"] as const,
+  list: (status?: CreditApplicationStatus) => [...reviewKeys.all, "list", status ?? "all"] as const,
   detail: (id: string) => [...reviewKeys.all, "detail", id] as const,
   conversation: (id: string) => [...reviewKeys.all, "conversation", id] as const,
+  rejections: () => [...reviewKeys.all, "rejections"] as const,
 };
 
-/** Lista paginada de intentos de solicitud con su veredicto (paginación obligatoria, §3.7). */
-export function useApplicationsList() {
+/** Lista paginada de intentos de solicitud con su veredicto (filtrable por estado). */
+export function useApplicationsList(status?: CreditApplicationStatus) {
   return useInfiniteQuery({
-    queryKey: reviewKeys.list(),
+    queryKey: reviewKeys.list(status),
     initialPageParam: 1,
     queryFn: async ({ pageParam }) =>
-      unwrap(await api.listApplications({ headers: tenantHeader(), query: { page: pageParam, pageSize: PAGE_SIZE } })),
+      unwrap(
+        await api.listApplications({
+          headers: tenantHeader(),
+          query: { page: pageParam, pageSize: PAGE_SIZE, ...(status ? { status } : {}) },
+        }),
+      ),
+    getNextPageParam: (last) =>
+      last.page * last.pageSize < last.total ? last.page + 1 : undefined,
+  });
+}
+
+/** Histórico de rechazos (motivo + quién + cuándo), scopeado por zona. */
+export function useRejections() {
+  return useInfiniteQuery({
+    queryKey: reviewKeys.rejections(),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) =>
+      unwrap(await api.listRejections({ headers: tenantHeader(), query: { page: pageParam, pageSize: PAGE_SIZE } })),
     getNextPageParam: (last) =>
       last.page * last.pageSize < last.total ? last.page + 1 : undefined,
   });
@@ -51,7 +73,7 @@ export function useApproveApplication(id: string) {
     mutationFn: async (input: ApproveApplicationInput) =>
       unwrap(await api.approveApplication({ headers: tenantHeader(), params: { id }, body: input })),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: reviewKeys.list() });
+      void qc.invalidateQueries({ queryKey: reviewKeys.all });
       void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) });
     },
   });
@@ -64,7 +86,7 @@ export function useRejectApplication(id: string) {
     mutationFn: async (input: RejectApplicationInput) =>
       unwrap(await api.rejectApplication({ headers: tenantHeader(), params: { id }, body: input })),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: reviewKeys.list() });
+      void qc.invalidateQueries({ queryKey: reviewKeys.all });
       void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) });
     },
   });

@@ -12,6 +12,7 @@ import { TrackingModule } from './tracking/tracking.module';
 import { TenantConfigModule } from './tenant-config/tenant-config.module';
 import { ReportingModule } from './reporting/reporting.module';
 import { ObservabilityModule } from './observability/observability.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { tenantMiddleware } from './tenancy/tenant-context';
 
 @Module({
@@ -28,6 +29,7 @@ import { tenantMiddleware } from './tenancy/tenant-context';
     TenantConfigModule,
     ReportingModule,
     ObservabilityModule,
+    WhatsappModule,
   ],
   controllers: [CreditController],
 })

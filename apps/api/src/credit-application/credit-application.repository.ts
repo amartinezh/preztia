@@ -59,12 +59,20 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
   }): Promise<string> {
     const { applicant, application } = input;
     return withTenantTxFor(applicant.tenantId, async (tx) => {
+      // Zona del canal (un número = una zona): estampa la solicitud para scopearla por alcance.
+      const [channel] = await tx
+        .select({ zonePath: schema.whatsappChannel.zonePath })
+        .from(schema.whatsappChannel)
+        .where(eq(schema.whatsappChannel.phoneNumberId, applicant.channelId))
+        .limit(1);
+
       const [created] = await tx
         .insert(schema.creditApplication)
         .values({
           tenantId: applicant.tenantId,
           channelId: applicant.channelId,
           applicantPhone: applicant.applicant,
+          zonePath: channel?.zonePath ?? null,
           status: application.status,
         })
         .returning({ id: schema.creditApplication.id });

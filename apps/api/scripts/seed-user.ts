@@ -93,6 +93,32 @@ async function main() {
       aiProvider: 'GEMINI',
     });
 
+    // 1b) Catálogo de documentos requeridos: lo que el bot pide al iniciar una solicitud.
+    // Sin estas filas, el flujo "credit_application" no tiene nada que pedir y no responde.
+    await tx.insert(schema.creditDocumentRequirement).values([
+      {
+        tenantId: TENANT_ID,
+        documentKey: 'IDENTITY_DOCUMENT',
+        title: 'Envía una foto de tu documento de identidad (ambos lados).',
+        description: 'Cédula o identificación oficial con foto, legible.',
+        sortOrder: 1,
+      },
+      {
+        tenantId: TENANT_ID,
+        documentKey: 'BUSINESS_VALIDITY_CERTIFICATE',
+        title: 'Envía el registro o certificado de tu negocio.',
+        description: 'Documento que acredita el negocio (cámara de comercio, RUT o similar).',
+        sortOrder: 2,
+      },
+      {
+        tenantId: TENANT_ID,
+        documentKey: 'PUBLIC_SERVICES_RECEIPT',
+        title: 'Envía un recibo de servicios públicos reciente.',
+        description: 'Recibo de agua, luz o gas con la dirección visible.',
+        sortOrder: 3,
+      },
+    ]);
+
     // 2-3) Usuarios: SUPER_ADMIN (sin tenant) y ADMIN (del tenant).
     await tx.insert(schema.appUser).values([
       {
