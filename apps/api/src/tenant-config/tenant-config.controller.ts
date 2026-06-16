@@ -115,6 +115,11 @@ export class TenantConfigController {
     const tenant = requireTenant(tenantId);
     requireRole(authorization, ADMIN_ONLY);
     const { items } = setDocumentRequirementsInput.parse(body);
-    return { items: await this.setDocumentsHandler.execute({ tenantId: tenant, items }) };
+    return {
+      items: await this.setDocumentsHandler.execute({
+        tenantId: tenant,
+        items,
+      }),
+    };
   }
 }

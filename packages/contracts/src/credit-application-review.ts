@@ -29,6 +29,16 @@ export const creditApplicationStatus = z.enum([
 ]);
 export type CreditApplicationStatus = z.infer<typeof creditApplicationStatus>;
 
+// Sub-estado de la negociación del plan de pago (Fase 10), espejo de `plan_offer_status` en BD.
+export const planOfferStatus = z.enum([
+  "NOT_OFFERED",
+  "AWAITING_SELECTION",
+  "AWAITING_ACCEPTANCE",
+  "ACCEPTED",
+  "DECLINED",
+]);
+export type PlanOfferStatus = z.infer<typeof planOfferStatus>;
+
 // Veredicto del pipeline antifraude (espejo de `validationStatus`/`FraudStatus`).
 export const verdictStatus = z.enum(["approved", "suspicious", "rejected"]);
 export type VerdictStatus = z.infer<typeof verdictStatus>;
@@ -115,6 +125,19 @@ export const applicationDocumentDetail = z.object({
 });
 export type ApplicationDocumentDetail = z.infer<typeof applicationDocumentDetail>;
 
+// Estado de la negociación del plan que el coordinador ve en el detalle (botón azul + bandera).
+export const planOfferView = z.object({
+  status: planOfferStatus,
+  offeredPlanName: z.string().nullable(),
+  offeredPrincipalMinor: z.number().int().nullable(),
+  // Términos del plan fijado (para prellenar/ocultar la captura manual al crear el crédito).
+  offeredPlanInstallments: z.number().int().nullable(),
+  offeredPlanInterestPct: z.number().int().nullable(),
+  offerExpiresAt: z.string().nullable(),
+  clientAcceptedAt: z.string().nullable(),
+});
+export type PlanOfferView = z.infer<typeof planOfferView>;
+
 export const applicationReviewDetail = z.object({
   id: z.string().uuid(),
   // Teléfono completo: el coordinador está autorizado a verlo en el detalle.
@@ -124,6 +147,8 @@ export const applicationReviewDetail = z.object({
   documents: z.array(applicationDocumentDetail),
   // Historial completo de corridas del pipeline (orden desc; la primera es la vigente).
   verdictHistory: z.array(validationRunView),
+  // Negociación del plan de pago (Fase 10).
+  planOffer: planOfferView,
 });
 export type ApplicationReviewDetail = z.infer<typeof applicationReviewDetail>;
 
@@ -139,6 +164,19 @@ export type ConversationEntry = z.infer<typeof conversationEntry>;
 
 export const conversationOutput = z.object({
   entries: z.array(conversationEntry),
+});
+
+// ── Oferta de planes (botón azul) ───────────────────────────────────────────
+// El coordinador fija el capital del préstamo; el resto (cuotas/frecuencia/interés) lo aporta el
+// plan. La moneda la fija el servidor. Según el toggle del tenant se envía menú o cronograma.
+export const offerPlansInput = z.object({
+  principalMinor: z.number().int().positive(),
+});
+export type OfferPlansInput = z.infer<typeof offerPlansInput>;
+
+export const offerPlansOutput = z.object({
+  applicationId: z.string().uuid(),
+  planOfferStatus,
 });
 
 // ── Decisiones del coordinador ──────────────────────────────────────────────
@@ -201,6 +239,15 @@ export const creditApplicationReviewContract = c.router({
     headers: tenantHeaders,
     responses: { 200: conversationOutput },
     summary: "Transcript de la conversación con el cliente del expediente",
+  },
+  offerPlans: {
+    method: "POST",
+    path: "/applications/:id/plan-offer",
+    pathParams: idParam,
+    headers: tenantHeaders,
+    body: offerPlansInput,
+    responses: { 200: offerPlansOutput },
+    summary: "Oferta planes de pago al cliente por WhatsApp (botón azul): menú o cronograma según el toggle del tenant",
   },
   approveApplication: {
     method: "POST",

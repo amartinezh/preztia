@@ -14,6 +14,9 @@ export interface OperationalSettings {
   readonly commissionPctBaseThousand: number; // Porcentaje Comisión (base-mil)
   readonly defaultCreditLimitMinor: number; // Cupo por Defecto
   readonly applyColorByOverdue: boolean; // Aplicar color a clientes con atrasos
+  readonly clientChoosesPlan: boolean; // El cliente elige plan por WhatsApp (Fase 10)
+  readonly planOfferTtlHours: number; // Vencimiento de la oferta de plan (horas; default 24)
+  readonly allowAdminOverride: boolean; // Permitir crear crédito sin aceptación del cliente
 }
 
 export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
@@ -24,6 +27,9 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   commissionPctBaseThousand: 0,
   defaultCreditLimitMinor: 0,
   applyColorByOverdue: false,
+  clientChoosesPlan: false,
+  planOfferTtlHours: 24,
+  allowAdminOverride: true,
 };
 
 // Configuración por tenant. Una fila por empresa (tenant_id es la PK y la clave RLS).

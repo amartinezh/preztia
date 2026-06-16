@@ -5,6 +5,7 @@ import { api, tenantHeader, unwrap } from "@/core/api/client";
 export interface AccountsListParams {
   name?: string;
   nationalId?: string;
+  phone?: string;
   onlyOverdue?: boolean;
 }
 
@@ -30,6 +31,7 @@ export function useAccountsList(params: AccountsListParams = {}) {
             pageSize: PAGE_SIZE,
             ...(params.name ? { name: params.name } : {}),
             ...(params.nationalId ? { nationalId: params.nationalId } : {}),
+            ...(params.phone ? { phone: params.phone } : {}),
             ...(params.onlyOverdue ? { onlyOverdue: true } : {}),
           },
         }),

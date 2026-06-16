@@ -27,7 +27,11 @@ export class TenantConfigRepository
         .from(schema.tenantConfig)
         .where(eq(schema.tenantConfig.tenantId, tenantId))
         .limit(1);
-      return row?.settings ?? DEFAULT_OPERATIONAL_SETTINGS;
+      // Mezcla sobre los defaults: rellena claves nuevas (p. ej. los toggles de planes de la
+      // Fase 10) en filas guardadas antes de su introducción, sin tocar lo ya configurado.
+      return row?.settings
+        ? { ...DEFAULT_OPERATIONAL_SETTINGS, ...row.settings }
+        : DEFAULT_OPERATIONAL_SETTINGS;
     });
   }
 

@@ -4,9 +4,21 @@ import {
   approveApplicationInput,
   rejectApplicationInput,
   type ApproveApplicationInput,
+  type PlanOfferView,
   type RejectApplicationInput,
 } from "@preztiaos/contracts";
-import { Banner, Button, Field, Input, Modal, Stack, Text, majorToMinor } from "@preztiaos/ui";
+import {
+  Banner,
+  Button,
+  Field,
+  Input,
+  Modal,
+  Row,
+  Stack,
+  Text,
+  majorToMinor,
+  minorToMajor,
+} from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
 
@@ -18,6 +30,7 @@ export type DecisionMode = "approve" | "reject" | null;
 type Props = {
   mode: DecisionMode;
   applicantPhone: string;
+  planOffer: PlanOfferView;
   approving: boolean;
   rejecting: boolean;
   submitError: string | null;
@@ -25,6 +38,24 @@ type Props = {
   onApprove: (input: ApproveApplicationInput) => void;
   onReject: (input: RejectApplicationInput) => void;
 };
+
+/** Hay un plan negociado cuyos términos definirán el crédito (el server los aplica, no el body). */
+function planTerms(planOffer: PlanOfferView) {
+  if (
+    planOffer.offeredPlanName == null ||
+    planOffer.offeredPrincipalMinor == null ||
+    planOffer.offeredPlanInstallments == null ||
+    planOffer.offeredPlanInterestPct == null
+  ) {
+    return null;
+  }
+  return {
+    name: planOffer.offeredPlanName,
+    principalMinor: planOffer.offeredPrincipalMinor,
+    installmentsCount: planOffer.offeredPlanInstallments,
+    interestPct: planOffer.offeredPlanInterestPct,
+  };
+}
 
 type ApproveErrors = Partial<Record<keyof ApproveApplicationInput, string>>;
 
@@ -36,6 +67,7 @@ type ApproveErrors = Partial<Record<keyof ApproveApplicationInput, string>>;
 export function DecisionModal({
   mode,
   applicantPhone,
+  planOffer,
   approving,
   rejecting,
   submitError,
@@ -53,13 +85,16 @@ export function DecisionModal({
   const [reason, setReason] = useState("");
   const [errors, setErrors] = useState<ApproveErrors>({});
 
+  // Si hay un plan negociado, sus términos definen el crédito: no se piden a mano (se ocultan).
+  const fromPlan = planTerms(planOffer);
+
   const submitApprove = () => {
     const candidate = {
       borrowerId: borrowerId.trim(),
       zoneId: zoneId.trim(),
-      principalMinor: majorToMinor(Number(principal)),
-      interestPct: Number(interest) * PERCENT_TO_BASE_THOUSAND,
-      installmentsCount: Math.trunc(Number(installments)),
+      principalMinor: fromPlan ? fromPlan.principalMinor : majorToMinor(Number(principal)),
+      interestPct: fromPlan ? fromPlan.interestPct : Number(interest) * PERCENT_TO_BASE_THOUSAND,
+      installmentsCount: fromPlan ? fromPlan.installmentsCount : Math.trunc(Number(installments)),
       borrowerPhone: applicantPhone,
       reason: reason.trim(),
     };
@@ -108,15 +143,42 @@ export function DecisionModal({
               <Field label="Zona (UUID)" error={errors.zoneId} required>
                 <Input autoCapitalize="none" value={zoneId} onChangeText={setZoneId} invalid={!!errors.zoneId} />
               </Field>
-              <Field label={t("credit.new.principal")} error={errors.principalMinor} hint="Monto en unidades mayores" required>
-                <Input keyboardType="numeric" value={principal} onChangeText={setPrincipal} invalid={!!errors.principalMinor} />
-              </Field>
-              <Field label={t("credit.new.interest")} error={errors.interestPct} hint="20 = 20%" required>
-                <Input keyboardType="numeric" value={interest} onChangeText={setInterest} invalid={!!errors.interestPct} />
-              </Field>
-              <Field label={t("credit.new.installments")} error={errors.installmentsCount} required>
-                <Input keyboardType="number-pad" value={installments} onChangeText={setInstallments} invalid={!!errors.installmentsCount} />
-              </Field>
+
+              {fromPlan ? (
+                // Términos definidos por el plan negociado: se muestran como informativos.
+                <Stack gap="xs" className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+                  <Text variant="label">{t("review.approve.planTerms")}</Text>
+                  <Row className="justify-between">
+                    <Text tone="muted">{t("offer.plan")}</Text>
+                    <Text variant="label">{fromPlan.name}</Text>
+                  </Row>
+                  <Row className="justify-between">
+                    <Text tone="muted">{t("credit.new.principal")}</Text>
+                    <Text variant="label">{String(minorToMajor(fromPlan.principalMinor))}</Text>
+                  </Row>
+                  <Row className="justify-between">
+                    <Text tone="muted">{t("credit.new.installments")}</Text>
+                    <Text variant="label">{String(fromPlan.installmentsCount)}</Text>
+                  </Row>
+                  <Row className="justify-between">
+                    <Text tone="muted">{t("credit.new.interest")}</Text>
+                    <Text variant="label">{`${(fromPlan.interestPct / 10).toFixed(1)}%`}</Text>
+                  </Row>
+                </Stack>
+              ) : (
+                <>
+                  <Field label={t("credit.new.principal")} error={errors.principalMinor} hint="Monto en unidades mayores" required>
+                    <Input keyboardType="numeric" value={principal} onChangeText={setPrincipal} invalid={!!errors.principalMinor} />
+                  </Field>
+                  <Field label={t("credit.new.interest")} error={errors.interestPct} hint="20 = 20%" required>
+                    <Input keyboardType="numeric" value={interest} onChangeText={setInterest} invalid={!!errors.interestPct} />
+                  </Field>
+                  <Field label={t("credit.new.installments")} error={errors.installmentsCount} required>
+                    <Input keyboardType="number-pad" value={installments} onChangeText={setInstallments} invalid={!!errors.installmentsCount} />
+                  </Field>
+                </>
+              )}
+
               <Field label={t("review.approve.reason")} error={errors.reason} required>
                 <Input value={reason} onChangeText={setReason} invalid={!!errors.reason} multiline />
               </Field>

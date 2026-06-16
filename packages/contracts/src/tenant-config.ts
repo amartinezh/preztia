@@ -14,6 +14,11 @@ export const operationalSettings = z.object({
   commissionPctBaseThousand: z.number().int().min(0).max(1000),
   defaultCreditLimitMinor: z.number().int().min(0),
   applyColorByOverdue: z.boolean(),
+  // Negociación de planes por WhatsApp (Fase 10): autonomía del cliente, vencimiento de la oferta
+  // (1 hora a 30 días) y override del administrador cuando el cliente no responde.
+  clientChoosesPlan: z.boolean(),
+  planOfferTtlHours: z.number().int().min(1).max(720),
+  allowAdminOverride: z.boolean(),
 });
 export type OperationalSettings = z.infer<typeof operationalSettings>;
 

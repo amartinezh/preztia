@@ -72,7 +72,10 @@ export class DocumentRequirementsRepository implements DocumentRequirementsStore
           keptKeys.length > 0
             ? and(
                 eq(schema.creditDocumentRequirement.tenantId, tenantId),
-                notInArray(schema.creditDocumentRequirement.documentKey, keptKeys),
+                notInArray(
+                  schema.creditDocumentRequirement.documentKey,
+                  keptKeys,
+                ),
               )
             : eq(schema.creditDocumentRequirement.tenantId, tenantId),
         );

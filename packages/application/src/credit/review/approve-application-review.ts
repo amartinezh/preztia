@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  ConflictError,
   Money,
   NotFoundError,
   buildSchedule,
@@ -9,7 +10,9 @@ import {
 } from "@preztiaos/domain";
 
 import type { ScheduledInstallment } from "../grant-credit";
-import type { ApplicationDecisionStore } from "./ports";
+import type { PaymentPlanStore } from "../plan/ports";
+import type { TenantSettingsStore } from "../../tenant/settings";
+import type { ApplicationDecisionSnapshot, ApplicationDecisionStore } from "./ports";
 
 /** Orden del coordinador: aprobar el expediente y otorgar el crédito con estos términos. */
 export interface ApproveApplicationReviewCommand {
@@ -35,16 +38,31 @@ export interface ApproveApplicationReviewResult {
   readonly status: "APPROVED";
 }
 
+/** Términos efectivos del crédito (del plan negociado o del comando, según el flujo). */
+interface EffectiveTerms {
+  readonly principalMinor: number;
+  readonly interestPct: number;
+  readonly installmentsCount: number;
+  readonly frequency: ScheduleFrequency;
+  readonly paymentPlanId: string | null;
+}
+
 /**
- * Caso de uso: el coordinador aprueba —a su discreción— el expediente y se genera el crédito,
- * aunque el pipeline antifraude lo haya marcado. La transición la decide el dominio
- * (`nextDecisionStatus`, que falla con conflicto si ya estaba resuelto); el cronograma se
- * arma con la lógica pura del crédito; la persistencia (estado + auditoría + crédito) es
- * atómica vía el puerto. No valida HTTP, no arma SQL: solo orquesta.
+ * Caso de uso: el coordinador aprueba el expediente y se genera el crédito. Si se inyectan los
+ * puertos de planes y configuración (Fase 10):
+ *  - exige que el cliente haya aceptado por WhatsApp, salvo que el tenant permita override del
+ *    administrador (`allowAdminOverride`); el override queda auditado;
+ *  - toma los términos del PLAN negociado (no del comando) cuando hubo un plan ofertado y aceptado,
+ *    garantizando que el crédito == lo que el cliente aceptó, y graba el `payment_plan_id`.
+ * Sin esos puertos conserva el comportamiento previo (términos del comando; sin guarda). La
+ * transición la decide el dominio (`nextDecisionStatus`); la persistencia (estado + auditoría +
+ * crédito) es atómica vía el puerto. No valida HTTP ni arma SQL: solo orquesta.
  */
 export class ApproveApplicationReviewHandler {
   constructor(
     private readonly store: ApplicationDecisionStore,
+    private readonly plans?: PaymentPlanStore,
+    private readonly settings?: TenantSettingsStore,
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
@@ -61,11 +79,14 @@ export class ApproveApplicationReviewHandler {
     // Valida la transición (lanza ConflictError si ya fue resuelto hacia otro estado).
     nextDecisionStatus(snapshot.status, "APPROVE");
 
-    const frequency = cmd.frequency ?? "DAILY";
-    const principal = Money.of(cmd.principalMinor, cmd.currency);
-    const schedule = buildSchedule(principal, cmd.interestPct, cmd.installmentsCount);
+    const accepted = snapshot.planOffer === "ACCEPTED";
+    const override = await this.assertAcceptanceOrOverride(cmd.tenantId, accepted);
+
+    const terms = await this.resolveTerms(cmd, snapshot);
+    const principal = Money.of(terms.principalMinor, cmd.currency);
+    const schedule = buildSchedule(principal, terms.interestPct, terms.installmentsCount);
     const startDate = this.clock().toISOString().slice(0, 10);
-    const dueDates = scheduleDueDates(startDate, frequency, cmd.installmentsCount);
+    const dueDates = scheduleDueDates(startDate, terms.frequency, terms.installmentsCount);
     const scheduled: ScheduledInstallment[] = schedule.map((installment, idx) => ({
       ...installment,
       dueDate: dueDates[idx]!,
@@ -79,18 +100,20 @@ export class ApproveApplicationReviewHandler {
       applicationId: cmd.applicationId,
       reason: cmd.reason,
       decidedBy: cmd.decidedBy,
+      override,
       credit: {
         id: creditId,
         tenantId: cmd.tenantId,
         borrowerId: cmd.borrowerId,
         zoneId: cmd.zoneId,
-        principalMinor: cmd.principalMinor,
-        interestPct: cmd.interestPct,
-        installmentsCount: cmd.installmentsCount,
-        frequency,
+        principalMinor: terms.principalMinor,
+        interestPct: terms.interestPct,
+        installmentsCount: terms.installmentsCount,
+        frequency: terms.frequency,
         currency: cmd.currency,
         startDate,
         endDate: dueDates[dueDates.length - 1]!,
+        paymentPlanId: terms.paymentPlanId,
       },
       schedule: scheduled,
       // contact solo cuando hay teléfono (exactOptionalPropertyTypes).
@@ -98,5 +121,51 @@ export class ApproveApplicationReviewHandler {
     });
 
     return { applicationId: cmd.applicationId, creditId, status: "APPROVED" };
+  }
+
+  /**
+   * Si hay configuración (Fase 10): exige aceptación del cliente salvo override permitido.
+   * @returns true si la creación es un override (cliente no aceptó); false en caso normal.
+   */
+  private async assertAcceptanceOrOverride(
+    tenantId: string,
+    accepted: boolean,
+  ): Promise<boolean> {
+    if (!this.settings || accepted) return false;
+    const config = await this.settings.get(tenantId);
+    if (!config.allowAdminOverride) {
+      throw new ConflictError("El cliente aún no ha aceptado el crédito por WhatsApp");
+    }
+    return true; // override del administrador
+  }
+
+  /** Términos del plan negociado si lo hubo (fuente única); si no, los del comando. */
+  private async resolveTerms(
+    cmd: ApproveApplicationReviewCommand,
+    snapshot: ApplicationDecisionSnapshot,
+  ): Promise<EffectiveTerms> {
+    if (this.plans && snapshot.offeredPlanId) {
+      const plan = await this.plans.findById({
+        tenantId: cmd.tenantId,
+        id: snapshot.offeredPlanId,
+      });
+      if (plan) {
+        return {
+          principalMinor: snapshot.offeredPrincipalMinor ?? cmd.principalMinor,
+          interestPct: plan.interestPct,
+          installmentsCount: plan.installmentsCount,
+          frequency: plan.frequency,
+          paymentPlanId: plan.id,
+        };
+      }
+    }
+    // Otorgamiento directo (sin oferta, plan borrado o sin puertos Fase 10): términos del comando.
+    return {
+      principalMinor: cmd.principalMinor,
+      interestPct: cmd.interestPct,
+      installmentsCount: cmd.installmentsCount,
+      frequency: cmd.frequency ?? "DAILY",
+      paymentPlanId: null,
+    };
   }
 }

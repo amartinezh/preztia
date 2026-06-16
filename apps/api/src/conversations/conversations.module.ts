@@ -20,6 +20,10 @@ import {
   type OutboundTextSender,
   type PendingDocumentReminder,
   ProcessInboundMessageHandler,
+  type PaymentPlanStore,
+  type PlanOfferNotifier,
+  type PlanReplyStore,
+  RecordPlanReplyHandler,
   type RequiredDocumentCatalog,
   RouteInboundMediaHandler,
   StartCreditApplicationHandler,
@@ -38,6 +42,10 @@ import {
 } from '@preztiaos/application';
 import { WhatsappWebhookController } from './whatsapp-webhook.controller';
 import { WhatsappTextConsumer } from './adapters/whatsapp-text.consumer';
+import { PlanReplyRepository } from '../credit-application/review/plan-reply.repository';
+import { PlanOfferWhatsappNotifier } from '../credit-application/review/plan-offer.notifier';
+import { PaymentPlanModule } from '../credit/plans/payment-plan.module';
+import { PaymentPlanRepository } from '../credit/plans/payment-plan.repository';
 import { AudioDispatchAdapter } from './adapters/audio-dispatch.adapter';
 import { TenantConfigDrizzleRepository } from './text/tenant-config.repository';
 import { KnowledgeAssistantRouter } from './ai/knowledge-assistant.router';
@@ -102,9 +110,34 @@ import {
  * los casos de uso se componen por inyección de dependencias (inversión de dependencias).
  */
 @Module({
-  imports: [PaymentsModule],
+  imports: [PaymentsModule, PaymentPlanModule],
   controllers: [WhatsappWebhookController],
   providers: [
+    // Negociación del plan por WhatsApp (Fase 10): respuesta del cliente a la oferta.
+    PlanReplyRepository,
+    PlanOfferWhatsappNotifier,
+    {
+      provide: RecordPlanReplyHandler,
+      inject: [
+        PlanReplyRepository,
+        PaymentPlanRepository,
+        PlanOfferWhatsappNotifier,
+        INBOUND_MESSAGE_DEDUPLICATOR,
+      ],
+      useFactory: (
+        store: PlanReplyStore,
+        plans: PaymentPlanStore,
+        notifier: PlanOfferNotifier,
+        dedup: InboundMessageDeduplicator,
+      ) =>
+        new RecordPlanReplyHandler(
+          store,
+          plans,
+          notifier,
+          dedup,
+          process.env.CREDIT_CURRENCY ?? 'COP',
+        ),
+    },
     // Enrutado por tipo de mensaje → adaptadores. Imagen y archivo pasan por el
     // enrutador de media, que decide entre protocolo KYC y recepción de pagos.
     { provide: TEXT_CONSUMER, useClass: WhatsappTextConsumer },

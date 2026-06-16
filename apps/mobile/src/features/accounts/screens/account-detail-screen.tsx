@@ -51,6 +51,8 @@ export function AccountDetailScreen({ creditId }: { creditId: string }) {
           <Stack gap="xs">
             <Text variant="heading">{a.borrowerName ?? a.nationalId ?? a.creditId.slice(0, 8)}</Text>
             <KeyValue label={t("accounts.field.nationalId")} value={a.nationalId ?? "—"} />
+            <KeyValue label={t("accounts.field.phone")} value={a.phone ?? "—"} />
+            <KeyValue label={t("accounts.field.plan")} value={a.planName ?? "—"} />
             <KeyMoney label={t("accounts.field.principal")} amountMinor={a.principalMinor} currency={a.currency} />
             <KeyValue label={t("accounts.field.installments")} value={String(a.installmentsCount)} />
             <KeyValue label={t("accounts.field.interest")} value={interest} />

@@ -5,6 +5,7 @@ export * from "./zones";
 export * from "./collectors";
 export * from "./borrowers";
 export * from "./credit";
+export * from "./payment-plans";
 export * from "./accounts";
 export * from "./expenses";
 export * from "./settlements";

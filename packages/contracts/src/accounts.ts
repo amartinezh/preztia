@@ -47,6 +47,8 @@ export const listAccountsOutput = z.object({
 export const listAccountsQuery = paginationQuery.extend({
   name: z.string().trim().min(1).max(80).optional(),
   nationalId: z.string().trim().min(1).max(40).optional(),
+  /** Búsqueda por teléfono del cliente (coincidencia parcial). */
+  phone: z.string().trim().min(1).max(40).optional(),
   /** Solo cuentas con días de atraso > 0. */
   onlyOverdue: z.coerce.boolean().optional(),
 });
@@ -66,6 +68,8 @@ export const accountDetail = z.object({
   borrowerName: z.string().nullable(),
   nationalId: z.string().nullable(),
   phone: z.string().nullable(),
+  /** Nombre del plan de pago pactado (Fase 10); null en créditos sin plan asociado. */
+  planName: z.string().nullable(),
   principalMinor: z.number().int(),
   interestPct: z.number().int(),
   installmentsCount: z.number().int(),

@@ -31,6 +31,7 @@ export function AccountsListScreen() {
   const { role } = useSession();
   const exportCsv = useExportAccounts();
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [onlyOverdue, setOnlyOverdue] = useState(false);
 
   // Export disponible para gestores y solo donde el entorno permite descargar (web/RN-web).
@@ -42,6 +43,7 @@ export function AccountsListScreen() {
 
   const query = useAccountsList({
     ...(name.trim() ? { name: name.trim() } : {}),
+    ...(phone.trim() ? { phone: phone.trim() } : {}),
     ...(onlyOverdue ? { onlyOverdue: true } : {}),
   });
   const items = useMemo<AccountRow[]>(
@@ -73,6 +75,12 @@ export function AccountsListScreen() {
               ) : null}
             </Row>
             <Input value={name} onChangeText={setName} placeholder={t("accounts.list.search")} />
+            <Input
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              placeholder={t("accounts.list.searchPhone")}
+            />
             <Switch
               value={onlyOverdue}
               onValueChange={setOnlyOverdue}

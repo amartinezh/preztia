@@ -34,6 +34,7 @@ export class AccountsQueryRepository {
     pageSize: number;
     name?: string;
     nationalId?: string;
+    phone?: string;
     onlyOverdue?: boolean;
   }): Promise<{ items: AccountRow[]; total: number }> {
     const today = todayIso();
@@ -51,6 +52,9 @@ export class AccountsQueryRepository {
         filters.push(
           ilike(schema.borrower.nationalId, `%${input.nationalId}%`),
         );
+      }
+      if (input.phone) {
+        filters.push(ilike(schema.borrower.phone, `%${input.phone}%`));
       }
       const where = filters.length ? and(...filters) : undefined;
 
@@ -153,11 +157,16 @@ export class AccountsQueryRepository {
           lastName: schema.borrower.lastName,
           nationalId: schema.borrower.nationalId,
           phone: schema.borrower.phone,
+          planName: schema.paymentPlan.name,
         })
         .from(schema.credit)
         .leftJoin(
           schema.borrower,
           eq(schema.borrower.id, schema.credit.borrowerId),
+        )
+        .leftJoin(
+          schema.paymentPlan,
+          eq(schema.paymentPlan.id, schema.credit.paymentPlanId),
         )
         .where(eq(schema.credit.id, input.creditId))
         .limit(1);
@@ -185,6 +194,7 @@ export class AccountsQueryRepository {
         borrowerName: fullName(credit.firstName, credit.lastName),
         nationalId: credit.nationalId ?? null,
         phone: credit.phone ?? null,
+        planName: credit.planName ?? null,
         principalMinor: credit.principalMinor,
         interestPct: credit.interestPct,
         installmentsCount: credit.installmentsCount,

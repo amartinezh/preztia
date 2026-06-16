@@ -151,3 +151,60 @@ mobile/src/features/<ctx>/{api,screens}      React Query sobre client ts-rest
 - **No tocar** Conversations/KYC/Antifraude/Payments salvo para enlazar `borrower`.
 - **Idempotencia de dinero** (gastos, liquidación) debe resolverse antes de la Fase 3.
 - **Mapas/export** pueden requerir libs nuevas → decisión a autorizar, no se instala por defecto.
+
+---
+
+## 9. Fase 10 — Planes de Pago + negociación por WhatsApp (NUEVO)
+
+> *Cómo* en ARCHITECTURE.md; este apartado fija las **decisiones funcionales** del módulo.
+
+**Aggregate nuevo `payment_plan`** (por tenant): plantilla de crédito ofertable (nº cuotas,
+frecuencia, interés base-mil, `is_active`, `is_default`). Invariante duro: **exactamente un
+`is_default` por tenant** (índice parcial único `WHERE is_default` + caso de uso que impide
+borrar/desactivar/quitar-default al único default → siempre ≥ 1).
+
+**Botón azul partido en dos pasos** (sin tocar el `status` KYC del expediente; la oferta es una
+**sub-máquina** `plan_offer_status` sobre `credit_application`):
+
+1. **Ofertar** (`POST /applications/:id/plan-offer`). Según el toggle de tenant
+   `clientChoosesPlan`: **ON** → WhatsApp con el menú de planes activos (espera selección);
+   **OFF** → toma el `is_default`, proyecta el cronograma (reusa `buildSchedule` +
+   `scheduleDueDates`) y pide aceptación.
+2. **Crear crédito** (`POST /applications/:id/approval`, ADMIN/COORDINATOR) → genera `credit` +
+   `installment`s con los términos del plan ofertado.
+
+### Decisiones de este aporte
+
+- **Override del administrador:** si el cliente **no responde**, el botón final (botón azul / "Crear
+  crédito") **igual puede ejecutarse** por ADMIN/COORDINATOR. El caso de uso acepta el override
+  explícito (la decisión queda en `credit_application_event` como `ADMIN_OVERRIDE`, append-only);
+  sin override exige la bandera `ACCEPTED`. La aceptación del cliente sigue siendo el camino feliz.
+- **Vencimiento de la oferta = 1 día, parametrizable por tenant:** nuevo ajuste operativo
+  `planOfferTtlHours` (default **24**) en `OperationalSettings`. Al ofertar se sella
+  `offer_expires_at = now() + ttl`. Pasado el vencimiento, la respuesta del cliente por WhatsApp se
+  ignora (se le re-oferta) y el coordinador puede re-ofertar o aplicar el override.
+- **Toggle de autonomía** `clientChoosesPlan` (default OFF) también en `OperationalSettings`.
+
+**Orden de entrega (slices):** (1) `payment_plan` (dominio+test+contrato+handler+repo+controller+
+pantalla con toggles) ✅; (2) toggles de tenant (`clientChoosesPlan`, `planOfferTtlHours`,
+`allowAdminOverride`) en `OperationalSettings` + UI en Configuración de cobro ✅ (migración 0029,
+default jsonb; `get` mezcla sobre defaults para filas previas); (3) sub-máquina de oferta
+(`plan_offer_status` + columnas en `credit_application`, migración 0030) + `OfferPlansHandler`
+(botón azul: menú o cronograma según toggle, TTL del tenant) + notifier WhatsApp (reusa
+`WhatsappTextSender`) + panel de oferta en el detalle de revisión ✅; (4) respuestas del cliente
+(webhook): parser puro `parsePlanSelection`/`parseAcceptance`, `RecordPlanReplyHandler` (interceptor
+previo al asistente en `WhatsappTextConsumer`; idempotente por wamid; respeta `offer_expires_at`;
+sella PLAN_SELECTED/CLIENT_ACCEPTED/CLIENT_DECLINED en `credit_application_event`) ✅; (5) guarda de
+bandera/override en `approval` + `payment_plan_id` en `credit` ✅ (`ApproveApplicationReviewHandler`
+con puertos opcionales de plan+config: exige `ACCEPTED` salvo `allowAdminOverride`, toma términos del
+plan ofertado + `offeredPrincipalMinor`, audita el override; migración 0031); (6) pantalla de créditos
+(gestión de Cuentas) ✅ — se EXTIENDE el read-model existente `accounts`: filtro adicional por
+**teléfono** (`listAccountsQuery.phone` + `ilike` en repo + input en la lista) y **plan pactado**
+(`accountDetail.planName` vía join a `payment_plan` por `credit.payment_plan_id`). El detalle ya
+traía cronograma de cuotas con colores, registro de abonos (`PaymentsList`) y mora (`daysOverdue` +
+deuda). Sin migración nueva.
+
+**Fase 10 COMPLETA** (verticals 1–6): planes de pago CRUD con default único, toggles de tenant,
+botón azul (oferta menú/cronograma), respuestas del cliente por webhook, creación con bandera/override
+y términos del plan, y gestión de créditos con filtros (nombre/cédula/teléfono) + detalle
+(plan + cuotas + abonos + mora). Migraciones 0028–0031.

@@ -4,6 +4,7 @@ import {
   uuid,
   text,
   integer,
+  bigint,
   jsonb,
   boolean,
   timestamp,
@@ -31,6 +32,18 @@ export const creditApplicationStatus = pgEnum("credit_application_status", [
   "REJECTED",
 ]);
 
+// Sub-máquina de la NEGOCIACIÓN del plan de pago (Fase 10), independiente del `status` KYC del
+// expediente: el `status` sigue en IN_REVIEW mientras se oferta/negocia; al crear el crédito pasa a
+// APPROVED. NOT_OFFERED (inicial) → AWAITING_SELECTION (toggle ON) / AWAITING_ACCEPTANCE (toggle OFF
+// o tras elegir) → ACCEPTED (bandera para el botón final) / DECLINED.
+export const planOfferStatus = pgEnum("plan_offer_status", [
+  "NOT_OFFERED",
+  "AWAITING_SELECTION",
+  "AWAITING_ACCEPTANCE",
+  "ACCEPTED",
+  "DECLINED",
+]);
+
 export const documentStatus = pgEnum("document_status", [
   "PENDING",
   "RECEIVED",
@@ -52,6 +65,20 @@ export const creditApplication = pgTable(
     // mapeado a una zona; solo el ADMIN (sin filtro) la ve en ese caso.
     zonePath: ltree("zone_path"),
     status: creditApplicationStatus("status").notNull().default("AWAITING_DOCUMENTS"),
+    // Monto que el cliente declaró querer solicitar (unidades menores), capturado por WhatsApp.
+    // Es solo la intención del cliente; el coordinador define el capital final al aprobar.
+    requestedAmountMinor: bigint("requested_amount_minor", { mode: "number" }),
+    // ── Negociación del plan de pago (Fase 10) ───────────────────────────────────────────────
+    planOffer: planOfferStatus("plan_offer_status").notNull().default("NOT_OFFERED"),
+    // Plan ofertado: el por defecto (toggle OFF) o el elegido por el cliente (toggle ON). Null hasta
+    // que se fija. FK lógica a payment_plan (sin FK física: el plan puede editarse/borrarse después).
+    offeredPlanId: uuid("offered_plan_id"),
+    // Capital del préstamo que el coordinador puso al ofertar (unidades menores); base del cronograma.
+    offeredPrincipalMinor: bigint("offered_principal_minor", { mode: "number" }),
+    // Vencimiento de la oferta (now + planOfferTtlHours del tenant). Tras él la respuesta se ignora.
+    offerExpiresAt: timestamp("offer_expires_at", { withTimezone: true }),
+    // Sello de la aceptación del cliente por WhatsApp (bandera para el botón final).
+    clientAcceptedAt: timestamp("client_accepted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

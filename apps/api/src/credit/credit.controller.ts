@@ -80,7 +80,7 @@ export class CreditController {
   ) {
     const tenant = requireTenant(tenantId);
     requireRole(authorization, DATA_PLANE_ROLES);
-    const { page, pageSize, name, nationalId, onlyOverdue } =
+    const { page, pageSize, name, nationalId, phone, onlyOverdue } =
       listAccountsQuery.parse(query);
     const { items, total } = await this.accounts.listAccounts({
       tenantId: tenant,
@@ -88,6 +88,7 @@ export class CreditController {
       pageSize,
       ...(name ? { name } : {}),
       ...(nationalId ? { nationalId } : {}),
+      ...(phone ? { phone } : {}),
       ...(onlyOverdue ? { onlyOverdue } : {}),
     });
     return { items, page, pageSize, total };

@@ -28,12 +28,21 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
         .select({
           status: schema.creditApplication.status,
           applicantPhone: schema.creditApplication.applicantPhone,
+          planOffer: schema.creditApplication.planOffer,
+          offeredPlanId: schema.creditApplication.offeredPlanId,
+          offeredPrincipalMinor: schema.creditApplication.offeredPrincipalMinor,
         })
         .from(schema.creditApplication)
         .where(eq(schema.creditApplication.id, input.applicationId))
         .limit(1);
       return row
-        ? { status: row.status, applicantPhone: row.applicantPhone }
+        ? {
+            status: row.status,
+            applicantPhone: row.applicantPhone,
+            planOffer: row.planOffer,
+            offeredPlanId: row.offeredPlanId,
+            offeredPrincipalMinor: row.offeredPrincipalMinor,
+          }
         : null;
     });
   }
@@ -46,6 +55,7 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
     credit: GrantedCreditData;
     schedule: readonly ScheduledInstallment[];
     contact?: { phone: string };
+    override?: boolean;
   }): Promise<void> {
     await withTenantTxFor(input.tenantId, async (tx) => {
       await this.transition(tx, input.applicationId, 'APPROVED');
@@ -56,6 +66,10 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
         reason: input.reason,
         decidedBy: input.decidedBy,
         creditId: input.credit.id,
+        ...(input.override ? { override: true } : {}),
+        ...(input.credit.paymentPlanId
+          ? { paymentPlanId: input.credit.paymentPlanId }
+          : {}),
       });
       await this.persistCredit(tx, input.credit, input.schedule, input.contact);
     });
@@ -106,6 +120,8 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
       reason: string;
       decidedBy: string;
       creditId?: string;
+      override?: boolean;
+      paymentPlanId?: string;
     },
   ): Promise<void> {
     await tx.insert(schema.creditApplicationEvent).values({
@@ -117,6 +133,8 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
         reason: input.reason,
         decidedBy: input.decidedBy,
         ...(input.creditId ? { creditId: input.creditId } : {}),
+        ...(input.override ? { override: true } : {}),
+        ...(input.paymentPlanId ? { paymentPlanId: input.paymentPlanId } : {}),
       },
     });
   }
@@ -134,6 +152,7 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
       tenantId: credit.tenantId,
       borrowerId: credit.borrowerId,
       zoneId: credit.zoneId,
+      ...(credit.paymentPlanId ? { paymentPlanId: credit.paymentPlanId } : {}),
       principalMinor: credit.principalMinor,
       interestPct: credit.interestPct,
       installmentsCount: credit.installmentsCount,

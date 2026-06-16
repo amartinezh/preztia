@@ -44,7 +44,8 @@ export class AssistantConfigRepository implements AssistantConfigStore {
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (knowledgeBase !== undefined) set.knowledgeBase = knowledgeBase;
     if (aiProvider !== undefined) set.aiProvider = aiProvider;
-    if (aiApiKey !== undefined) set.aiApiKey = aiApiKey === '' ? null : aiApiKey;
+    if (aiApiKey !== undefined)
+      set.aiApiKey = aiApiKey === '' ? null : aiApiKey;
 
     await withTenantTxFor(tenantId, async (tx) => {
       await tx

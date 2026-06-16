@@ -96,6 +96,11 @@ export class ApplicationReviewQueryRepository {
           applicantPhone: schema.creditApplication.applicantPhone,
           status: schema.creditApplication.status,
           createdAt: schema.creditApplication.createdAt,
+          planOffer: schema.creditApplication.planOffer,
+          offeredPlanId: schema.creditApplication.offeredPlanId,
+          offeredPrincipalMinor: schema.creditApplication.offeredPrincipalMinor,
+          offerExpiresAt: schema.creditApplication.offerExpiresAt,
+          clientAcceptedAt: schema.creditApplication.clientAcceptedAt,
         })
         .from(schema.creditApplication)
         .where(
@@ -106,6 +111,25 @@ export class ApplicationReviewQueryRepository {
         )
         .limit(1);
       if (!app) return null;
+
+      // Plan ofertado (si lo hay): nombre + términos, para el detalle y para prellenar la creación.
+      let offeredPlanName: string | null = null;
+      let offeredPlanInstallments: number | null = null;
+      let offeredPlanInterestPct: number | null = null;
+      if (app.offeredPlanId) {
+        const [planRow] = await tx
+          .select({
+            name: schema.paymentPlan.name,
+            installmentsCount: schema.paymentPlan.installmentsCount,
+            interestPct: schema.paymentPlan.interestPct,
+          })
+          .from(schema.paymentPlan)
+          .where(eq(schema.paymentPlan.id, app.offeredPlanId))
+          .limit(1);
+        offeredPlanName = planRow?.name ?? null;
+        offeredPlanInstallments = planRow?.installmentsCount ?? null;
+        offeredPlanInterestPct = planRow?.interestPct ?? null;
+      }
 
       const docs = await tx
         .select({
@@ -178,6 +202,19 @@ export class ApplicationReviewQueryRepository {
           };
         }),
         verdictHistory,
+        planOffer: {
+          status: app.planOffer,
+          offeredPlanName,
+          offeredPrincipalMinor: app.offeredPrincipalMinor ?? null,
+          offeredPlanInstallments,
+          offeredPlanInterestPct,
+          offerExpiresAt: app.offerExpiresAt
+            ? app.offerExpiresAt.toISOString()
+            : null,
+          clientAcceptedAt: app.clientAcceptedAt
+            ? app.clientAcceptedAt.toISOString()
+            : null,
+        },
       };
     });
   }

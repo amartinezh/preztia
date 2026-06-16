@@ -1,4 +1,8 @@
-import type { CreditApplicationStatus, ScheduleFrequency } from "@preztiaos/domain";
+import type {
+  CreditApplicationStatus,
+  PlanOfferStatus,
+  ScheduleFrequency,
+} from "@preztiaos/domain";
 import type { ScheduledInstallment } from "../grant-credit";
 
 // Puertos de salida de la revisión manual de expedientes (decisión del coordinador).
@@ -9,6 +13,12 @@ export interface ApplicationDecisionSnapshot {
   readonly status: CreditApplicationStatus;
   /** Teléfono del solicitante (E.164 sin '+'): habilita abonos PIX del crédito generado. */
   readonly applicantPhone: string;
+  /** Sub-estado de la negociación del plan (Fase 10); ausente en flujos sin oferta. */
+  readonly planOffer?: PlanOfferStatus;
+  /** Plan negociado y aceptado (si lo hubo): fuente única de los términos del crédito. */
+  readonly offeredPlanId?: string | null;
+  /** Capital pactado en la oferta (unidades menores). */
+  readonly offeredPrincipalMinor?: number | null;
 }
 
 /** Crédito a otorgar al aprobar el expediente (mismos campos que persiste el slice de crédito). */
@@ -24,6 +34,8 @@ export interface GrantedCreditData {
   readonly currency: string;
   readonly startDate: string;
   readonly endDate: string;
+  /** Plan de pago del que salieron los términos (Fase 10); null si fue otorgamiento directo. */
+  readonly paymentPlanId?: string | null;
 }
 
 /**
@@ -47,6 +59,8 @@ export interface ApplicationDecisionStore {
     credit: GrantedCreditData;
     schedule: readonly ScheduledInstallment[];
     contact?: { phone: string };
+    /** true si se creó sin aceptación del cliente (override del administrador): queda auditado. */
+    override?: boolean;
   }): Promise<void>;
 
   /** Marca REJECTED y audita la decisión, en una transacción. */

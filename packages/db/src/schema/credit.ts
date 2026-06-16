@@ -10,6 +10,8 @@ export const credit = pgTable("credit", {
   tenantId: uuid("tenant_id").notNull(),
   borrowerId: uuid("borrower_id").notNull(),
   zoneId: uuid("zone_id").notNull(),
+  // Plan de pago del que salieron los términos (Fase 10); null en otorgamientos directos/legados.
+  paymentPlanId: uuid("payment_plan_id"),
   principalMinor: bigint("principal_minor", { mode: "number" }).notNull(),
   interestPct: integer("interest_pct").notNull(),
   installmentsCount: integer("installments_count").notNull(),

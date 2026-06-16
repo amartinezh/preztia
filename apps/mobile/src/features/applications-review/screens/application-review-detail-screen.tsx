@@ -9,6 +9,7 @@ import { useT } from "@/core/i18n";
 import {
   useApplicationReview,
   useApproveApplication,
+  useOfferPlans,
   useRejectApplication,
 } from "../api/queries";
 import { applicationStatusBadge } from "../components/review-status";
@@ -17,6 +18,7 @@ import { VerdictHistory } from "../components/verdict-history";
 import { ConversationPanel } from "../components/conversation-panel";
 import { DocumentViewer } from "../components/document-viewer";
 import { DecisionModal, type DecisionMode } from "../components/decision-modal";
+import { PlanOfferPanel } from "../components/plan-offer-panel";
 
 /**
  * Detalle del expediente para el coordinador: toda la información disponible para aprobar.
@@ -30,11 +32,13 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
   const query = useApplicationReview(applicationId);
   const approve = useApproveApplication(applicationId);
   const reject = useRejectApplication(applicationId);
+  const offer = useOfferPlans(applicationId);
 
   const [conversationOpen, setConversationOpen] = useState(false);
   const [viewerDocument, setViewerDocument] = useState<string | null>(null);
   const [decision, setDecision] = useState<DecisionMode>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [offerError, setOfferError] = useState<string | null>(null);
 
   if (query.isPending) return <Spinner label={t("common.loading")} />;
   if (query.isError) {
@@ -64,6 +68,18 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
     });
   };
 
+  // Oferta de planes (botón azul). Resuelve para que el panel cierre el modal; rechaza para dejarlo
+  // abierto mostrando el error.
+  const onOffer = async (principalMinor: number) => {
+    setOfferError(null);
+    try {
+      await offer.mutateAsync({ principalMinor });
+    } catch (err) {
+      setOfferError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
+      throw err;
+    }
+  };
+
   return (
     <Screen>
       <Stack gap="lg">
@@ -88,6 +104,15 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
         </Stack>
 
         {!decided ? (
+          <PlanOfferPanel
+            planOffer={detail.planOffer}
+            offering={offer.isPending}
+            offerError={offerError}
+            onOffer={onOffer}
+          />
+        ) : null}
+
+        {!decided ? (
           <Stack gap="sm">
             <Button label={t("review.approve.submit")} onPress={() => { setSubmitError(null); setDecision("approve"); }} />
             <Button label={t("review.reject.submit")} variant="danger" onPress={() => { setSubmitError(null); setDecision("reject"); }} />
@@ -102,6 +127,7 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
       <DecisionModal
         mode={decision}
         applicantPhone={detail.applicantPhone}
+        planOffer={detail.planOffer}
         approving={approve.isPending}
         rejecting={reject.isPending}
         submitError={submitError}

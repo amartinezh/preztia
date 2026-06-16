@@ -15,11 +15,13 @@ import type { Response } from 'express';
 import { z } from 'zod';
 import {
   ApproveApplicationReviewHandler,
+  OfferPlansHandler,
   RejectApplicationReviewHandler,
 } from '@preztiaos/application';
 import {
   approveApplicationInput,
   listApplicationsQuery,
+  offerPlansInput,
   paginationQuery,
   rejectApplicationInput,
   requiredDocumentType,
@@ -27,9 +29,15 @@ import {
 import { JwtGuard } from '../../auth/jwt.guard';
 import { requireTenant } from '../../auth/require-tenant';
 import { requireReviewer } from '../../auth/require-reviewer';
+import { PaymentPlanRepository } from '../../credit/plans/payment-plan.repository';
+import { TenantConfigRepository } from '../../tenant-config/tenant-config.repository';
 import { ApplicationReviewQueryRepository } from './application-review-query.repository';
 import { ApplicationDecisionRepository } from './application-decision.repository';
 import { DocumentOriginalStorage } from './document-original.storage';
+import { PlanOfferRepository } from './plan-offer.repository';
+import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
+
+const CREDIT_CURRENCY = process.env.CREDIT_CURRENCY ?? 'COP';
 
 const uuid = z.string().uuid();
 
@@ -43,14 +51,31 @@ const uuid = z.string().uuid();
 export class ApplicationReviewController {
   private readonly approveHandler: ApproveApplicationReviewHandler;
   private readonly rejectHandler: RejectApplicationReviewHandler;
+  private readonly offerHandler: OfferPlansHandler;
 
   constructor(
     private readonly queries: ApplicationReviewQueryRepository,
     private readonly decisions: ApplicationDecisionRepository,
     private readonly originals: DocumentOriginalStorage,
+    private readonly planOffers: PlanOfferRepository,
+    private readonly plans: PaymentPlanRepository,
+    private readonly tenantConfig: TenantConfigRepository,
+    private readonly offerNotifier: PlanOfferWhatsappNotifier,
   ) {
-    this.approveHandler = new ApproveApplicationReviewHandler(this.decisions);
+    // Fase 10: el otorgamiento toma los términos del plan negociado y exige aceptación del cliente
+    // (salvo override permitido por el tenant).
+    this.approveHandler = new ApproveApplicationReviewHandler(
+      this.decisions,
+      this.plans,
+      this.tenantConfig,
+    );
     this.rejectHandler = new RejectApplicationReviewHandler(this.decisions);
+    this.offerHandler = new OfferPlansHandler(
+      this.planOffers,
+      this.plans,
+      this.tenantConfig,
+      this.offerNotifier,
+    );
   }
 
   @Get('applications')
@@ -142,6 +167,31 @@ export class ApplicationReviewController {
       .setHeader('Content-Disposition', 'inline')
       .setHeader('Cache-Control', 'no-store')
       .send(original.bytes);
+  }
+
+  @Post('applications/:id/plan-offer')
+  @HttpCode(200)
+  async offerPlans(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
+  ) {
+    const tenant = requireTenant(tenantId);
+    const reviewer = requireReviewer(authorization);
+    const dto = offerPlansInput.parse(body);
+    const result = await this.offerHandler.execute({
+      tenantId: tenant,
+      applicationId: uuid.parse(id),
+      decidedBy: reviewer.userId,
+      principalMinor: dto.principalMinor,
+      // La moneda la fija el servidor por despliegue, no el cliente.
+      currency: CREDIT_CURRENCY,
+    });
+    return {
+      applicationId: uuid.parse(id),
+      planOfferStatus: result.planOfferStatus,
+    };
   }
 
   @Post('applications/:id/approval')

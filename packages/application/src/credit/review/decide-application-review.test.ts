@@ -1,21 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { ConflictError, NotFoundError, type CreditApplicationStatus } from "@preztiaos/domain";
+import {
+  ConflictError,
+  NotFoundError,
+  type CreditApplicationStatus,
+  type OperationalSettings,
+  type PaymentPlan,
+  type PlanOfferStatus,
+} from "@preztiaos/domain";
 
 import { ApproveApplicationReviewHandler } from "./approve-application-review";
 import { RejectApplicationReviewHandler } from "./reject-application-review";
 import type { ApplicationDecisionSnapshot, ApplicationDecisionStore } from "./ports";
 import type { ScheduledInstallment } from "../grant-credit";
 import type { GrantedCreditData } from "./ports";
+import type { PaymentPlanStore } from "../plan/ports";
+import type { TenantSettingsStore } from "../../tenant/settings";
 
 /** Store en memoria que registra lo persistido para verificar la orquestación. */
 class FakeStore implements ApplicationDecisionStore {
-  approvals: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; contact?: { phone: string } }[] = [];
+  approvals: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; contact?: { phone: string }; override?: boolean }[] = [];
   rejections: { tenantId: string; applicationId: string; reason: string; decidedBy: string }[] = [];
   constructor(private readonly snapshot: ApplicationDecisionSnapshot | null) {}
   async loadDecisionSnapshot() {
     return this.snapshot;
   }
-  async approveAndGrant(input: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; contact?: { phone: string } }) {
+  async approveAndGrant(input: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; contact?: { phone: string }; override?: boolean }) {
     this.approvals.push(input);
   }
   async reject(input: { tenantId: string; applicationId: string; reason: string; decidedBy: string }) {
@@ -79,6 +88,70 @@ describe("ApproveApplicationReviewHandler", () => {
     const store = new FakeStore(snapshot("REJECTED"));
     await expect(new ApproveApplicationReviewHandler(store).execute(approveCmd)).rejects.toBeInstanceOf(ConflictError);
     expect(store.approvals).toHaveLength(0);
+  });
+});
+
+// ── Fase 10: términos del plan negociado + guarda de aceptación / override ──────────────────────
+const PLAN_30: PaymentPlan = {
+  id: "plan-30",
+  tenantId: "t-1",
+  name: "Plan 30 días",
+  installmentsCount: 30,
+  frequency: "DAILY",
+  interestPct: 100,
+  isActive: true,
+  isDefault: true,
+};
+
+const plansStore: PaymentPlanStore = {
+  findById: async () => PLAN_30,
+} as unknown as PaymentPlanStore;
+
+const settingsWith = (allowAdminOverride: boolean): TenantSettingsStore => ({
+  get: async () =>
+    ({ allowAdminOverride, clientChoosesPlan: false, planOfferTtlHours: 24 } as OperationalSettings),
+  save: async () => {},
+});
+
+const offerSnapshot = (
+  planOffer: PlanOfferStatus,
+): ApplicationDecisionSnapshot => ({
+  status: "IN_REVIEW",
+  applicantPhone: "5511999990000",
+  planOffer,
+  offeredPlanId: "plan-30",
+  offeredPrincipalMinor: 200_000,
+});
+
+describe("ApproveApplicationReviewHandler — negociación de planes (Fase 10)", () => {
+  it("aceptado: toma los términos del plan y el capital pactado, no los del comando", async () => {
+    const store = new FakeStore(offerSnapshot("ACCEPTED"));
+    const handler = new ApproveApplicationReviewHandler(store, plansStore, settingsWith(false));
+
+    await handler.execute(approveCmd); // el comando trae 100_000 / 200 / 10 cuotas
+
+    const [persisted] = store.approvals;
+    expect(persisted!.credit.installmentsCount).toBe(30); // del plan, no del comando
+    expect(persisted!.credit.interestPct).toBe(100); // del plan
+    expect(persisted!.credit.principalMinor).toBe(200_000); // capital ofertado
+    expect(persisted!.credit.paymentPlanId).toBe("plan-30");
+    expect(persisted!.schedule).toHaveLength(30);
+    expect(persisted!.override).toBeFalsy();
+  });
+
+  it("no aceptado y override prohibido: 409, no crea el crédito", async () => {
+    const store = new FakeStore(offerSnapshot("AWAITING_ACCEPTANCE"));
+    const handler = new ApproveApplicationReviewHandler(store, plansStore, settingsWith(false));
+    await expect(handler.execute(approveCmd)).rejects.toBeInstanceOf(ConflictError);
+    expect(store.approvals).toHaveLength(0);
+  });
+
+  it("no aceptado pero override permitido: crea el crédito y lo marca como override", async () => {
+    const store = new FakeStore(offerSnapshot("AWAITING_ACCEPTANCE"));
+    const handler = new ApproveApplicationReviewHandler(store, plansStore, settingsWith(true));
+    const result = await handler.execute(approveCmd);
+    expect(result.status).toBe("APPROVED");
+    expect(store.approvals[0]!.override).toBe(true);
   });
 });
 

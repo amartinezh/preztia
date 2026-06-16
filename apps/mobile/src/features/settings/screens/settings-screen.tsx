@@ -94,6 +94,13 @@ export function SettingsScreen() {
                 trailing={<Text tone="muted">›</Text>}
               />
             ) : null}
+            {role === "ADMIN" ? (
+              <ListItem
+                title={t("plans.tab")}
+                onPress={() => router.push("/payment-plans" as Href)}
+                trailing={<Text tone="muted">›</Text>}
+              />
+            ) : null}
           </Stack>
         ) : null}
 
@@ -446,6 +453,17 @@ function OperationalConfigCard() {
         <Switch value={form.blockOverdueDatesForSales} onValueChange={(v) => set("blockOverdueDatesForSales", v)} label={t("config.blockOverdue")} />
         <Switch value={form.blockInterestChange} onValueChange={(v) => set("blockInterestChange", v)} label={t("config.blockInterest")} />
         <Switch value={form.applyColorByOverdue} onValueChange={(v) => set("applyColorByOverdue", v)} label={t("config.colorByOverdue")} />
+
+        <Switch value={form.clientChoosesPlan} onValueChange={(v) => set("clientChoosesPlan", v)} label={t("config.clientChoosesPlan")} />
+        <Switch value={form.allowAdminOverride} onValueChange={(v) => set("allowAdminOverride", v)} label={t("config.allowAdminOverride")} />
+
+        <Field label={t("config.planOfferTtl")}>
+          <Input
+            keyboardType="numeric"
+            value={String(form.planOfferTtlHours)}
+            onChangeText={(text) => set("planOfferTtlHours", Math.max(1, Math.round(Number(text) || 0)))}
+          />
+        </Field>
 
         <Field label={t("config.commission")}>
           <Input

@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import type {
   ApproveApplicationInput,
   CreditApplicationStatus,
+  OfferPlansInput,
   RejectApplicationInput,
 } from "@preztiaos/contracts";
 
@@ -76,6 +77,16 @@ export function useApproveApplication(id: string) {
       void qc.invalidateQueries({ queryKey: reviewKeys.all });
       void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) });
     },
+  });
+}
+
+/** Oferta planes al cliente por WhatsApp (botón azul). Refresca el detalle (cambia el sub-estado). */
+export function useOfferPlans(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: OfferPlansInput) =>
+      unwrap(await api.offerPlans({ headers: tenantHeader(), params: { id }, body: input })),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) }),
   });
 }
 

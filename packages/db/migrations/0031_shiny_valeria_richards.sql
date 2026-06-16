@@ -1,0 +1,1 @@
+ALTER TABLE "credit" ADD COLUMN "payment_plan_id" uuid;
