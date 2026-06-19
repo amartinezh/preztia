@@ -225,6 +225,27 @@
       "when": 1781625565309,
       "tag": "0031_shiny_valeria_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1781640425779,
+      "tag": "0032_dizzy_queen_noir",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1781796339762,
+      "tag": "0033_cash_box_and_bank_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1781832710906,
+      "tag": "0034_cash_tx_system_routing",
+      "breakpoints": true
     }
   ]
 }

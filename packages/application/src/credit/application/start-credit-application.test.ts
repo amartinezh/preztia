@@ -57,14 +57,15 @@ describe("StartCreditApplicationHandler", () => {
   let sender: SpySender;
   beforeEach(() => { sender = new SpySender(); });
 
-  it("crea la solicitud y pide el primer documento cuando no hay una activa", async () => {
+  it("crea la solicitud y pregunta el monto cuando no hay una activa", async () => {
     const repo = new FakeRepo(null);
     await new StartCreditApplicationHandler(repo, sender, new FakeCatalog()).start(applicant);
 
     expect(repo.created).toHaveLength(1);
     expect(sender.sent).toHaveLength(1);
     expect(sender.sent[0]?.to).toEqual({ channelId: "PNID", recipient: "573001112233" });
-    expect(sender.sent[0]?.body).toContain(titleOf(DOC1));
+    // El primer paso del flujo es preguntar el monto (los documentos vienen después).
+    expect(sender.sent[0]?.body).toContain("Cuánto dinero");
   });
 
   it("es idempotente: si ya hay solicitud activa no crea otra y recuerda el pendiente", async () => {
@@ -115,12 +116,12 @@ describe("StartCreditApplicationHandler", () => {
     expect(sender.sent[0]?.body).toContain(titleOf(DOC1)); // vuelve a pedir el primero
   });
 
-  it("reinicia sin solicitud activa: inicia una nueva", async () => {
+  it("reinicia sin solicitud activa: inicia una nueva (pregunta el monto)", async () => {
     const repo = new FakeRepo(null);
     await new StartCreditApplicationHandler(repo, sender, new FakeCatalog()).restart(applicant);
 
     expect(repo.resets).toHaveLength(0);
     expect(repo.created).toHaveLength(1);
-    expect(sender.sent[0]?.body).toContain(titleOf(DOC1));
+    expect(sender.sent[0]?.body).toContain("Cuánto dinero");
   });
 });

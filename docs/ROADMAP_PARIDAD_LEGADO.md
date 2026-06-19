@@ -208,3 +208,26 @@ deuda). Sin migración nueva.
 botón azul (oferta menú/cronograma), respuestas del cliente por webhook, creación con bandera/override
 y términos del plan, y gestión de créditos con filtros (nombre/cédula/teléfono) + detalle
 (plan + cuotas + abonos + mora). Migraciones 0028–0031.
+
+---
+
+## 10. Fase 11 — Originación asistida (monto WhatsApp + zona/deudor automáticos)
+
+Mejora del flujo de originación sobre la Fase 10. Cuatro piezas:
+
+1. **Monto por WhatsApp** — el bot pregunta "¿Cuánto dinero deseas solicitar?" al iniciar la
+   solicitud; `RecordAmountReplyHandler` (interceptor previo al asistente, idempotente por wamid)
+   captura el número y lo sella en `credit_application.requested_amount_minor` (migración 0032);
+   luego pide el primer documento. El coordinador lo ve en la revisión y aprueba el capital que
+   decida.
+2. **Zona automática** — el detalle de revisión resuelve `zoneId` desde `zone_path` (mapeo
+   línea→zona de la Fase 9); en el modal la zona es de **solo lectura** (sin UUID a mano).
+3. **Deudor desde OCR / existente** — el detalle expone `extractedIdentity` (cédula/nombre del
+   `document_extraction` vía `mapIdentityFields` + `splitFullName`). En el modal, `BorrowerPicker`
+   crea el cliente desde el OCR (un clic → `createBorrower`) o elige uno existente por búsqueda
+   (`listBorrowers`), fijando el `borrowerId`.
+4. **Bloqueo de aprobación** — "Aprobar y generar crédito" queda **disabled** hasta que haya
+   `borrowerId` (creado o seleccionado) y `zoneId` resuelto.
+
+Sin DDL a mano (solo `requested_amount_minor`, migración 0032). Reusa OCR, borrower CRUD/búsqueda y
+el mapeo número→zona ya existentes; el contrato de `approveApplication` no cambió.

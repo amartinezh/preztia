@@ -8,18 +8,25 @@ import {
   Param,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { z } from 'zod';
 import { ReconcilePendingPaymentsHandler } from '@preztiaos/application';
 import {
+  listPaymentAttemptsQuery,
+  manualVerifyPaymentInput,
   paginationQuery,
   registerCashPaymentInput,
 } from '@preztiaos/contracts';
 import { PaymentsQueryRepository } from './payments-query.repository';
 import { CashPaymentDrizzleRepository } from './cash-payment.repository';
+import { ManualVerifyPaymentRepository } from './manual-verify-payment.repository';
+import { PaymentReceiptOriginalStorage } from './payment-receipt-original.storage';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
+import { requireReviewer } from '../auth/require-reviewer';
 
 const uuid = z.string().uuid();
 
@@ -34,6 +41,8 @@ export class PaymentsController {
     private readonly queries: PaymentsQueryRepository,
     private readonly reconcile: ReconcilePendingPaymentsHandler,
     private readonly cashPayments: CashPaymentDrizzleRepository,
+    private readonly manualVerify: ManualVerifyPaymentRepository,
+    private readonly receipts: PaymentReceiptOriginalStorage,
   ) {}
 
   @Get('credits/:creditId/payments')
@@ -96,5 +105,83 @@ export class PaymentsController {
   ) {
     const tenant = requireTenant(tenantId);
     return this.reconcile.execute({ tenantId: tenant });
+  }
+
+  @Get('payments')
+  async listAttempts(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: Record<string, string>,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireReviewer(authorization);
+    const { page, pageSize, status, failedOnly } =
+      listPaymentAttemptsQuery.parse(query);
+    const { items, total } = await this.queries.listPaymentAttempts({
+      tenantId: tenant,
+      page,
+      pageSize,
+      ...(status ? { status } : {}),
+      ...(failedOnly ? { failedOnly } : {}),
+    });
+    return { items, page, pageSize, total };
+  }
+
+  @Get('payments/:paymentId')
+  async paymentDetail(
+    @Param('paymentId') paymentId: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireReviewer(authorization);
+    const detail = await this.queries.getPaymentDetail({
+      tenantId: tenant,
+      paymentId: uuid.parse(paymentId),
+    });
+    if (!detail) throw new NotFoundException('Pago no encontrado');
+    return detail;
+  }
+
+  @Post('payments/:paymentId/manual-verification')
+  @HttpCode(200)
+  async manualVerifyPayment(
+    @Param('paymentId') paymentId: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
+  ) {
+    const tenant = requireTenant(tenantId);
+    const reviewer = requireReviewer(authorization);
+    const dto = manualVerifyPaymentInput.parse(body);
+    return this.manualVerify.verify({
+      tenantId: tenant,
+      paymentId: uuid.parse(paymentId),
+      decidedBy: reviewer.userId,
+      reason: dto.reason,
+      ...(dto.amountMinor ? { amountMinorOverride: dto.amountMinor } : {}),
+    });
+  }
+
+  @Get('payments/:paymentId/receipt')
+  async receipt(
+    @Param('paymentId') paymentId: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const tenant = requireTenant(tenantId);
+    requireReviewer(authorization);
+    const original = await this.receipts.fetch({
+      tenantId: tenant,
+      paymentId: uuid.parse(paymentId),
+    });
+    // PII/evidencia en reposo: se muestra inline pero NUNCA se cachea.
+    res
+      .status(200)
+      .setHeader('Content-Type', original.mimeType)
+      .setHeader('Content-Disposition', 'inline')
+      .setHeader('Cache-Control', 'no-store')
+      .send(original.bytes);
   }
 }

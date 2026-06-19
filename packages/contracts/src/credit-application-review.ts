@@ -138,12 +138,28 @@ export const planOfferView = z.object({
 });
 export type PlanOfferView = z.infer<typeof planOfferView>;
 
+// Datos del cliente extraídos por OCR del documento de identidad (para precargar la creación).
+export const extractedIdentityView = z.object({
+  nationalId: z.string().nullable(),
+  firstName: z.string(),
+  lastName: z.string(),
+  fullName: z.string().nullable(),
+  birthDate: z.string().nullable(),
+});
+export type ExtractedIdentityView = z.infer<typeof extractedIdentityView>;
+
 export const applicationReviewDetail = z.object({
   id: z.string().uuid(),
   // Teléfono completo: el coordinador está autorizado a verlo en el detalle.
   applicantPhone: z.string(),
   status: creditApplicationStatus,
   createdAt: z.string(),
+  // Monto que el cliente declaró por WhatsApp (unidades menores); editable al aprobar.
+  requestedAmountMinor: z.number().int().nullable(),
+  // Zona resuelta automáticamente desde la línea/canal de WhatsApp (mapeo número→zona).
+  zoneId: z.string().uuid().nullable(),
+  // Datos del cliente extraídos por OCR del documento de identidad (null si aún no hay).
+  extractedIdentity: extractedIdentityView.nullable(),
   documents: z.array(applicationDocumentDetail),
   // Historial completo de corridas del pipeline (orden desc; la primera es la vigente).
   verdictHistory: z.array(validationRunView),

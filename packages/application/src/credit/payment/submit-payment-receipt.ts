@@ -179,8 +179,19 @@ function buildOutcome(
         ? { score: 100, reasons: decision.reasons }
         : null;
 
+  // Motivos del veredicto (por qué se marcó/aceptó): se guardan en el evento de decisión para
+  // que la auditoría del intento pueda mostrarlos (banner del detalle).
+  const decisionReasons =
+    decision.kind === "accepted_verified" ? decision.assessment.reasons : decision.reasons;
+
   const events: PaymentAuditEvent[] = [
-    { type: `payment_${status.toLowerCase()}`, payload: { creditId: portfolio.creditId } },
+    {
+      type: `payment_${status.toLowerCase()}`,
+      payload: {
+        creditId: portfolio.creditId,
+        ...(decisionReasons.length ? { reasons: [...decisionReasons] } : {}),
+      },
+    },
   ];
   if (allocation) {
     events.push({

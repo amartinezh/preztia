@@ -9,6 +9,7 @@ import {
 import { type PaymentAllocation } from '@preztiaos/domain';
 import { type Tx } from '../tenancy/unit-of-work';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
 
 /**
  * Adaptador del puerto CreditPortfolioRepository: traduce cartera/pagos ↔
@@ -140,6 +141,19 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
           payload: event.payload ?? null,
         })),
       );
+
+      // El dinero confirmado entra a su caja (bancaria por llave PIX, o tránsito si no se
+      // identifica). Solo cuando el pago queda VERIFIED: un UNVERIFIED aún no es dinero en caja.
+      if (p.status === 'VERIFIED') {
+        await routeVerifiedPaymentToBox(tx, {
+          tenantId: p.tenantId,
+          paymentId,
+          receiverPixKey: p.receiverPixKey,
+          amountMinor: p.amountMinor,
+          currency: p.currency,
+          createdBy: null,
+        });
+      }
     });
   }
 

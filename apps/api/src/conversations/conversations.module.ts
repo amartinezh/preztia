@@ -20,9 +20,11 @@ import {
   type OutboundTextSender,
   type PendingDocumentReminder,
   ProcessInboundMessageHandler,
+  type AmountCaptureStore,
   type PaymentPlanStore,
   type PlanOfferNotifier,
   type PlanReplyStore,
+  RecordAmountReplyHandler,
   RecordPlanReplyHandler,
   type RequiredDocumentCatalog,
   RouteInboundMediaHandler,
@@ -43,6 +45,7 @@ import {
 import { WhatsappWebhookController } from './whatsapp-webhook.controller';
 import { WhatsappTextConsumer } from './adapters/whatsapp-text.consumer';
 import { PlanReplyRepository } from '../credit-application/review/plan-reply.repository';
+import { AmountCaptureRepository } from '../credit-application/amount-capture.repository';
 import { PlanOfferWhatsappNotifier } from '../credit-application/review/plan-offer.notifier';
 import { PaymentPlanModule } from '../credit/plans/payment-plan.module';
 import { PaymentPlanRepository } from '../credit/plans/payment-plan.repository';
@@ -113,6 +116,24 @@ import {
   imports: [PaymentsModule, PaymentPlanModule],
   controllers: [WhatsappWebhookController],
   providers: [
+    // Captura del monto solicitado por WhatsApp (primer paso de la solicitud).
+    AmountCaptureRepository,
+    {
+      provide: RecordAmountReplyHandler,
+      inject: [
+        AmountCaptureRepository,
+        REQUIRED_DOCUMENT_CATALOG,
+        OUTBOUND_TEXT_SENDER,
+        INBOUND_MESSAGE_DEDUPLICATOR,
+      ],
+      useFactory: (
+        store: AmountCaptureStore,
+        catalog: RequiredDocumentCatalog,
+        sender: OutboundTextSender,
+        dedup: InboundMessageDeduplicator,
+      ) => new RecordAmountReplyHandler(store, catalog, sender, dedup),
+    },
+
     // Negociación del plan por WhatsApp (Fase 10): respuesta del cliente a la oferta.
     PlanReplyRepository,
     PlanOfferWhatsappNotifier,

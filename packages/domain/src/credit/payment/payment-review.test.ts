@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { ConflictError } from "../../shared/money";
 import type { FraudAssessment } from "../application/fraud";
-import { decidePaymentReview, type BankVerification, type PixReceiptData } from "./payment-review";
+import {
+  assertManuallyVerifiable,
+  decidePaymentReview,
+  type BankVerification,
+  type PixReceiptData,
+} from "./payment-review";
 
 const APPROVED: FraudAssessment = { status: "approved", score: 0, reasons: [] };
 const REJECTED: FraudAssessment = { status: "rejected", score: 100, reasons: ["Comprobante reutilizado"] };
@@ -72,5 +78,17 @@ describe("decidePaymentReview", () => {
       bank: { status: "unavailable", reason: "timeout" },
     });
     expect(decision.kind).toBe("accepted_unverified");
+  });
+});
+
+describe("assertManuallyVerifiable", () => {
+  it("permite validar manualmente un intento fallido/pendiente", () => {
+    for (const status of ["RECEIVED", "UNVERIFIED", "REJECTED_FRAUD", "REJECTED_INVALID"] as const) {
+      expect(() => assertManuallyVerifiable(status)).not.toThrow();
+    }
+  });
+
+  it("rechaza revalidar un pago ya VERIFIED", () => {
+    expect(() => assertManuallyVerifiable("VERIFIED")).toThrow(ConflictError);
   });
 });

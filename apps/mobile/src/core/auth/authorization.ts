@@ -18,6 +18,7 @@ export type Permission =
   | "client:read"
   | "borrower:manage"
   | "cash:manage"
+  | "cash:admin"
   | "credit:create"
   | "credit:read"
   | "payment:register"
@@ -34,6 +35,7 @@ const ROLE_PERMISSIONS: Record<UserRole, ReadonlySet<Permission>> = {
     "client:read",
     "borrower:manage",
     "cash:manage",
+    "cash:admin",
     "credit:create",
     "credit:read",
     "payment:register",

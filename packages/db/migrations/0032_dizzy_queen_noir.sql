@@ -1,0 +1,1 @@
+ALTER TABLE "credit_application" ADD COLUMN "requested_amount_minor" bigint;

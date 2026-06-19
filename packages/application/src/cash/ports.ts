@@ -1,4 +1,4 @@
-import type { ExpenseStatus } from "@preztiaos/domain";
+import type { BankBalanceVerdict, ExpenseStatus } from "@preztiaos/domain";
 
 // Puertos de salida del bounded context CASH (gastos + liquidación). La infraestructura los
 // implementa con Drizzle bajo el rol `app` + RLS. Aquí solo se DECLARAN.
@@ -73,4 +73,21 @@ export interface SettlementStore {
     periodEnd: Date;
   }): Promise<WindowTotals>;
   create(settlement: NewSettlement): Promise<void>;
+}
+
+// --- Conciliación bancaria en línea (Req 7) ---------------------------------
+
+/**
+ * Puerto: consulta el saldo REAL de una cuenta bancaria. La infraestructura resuelve el
+ * adaptador por (countryCode, bankCode) — igual que BankPaymentVerifier — y la autenticación
+ * (API key/OAuth/mTLS) es un detalle del adaptador. Nunca lanza hacia el caso de uso: cualquier
+ * fallo se degrada a `unavailable` para que la conciliación no rompa la operación.
+ */
+export interface BankBalanceProvider {
+  fetchBalance(input: {
+    tenantId: string;
+    countryCode: string;
+    bankCode: string;
+    apiKey: string | null;
+  }): Promise<BankBalanceVerdict>;
 }

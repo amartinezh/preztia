@@ -23,6 +23,7 @@ export * from "./credit/plan/offer-plans";
 export * from "./credit/plan/record-plan-reply";
 export * from "./credit/application/ports";
 export * from "./credit/application/start-credit-application";
+export * from "./credit/application/record-amount-reply";
 export * from "./credit/application/submit-application-document";
 export * from "./credit/validation/ports";
 export * from "./credit/validation/extraction-fields";

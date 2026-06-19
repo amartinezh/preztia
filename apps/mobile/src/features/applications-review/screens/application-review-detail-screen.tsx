@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRouter, type Href } from "expo-router";
 import type { ApproveApplicationInput, RejectApplicationInput } from "@preztiaos/contracts";
-import { Badge, Button, ErrorState, Row, Spinner, Stack, Text } from "@preztiaos/ui";
+import { Badge, Button, Card, ErrorState, Row, Spinner, Stack, Text, minorToMajor } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
@@ -93,6 +93,27 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
 
         <Button label={t("review.detail.viewConversation")} variant="secondary" onPress={() => setConversationOpen(true)} />
 
+        {/* Precarga: monto solicitado por WhatsApp + datos del cliente extraídos del OCR. */}
+        <Card>
+          <Stack gap="xs">
+            <Text variant="heading">{t("review.detail.applicant")}</Text>
+            <Row className="justify-between">
+              <Text tone="muted">{t("review.detail.requestedAmount")}</Text>
+              <Text variant="label">
+                {detail.requestedAmountMinor != null ? String(minorToMajor(detail.requestedAmountMinor)) : "—"}
+              </Text>
+            </Row>
+            <Row className="justify-between">
+              <Text tone="muted">{t("borrower.nationalId")}</Text>
+              <Text variant="label">{detail.extractedIdentity?.nationalId ?? "—"}</Text>
+            </Row>
+            <Row className="justify-between">
+              <Text tone="muted">{t("borrower.name")}</Text>
+              <Text variant="label">{detail.extractedIdentity?.fullName ?? "—"}</Text>
+            </Row>
+          </Stack>
+        </Card>
+
         <Stack gap="sm">
           <Text variant="heading">{t("review.detail.documents")}</Text>
           <DocumentsTable documents={detail.documents} onViewOriginal={setViewerDocument} />
@@ -108,6 +129,7 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
             planOffer={detail.planOffer}
             offering={offer.isPending}
             offerError={offerError}
+            requestedAmountMinor={detail.requestedAmountMinor}
             onOffer={onOffer}
           />
         ) : null}
@@ -128,6 +150,8 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
         mode={decision}
         applicantPhone={detail.applicantPhone}
         planOffer={detail.planOffer}
+        zoneId={detail.zoneId}
+        extractedIdentity={detail.extractedIdentity}
         approving={approve.isPending}
         rejecting={reject.isPending}
         submitError={submitError}

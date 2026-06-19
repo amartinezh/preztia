@@ -9,6 +9,8 @@ import {
   type ReconciliationRepository,
   type TenantBankAccountRepository,
 } from '@preztiaos/application';
+import { ManualVerifyPaymentRepository } from './manual-verify-payment.repository';
+import { PaymentReceiptOriginalStorage } from './payment-receipt-original.storage';
 import { ConversationMessageLog } from '../conversations/conversation-message.log';
 import { WhatsappTextSender } from '../conversations/text/whatsapp-text-sender';
 import { LoggingTextSender } from '../conversations/text/logging-text-sender';
@@ -75,6 +77,8 @@ function reconciliationMaxAttempts(): number {
       useClass: PaymentReconciliationDrizzleRepository,
     },
     PaymentsQueryRepository,
+    ManualVerifyPaymentRepository,
+    PaymentReceiptOriginalStorage,
     TenantBankAccountDrizzleRepository,
 
     // Antifraude de pagos: composite de reglas. PUNTO DE EXTENSIÓN: para ampliar

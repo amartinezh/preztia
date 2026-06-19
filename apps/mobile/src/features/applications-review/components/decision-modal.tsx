@@ -4,6 +4,7 @@ import {
   approveApplicationInput,
   rejectApplicationInput,
   type ApproveApplicationInput,
+  type ExtractedIdentityView,
   type PlanOfferView,
   type RejectApplicationInput,
 } from "@preztiaos/contracts";
@@ -21,6 +22,7 @@ import {
 } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
+import { BorrowerPicker } from "./borrower-picker";
 
 // El dominio interpreta interestPct como base-mil (200 = 20%); la UI captura % y convierte.
 const PERCENT_TO_BASE_THOUSAND = 10;
@@ -31,6 +33,10 @@ type Props = {
   mode: DecisionMode;
   applicantPhone: string;
   planOffer: PlanOfferView;
+  /** Zona resuelta automáticamente desde la línea de WhatsApp (no editable). */
+  zoneId: string | null;
+  /** Datos del cliente extraídos por OCR (para crear el deudor con un clic). */
+  extractedIdentity: ExtractedIdentityView | null;
   approving: boolean;
   rejecting: boolean;
   submitError: string | null;
@@ -60,14 +66,17 @@ function planTerms(planOffer: PlanOfferView) {
 type ApproveErrors = Partial<Record<keyof ApproveApplicationInput, string>>;
 
 /**
- * Modal de decisión manual del coordinador. En modo "approve" captura los términos del crédito
- * (mismo zod del contrato) + motivo y, al confirmar, aprueba el expediente y genera el crédito.
- * En modo "reject" pide solo el motivo. La validación de frontera vive en el contrato.
+ * Modal de decisión manual del coordinador. En modo "approve": la zona se asigna automáticamente
+ * (línea de WhatsApp → zona) y el deudor se crea desde el OCR o se elige de los existentes; el
+ * botón de aprobar solo se habilita con un `Deudor (UUID)` válido (regla de negocio). Los términos
+ * vienen del plan negociado si lo hubo; si no, se capturan a mano. En "reject" pide solo el motivo.
  */
 export function DecisionModal({
   mode,
   applicantPhone,
   planOffer,
+  zoneId,
+  extractedIdentity,
   approving,
   rejecting,
   submitError,
@@ -77,8 +86,7 @@ export function DecisionModal({
 }: Props) {
   const { t } = useT();
 
-  const [borrowerId, setBorrowerId] = useState("");
-  const [zoneId, setZoneId] = useState("");
+  const [borrower, setBorrower] = useState<{ id: string; label: string } | null>(null);
   const [principal, setPrincipal] = useState("");
   const [interest, setInterest] = useState("");
   const [installments, setInstallments] = useState("");
@@ -87,11 +95,14 @@ export function DecisionModal({
 
   // Si hay un plan negociado, sus términos definen el crédito: no se piden a mano (se ocultan).
   const fromPlan = planTerms(planOffer);
+  // Regla de negocio: aprobar requiere deudor asignado y zona resuelta.
+  const canApprove = borrower != null && zoneId != null;
 
   const submitApprove = () => {
+    if (!borrower || !zoneId) return;
     const candidate = {
-      borrowerId: borrowerId.trim(),
-      zoneId: zoneId.trim(),
+      borrowerId: borrower.id,
+      zoneId,
       principalMinor: fromPlan ? fromPlan.principalMinor : majorToMinor(Number(principal)),
       interestPct: fromPlan ? fromPlan.interestPct : Number(interest) * PERCENT_TO_BASE_THOUSAND,
       installmentsCount: fromPlan ? fromPlan.installmentsCount : Math.trunc(Number(installments)),
@@ -137,11 +148,24 @@ export function DecisionModal({
               <Text variant="caption" tone="muted">
                 Generarás el crédito para {applicantPhone}.
               </Text>
-              <Field label="Deudor (UUID)" error={errors.borrowerId} required>
-                <Input autoCapitalize="none" value={borrowerId} onChangeText={setBorrowerId} invalid={!!errors.borrowerId} />
+
+              {/* Zona: asignada automáticamente desde la línea de WhatsApp (no editable). */}
+              <Field label={t("review.approve.zone")}>
+                {zoneId ? (
+                  <Text variant="code">{zoneId}</Text>
+                ) : (
+                  <Banner tone="warning" title={t("review.approve.zoneMissing")} />
+                )}
               </Field>
-              <Field label="Zona (UUID)" error={errors.zoneId} required>
-                <Input autoCapitalize="none" value={zoneId} onChangeText={setZoneId} invalid={!!errors.zoneId} />
+
+              {/* Deudor: crear desde OCR o elegir existente. Habilita el botón de aprobar. */}
+              <Field label={t("review.approve.borrower")}>
+                <BorrowerPicker
+                  extractedIdentity={extractedIdentity}
+                  applicantPhone={applicantPhone}
+                  selected={borrower}
+                  onSelect={setBorrower}
+                />
               </Field>
 
               {fromPlan ? (
@@ -182,7 +206,18 @@ export function DecisionModal({
               <Field label={t("review.approve.reason")} error={errors.reason} required>
                 <Input value={reason} onChangeText={setReason} invalid={!!errors.reason} multiline />
               </Field>
-              <Button label={t("review.approve.submit")} loading={approving} block onPress={submitApprove} />
+              <Button
+                label={t("review.approve.submit")}
+                loading={approving}
+                disabled={!canApprove}
+                block
+                onPress={submitApprove}
+              />
+              {!canApprove ? (
+                <Text variant="caption" tone="muted">
+                  {t("review.approve.needBorrower")}
+                </Text>
+              ) : null}
             </>
           ) : null}
 

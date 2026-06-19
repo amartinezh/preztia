@@ -35,6 +35,79 @@ export const listPaymentsOutput = z.object({
   total: z.number().int(),
 });
 
+// Estados de un INTENTO de pago fallido/pendiente (para la vista de auditoría de pagos).
+export const paymentStatusEnum = z.enum([
+  "RECEIVED",
+  "VERIFIED",
+  "UNVERIFIED",
+  "REJECTED_FRAUD",
+  "REJECTED_INVALID",
+]);
+export type PaymentStatusContract = z.infer<typeof paymentStatusEnum>;
+
+// Listado de intentos a nivel tenant (auditoría). `failedOnly` filtra los no verificados.
+export const listPaymentAttemptsQuery = paginationQuery.extend({
+  status: paymentStatusEnum.optional(),
+  failedOnly: z.coerce.boolean().optional(),
+});
+
+// Una entrada del proceso (bitácora append-only `payment_event`): qué pasó y cuándo.
+export const paymentEventView = z.object({
+  type: z.string(),
+  payload: z.unknown().nullable(),
+  createdAt: z.string(),
+});
+export type PaymentEventView = z.infer<typeof paymentEventView>;
+
+// Detalle completo de un intento de pago para auditoría (coordinador/admin). Incluye PII completa
+// (el revisor está autorizado), la extracción íntegra de la IA, la respuesta del banco y el proceso.
+export const paymentDetail = z.object({
+  id: z.string().uuid(),
+  creditId: z.string().uuid().nullable(),
+  status: paymentStatusEnum,
+  amountMinor: z.number().int().nullable(),
+  currency: z.string(),
+  paidAt: z.string().nullable(),
+  payerPhone: z.string(),
+  payerName: z.string().nullable(),
+  payerTaxId: z.string().nullable(),
+  payerBankName: z.string().nullable(),
+  receiverPixKey: z.string().nullable(),
+  endToEndId: z.string().nullable(),
+  txid: z.string().nullable(),
+  // Verificación bancaria: estado + respuesta cruda del banco (por qué se confirmó/no).
+  bankStatus: z.enum(["CONFIRMED", "NOT_FOUND", "UNAVAILABLE"]).nullable(),
+  bankResponse: z.unknown().nullable(),
+  verifiedAt: z.string().nullable(),
+  reconciliationAttempts: z.number().int(),
+  lastReconciliationAt: z.string().nullable(),
+  // Metadata íntegra extraída por la IA del comprobante (campos variables por banco).
+  extraction: z.record(z.unknown()).nullable(),
+  // ¿Hay imagen del comprobante almacenada para abrir/zoom?
+  hasReceipt: z.boolean(),
+  mimeType: z.string().nullable(),
+  createdAt: z.string(),
+  // Motivo(s) por los que el intento fue marcado/no verificado (para el banner destacado).
+  flagReasons: z.array(z.string()).nullable(),
+  // Proceso completo (antifraude → verificación bancaria → decisión → validación manual).
+  events: z.array(paymentEventView),
+});
+export type PaymentDetail = z.infer<typeof paymentDetail>;
+
+// Validación MANUAL: el coordinador/admin hace efectivo el abono. Motivo OBLIGATORIO; puede
+// corregir el monto si el OCR falló (por defecto usa el monto extraído).
+export const manualVerifyPaymentInput = z.object({
+  reason: z.string().trim().min(5).max(500),
+  amountMinor: z.number().int().positive().optional(),
+});
+export type ManualVerifyPaymentInput = z.infer<typeof manualVerifyPaymentInput>;
+
+export const manualVerifyPaymentOutput = z.object({
+  id: z.string().uuid(),
+  status: paymentStatusEnum,
+  balanceMinor: z.number().int(),
+});
+
 export const installmentSummary = z.object({
   seq: z.number().int(),
   dueDate: z.string(),
@@ -107,5 +180,30 @@ export const paymentsContract = c.router({
     body: z.object({}),
     responses: { 200: reconcileOutput },
     summary: "Concilia contra el banco los pagos pendientes de verificación",
+  },
+  listPaymentAttempts: {
+    method: "GET",
+    path: "/payments",
+    headers: tenantHeaders,
+    query: listPaymentAttemptsQuery,
+    responses: { 200: listPaymentsOutput },
+    summary: "Listado de intentos de pago a nivel tenant (auditoría; filtrable por estado)",
+  },
+  getPaymentDetail: {
+    method: "GET",
+    path: "/payments/:paymentId",
+    pathParams: z.object({ paymentId: z.string().uuid() }),
+    headers: tenantHeaders,
+    responses: { 200: paymentDetail },
+    summary: "Detalle completo de un intento de pago (metadata IA + banco + proceso)",
+  },
+  manualVerifyPayment: {
+    method: "POST",
+    path: "/payments/:paymentId/manual-verification",
+    pathParams: z.object({ paymentId: z.string().uuid() }),
+    headers: tenantHeaders,
+    body: manualVerifyPaymentInput,
+    responses: { 200: manualVerifyPaymentOutput },
+    summary: "Valida manualmente un pago (coordinador/admin) con motivo obligatorio: hace efectivo el abono",
   },
 });

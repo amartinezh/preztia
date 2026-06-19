@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { useRouter, type Href } from "expo-router";
 import type { Expense } from "@preztiaos/contracts";
 import {
   Badge,
@@ -42,13 +42,22 @@ const EXPENSE_TONE: Record<Expense["status"], BadgeTone> = {
 /** Caja: reporte diario, liquidada (cierre encadenado) y gastos (maker-checker). */
 export function CashScreen() {
   const { t } = useT();
+  const router = useRouter();
   const { role } = useSession();
   const manages = can(role, "cash:manage");
 
   return (
     <Screen>
       <Stack gap="lg">
-        <Text variant="subtitle">{t("cash.title")}</Text>
+        <Row className="justify-between items-center">
+          <Text variant="subtitle">{t("cash.title")}</Text>
+          <Button
+            label={t("cash.boxes.link")}
+            variant="secondary"
+            size="sm"
+            onPress={() => router.push("/cash/boxes" as Href)}
+          />
+        </Row>
         <DailyReportCard />
         <SettlementSection canManage={manages} />
         <ExpensesSection canManage={manages} />

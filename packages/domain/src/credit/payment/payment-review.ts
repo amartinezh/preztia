@@ -6,6 +6,7 @@
 // Análoga a `decideDocumentReview`: no conoce IA, BD ni HTTP; recibe señales ya
 // resueltas por la infraestructura y devuelve la decisión auditable.
 
+import { ConflictError } from "../../shared/money";
 import { type FraudAssessment, isAcceptable } from "../application/fraud";
 
 /** Estado de un pago registrado a partir de un comprobante. */
@@ -15,6 +16,17 @@ export type PaymentStatus =
   | "UNVERIFIED"
   | "REJECTED_FRAUD"
   | "REJECTED_INVALID";
+
+/**
+ * Regla de la validación MANUAL del coordinador/admin: solo puede hacerse efectiva una vez. Un
+ * pago ya VERIFIED no se revalida (idempotencia del dinero); cualquier otro estado (recibido, sin
+ * verificar, rechazado por fraude/inválido) sí puede aceptarse manualmente a discreción.
+ */
+export function assertManuallyVerifiable(status: PaymentStatus): void {
+  if (status === "VERIFIED") {
+    throw new ConflictError("El pago ya está verificado; no puede validarse de nuevo");
+  }
+}
 
 /**
  * Datos extraídos del comprobante PIX. Los campos varían según el banco emisor:

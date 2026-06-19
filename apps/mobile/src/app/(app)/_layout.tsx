@@ -37,6 +37,12 @@ export default function AppLayout() {
         <Stack.Screen name="credit/[id]" options={{ title: t("credit.list.title") }} />
         <Stack.Screen name="payment/[creditId]" options={{ title: t("payments.register"), presentation: "modal" }} />
         <Stack.Screen name="collectors/[id]" options={{ title: t("collectors.assign.title") }} />
+        <Stack.Screen name="applications/[id]" options={{ title: t("review.detail.title") }} />
+        <Stack.Screen name="account/[creditId]" options={{ title: t("accounts.detail.title") }} />
+        <Stack.Screen name="payment-plans" options={{ title: t("plans.tab") }} />
+        <Stack.Screen name="rejections" options={{ title: t("review.rejections") }} />
+        <Stack.Screen name="lists" options={{ title: t("lists.title") }} />
+        <Stack.Screen name="payments/[id]" options={{ title: t("payment.detail.title") }} />
       </Stack>
     </View>
   );

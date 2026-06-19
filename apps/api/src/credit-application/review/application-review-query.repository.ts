@@ -6,9 +6,12 @@ import type {
   ApplicationReviewSummary,
   ConversationEntry,
   CreditApplicationStatus,
+  ExtractedIdentityView,
   RejectionSummary,
   ValidationRunView,
 } from '@preztiaos/contracts';
+import { mapIdentityFields } from '@preztiaos/application';
+import { splitFullName } from '@preztiaos/domain';
 import { withTenantTxFor } from '../../tenancy/unit-of-work';
 import { zoneScopePredicate } from '../../iam/zone-scope';
 import type { Session } from '../../auth/require-role';
@@ -101,6 +104,8 @@ export class ApplicationReviewQueryRepository {
           offeredPrincipalMinor: schema.creditApplication.offeredPrincipalMinor,
           offerExpiresAt: schema.creditApplication.offerExpiresAt,
           clientAcceptedAt: schema.creditApplication.clientAcceptedAt,
+          requestedAmountMinor: schema.creditApplication.requestedAmountMinor,
+          zonePath: schema.creditApplication.zonePath,
         })
         .from(schema.creditApplication)
         .where(
@@ -130,6 +135,23 @@ export class ApplicationReviewQueryRepository {
         offeredPlanInstallments = planRow?.installmentsCount ?? null;
         offeredPlanInterestPct = planRow?.interestPct ?? null;
       }
+
+      // Zona resuelta automáticamente (mapeo línea de WhatsApp → zona): UUID a partir del zone_path.
+      let zoneId: string | null = null;
+      if (app.zonePath) {
+        const [zoneRow] = await tx
+          .select({ id: schema.zone.id })
+          .from(schema.zone)
+          .where(eq(schema.zone.path, app.zonePath))
+          .limit(1);
+        zoneId = zoneRow?.id ?? null;
+      }
+
+      // Datos del cliente extraídos por OCR del documento de identidad (la corrida más reciente).
+      const extractedIdentity = await this.latestIdentity(
+        tx,
+        input.applicationId,
+      );
 
       const docs = await tx
         .select({
@@ -186,6 +208,9 @@ export class ApplicationReviewQueryRepository {
         applicantPhone: app.applicantPhone,
         status: app.status,
         createdAt: app.createdAt.toISOString(),
+        requestedAmountMinor: app.requestedAmountMinor ?? null,
+        zoneId,
+        extractedIdentity,
         documents: docs.map((d) => {
           const extraction = extractions.get(d.documentType);
           return {
@@ -417,6 +442,39 @@ export class ApplicationReviewQueryRepository {
       });
     }
     return map;
+  }
+
+  /**
+   * Datos del cliente extraídos por OCR del documento de identidad (corrida más reciente),
+   * normalizados (`mapIdentityFields`) y con el nombre partido en nombre/apellido para precargar
+   * la creación del cliente. `null` si aún no hay extracción de identidad.
+   */
+  private async latestIdentity(
+    tx: Parameters<Parameters<typeof withTenantTxFor>[1]>[0],
+    applicationId: string,
+  ): Promise<ExtractedIdentityView | null> {
+    const [row] = await tx
+      .select({ fields: schema.documentExtraction.fields })
+      .from(schema.documentExtraction)
+      .where(
+        and(
+          eq(schema.documentExtraction.applicationId, applicationId),
+          eq(schema.documentExtraction.documentType, 'IDENTITY_DOCUMENT'),
+        ),
+      )
+      .orderBy(desc(schema.documentExtraction.createdAt))
+      .limit(1);
+    if (!row?.fields) return null;
+
+    const identity = mapIdentityFields(row.fields);
+    const { firstName, lastName } = splitFullName(identity.nombre);
+    return {
+      nationalId: identity.cpf,
+      firstName,
+      lastName,
+      fullName: identity.nombre,
+      birthDate: identity.fechaNacimiento,
+    };
   }
 }
 

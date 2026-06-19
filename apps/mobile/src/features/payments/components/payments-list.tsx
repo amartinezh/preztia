@@ -1,33 +1,21 @@
 import { useMemo } from "react";
-import type { BadgeTone } from "@preztiaos/ui";
+import { Pressable } from "react-native";
+import { useRouter, type Href } from "expo-router";
 import type { PaymentSummary } from "@preztiaos/contracts";
 import { Badge, Button, Card, EmptyState, MoneyText, Row, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
 import { usePaymentsList } from "../api/queries";
-
-function paymentBadge(status: PaymentSummary["status"]): { tone: BadgeTone; label: string } {
-  switch (status) {
-    case "VERIFIED":
-      return { tone: "success", label: "Verificado" };
-    case "RECEIVED":
-      return { tone: "info", label: "Recibido" };
-    case "UNVERIFIED":
-      return { tone: "warning", label: "Sin verificar" };
-    case "REJECTED_FRAUD":
-      return { tone: "danger", label: "Fraude" };
-    case "REJECTED_INVALID":
-      return { tone: "danger", label: "Inválido" };
-  }
-}
+import { paymentBadge } from "./payment-status";
 
 /**
  * Lista de pagos de un crédito. Muestra SOLO los campos que el contrato expone (con CPF/CNPJ
- * ya enmascarado); la PII completa nunca sale de la BD bajo RLS. Sin FlatList para evitar
- * virtualización anidada dentro del ScrollView de la pantalla de cartera.
+ * ya enmascarado); la PII completa nunca sale de la BD bajo RLS. Cada fila abre el detalle/auditoría
+ * del intento. Sin FlatList para evitar virtualización anidada dentro del ScrollView de la cartera.
  */
 export function PaymentsList({ creditId }: { creditId: string }) {
   const { t } = useT();
+  const router = useRouter();
   const query = usePaymentsList(creditId);
 
   const items = useMemo<PaymentSummary[]>(
@@ -44,24 +32,26 @@ export function PaymentsList({ creditId }: { creditId: string }) {
       {items.map((p) => {
         const badge = paymentBadge(p.status);
         return (
-          <Card key={p.id}>
-            <Row className="justify-between">
-              <Stack gap="xs">
-                <Text variant="label">{p.payerName ?? "—"}</Text>
-                <Text variant="caption" tone="muted">
-                  {p.payerTaxIdMasked ?? p.payerBankName ?? p.endToEndId ?? p.id.slice(0, 8)}
-                </Text>
-              </Stack>
-              <Stack gap="xs" className="items-end">
-                {p.amountMinor !== null ? (
-                  <MoneyText variant="label" amountMinor={p.amountMinor} currency={p.currency} />
-                ) : (
-                  <Text variant="label" tone="muted">—</Text>
-                )}
-                <Badge tone={badge.tone} label={badge.label} />
-              </Stack>
-            </Row>
-          </Card>
+          <Pressable key={p.id} onPress={() => router.push(`/payments/${p.id}` as Href)}>
+            <Card>
+              <Row className="justify-between">
+                <Stack gap="xs">
+                  <Text variant="label">{p.payerName ?? "—"}</Text>
+                  <Text variant="caption" tone="muted">
+                    {p.payerTaxIdMasked ?? p.payerBankName ?? p.endToEndId ?? p.id.slice(0, 8)}
+                  </Text>
+                </Stack>
+                <Stack gap="xs" className="items-end">
+                  {p.amountMinor !== null ? (
+                    <MoneyText variant="label" amountMinor={p.amountMinor} currency={p.currency} />
+                  ) : (
+                    <Text variant="label" tone="muted">—</Text>
+                  )}
+                  <Badge tone={badge.tone} label={badge.label} />
+                </Stack>
+              </Row>
+            </Card>
+          </Pressable>
         );
       })}
       {query.hasNextPage ? (

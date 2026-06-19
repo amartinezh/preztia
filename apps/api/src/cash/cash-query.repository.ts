@@ -12,12 +12,18 @@ import {
 } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type {
+  CashDashboardOutput,
+  CashTransactionRow,
   DailyReport,
   Expense,
   ExpenseStatus,
   Settlement,
 } from '@preztiaos/contracts';
+import type { CashTxDirection, CashTxKind } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+
+// Suma firmada de un libro mayor: IN suma, OUT resta. Reutilizada por el dashboard.
+const signedSum = sql<number>`COALESCE(SUM(CASE WHEN ${schema.cashTransaction.direction} = 'IN' THEN ${schema.cashTransaction.amountMinor} ELSE -${schema.cashTransaction.amountMinor} END), 0)`;
 
 // Read models de CAJA: listado de gastos, historial de liquidadas y reporte diario. Solo
 // lectura; RLS aísla por tenant. La moneda del tenant la fija el despliegue (CREDIT_CURRENCY).
@@ -85,6 +91,149 @@ export class CashQueryRepository {
         cajaActualMinor: row.cajaActualMinor,
         cuentasNuevas: row.cuentasNuevas,
         cuentasTerminadas: row.cuentasTerminadas,
+        createdAt: row.createdAt.toISOString(),
+      }));
+      return { items, total: Number(totalRow?.value ?? 0) };
+    });
+  }
+
+  // Dashboard financiero (Req 5): saldo total + saldo por caja en una sola consulta agrupada
+  // (sin N+1). El saldo de cada caja es Σ asientos firmados; el total es Σ de las cajas activas.
+  async getCashDashboard(input: {
+    tenantId: string;
+    currency: string;
+  }): Promise<CashDashboardOutput> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const rows = await tx
+        .select({
+          id: schema.cashBox.id,
+          name: schema.cashBox.name,
+          type: schema.cashBox.type,
+          currency: schema.cashBox.currency,
+          bankAccountId: schema.cashBox.bankAccountId,
+          bankName: schema.tenantBankAccount.bankName,
+          balanceMinor: signedSum,
+        })
+        .from(schema.cashBox)
+        .leftJoin(
+          schema.cashTransaction,
+          eq(schema.cashTransaction.cashBoxId, schema.cashBox.id),
+        )
+        .leftJoin(
+          schema.tenantBankAccount,
+          eq(schema.tenantBankAccount.id, schema.cashBox.bankAccountId),
+        )
+        .where(eq(schema.cashBox.active, true))
+        .groupBy(schema.cashBox.id, schema.tenantBankAccount.bankName);
+
+      // Última conciliación por caja (la más reciente): para resaltar descuadres (Req 7).
+      const recRows = await tx
+        .selectDistinctOn([schema.bankReconciliation.cashBoxId], {
+          cashBoxId: schema.bankReconciliation.cashBoxId,
+          status: schema.bankReconciliation.status,
+          differenceMinor: schema.bankReconciliation.differenceMinor,
+        })
+        .from(schema.bankReconciliation)
+        .orderBy(
+          schema.bankReconciliation.cashBoxId,
+          desc(schema.bankReconciliation.createdAt),
+        );
+      const lastByBox = new Map(
+        recRows.map((r) => [
+          r.cashBoxId,
+          { status: r.status, differenceMinor: r.differenceMinor },
+        ]),
+      );
+
+      const boxes = rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        currency: row.currency,
+        balanceMinor: Number(row.balanceMinor ?? 0),
+        bankAccountId: row.bankAccountId,
+        bankName: row.bankName ?? null,
+        lastReconciliation: lastByBox.get(row.id) ?? null,
+      }));
+
+      const totalMinor = boxes.reduce((acc, b) => acc + b.balanceMinor, 0);
+      const unidentifiedMinor = boxes
+        .filter((b) => b.type === 'TRANSIT')
+        .reduce((acc, b) => acc + b.balanceMinor, 0);
+
+      return { totalMinor, currency: input.currency, boxes, unidentifiedMinor };
+    });
+  }
+
+  // Historial detallado de movimientos con filtros (Req 5). Paginado; RLS aísla por tenant.
+  async listCashTransactions(input: {
+    tenantId: string;
+    page: number;
+    pageSize: number;
+    cashBoxId?: string;
+    kind?: CashTxKind;
+    direction?: CashTxDirection;
+    userId?: string;
+    from?: string;
+    to?: string;
+  }): Promise<{ items: CashTransactionRow[]; total: number }> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const conds: SQL[] = [];
+      if (input.cashBoxId)
+        conds.push(eq(schema.cashTransaction.cashBoxId, input.cashBoxId));
+      if (input.kind) conds.push(eq(schema.cashTransaction.kind, input.kind));
+      if (input.direction)
+        conds.push(eq(schema.cashTransaction.direction, input.direction));
+      if (input.userId)
+        conds.push(eq(schema.cashTransaction.createdBy, input.userId));
+      if (input.from)
+        conds.push(gte(schema.cashTransaction.createdAt, new Date(input.from)));
+      if (input.to)
+        conds.push(lte(schema.cashTransaction.createdAt, new Date(input.to)));
+      const where = conds.length ? and(...conds) : undefined;
+
+      const [totalRow] = await tx
+        .select({ value: count() })
+        .from(schema.cashTransaction)
+        .where(where);
+
+      const rows = await tx
+        .select({
+          id: schema.cashTransaction.id,
+          cashBoxId: schema.cashTransaction.cashBoxId,
+          boxName: schema.cashBox.name,
+          direction: schema.cashTransaction.direction,
+          kind: schema.cashTransaction.kind,
+          amountMinor: schema.cashTransaction.amountMinor,
+          currency: schema.cashTransaction.currency,
+          reason: schema.cashTransaction.reason,
+          paymentId: schema.cashTransaction.paymentId,
+          transferGroupId: schema.cashTransaction.transferGroupId,
+          createdBy: schema.cashTransaction.createdBy,
+          createdAt: schema.cashTransaction.createdAt,
+        })
+        .from(schema.cashTransaction)
+        .innerJoin(
+          schema.cashBox,
+          eq(schema.cashBox.id, schema.cashTransaction.cashBoxId),
+        )
+        .where(where)
+        .orderBy(desc(schema.cashTransaction.createdAt))
+        .limit(input.pageSize)
+        .offset((input.page - 1) * input.pageSize);
+
+      const items: CashTransactionRow[] = rows.map((row) => ({
+        id: row.id,
+        cashBoxId: row.cashBoxId,
+        boxName: row.boxName,
+        direction: row.direction,
+        kind: row.kind,
+        amountMinor: row.amountMinor,
+        currency: row.currency,
+        reason: row.reason,
+        paymentId: row.paymentId,
+        transferGroupId: row.transferGroupId,
+        createdBy: row.createdBy,
         createdAt: row.createdAt.toISOString(),
       }));
       return { items, total: Number(totalRow?.value ?? 0) };

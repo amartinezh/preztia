@@ -10,6 +10,7 @@ import {
 } from '@preztiaos/application';
 import { type AllocationResult, type PixReceiptData } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
 
 /**
  * Adaptador del puerto ReconciliationRepository: persistencia de la conciliación
@@ -115,6 +116,9 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         .returning({
           id: schema.payment.id,
           creditId: schema.payment.creditId,
+          receiverPixKey: schema.payment.receiverPixKey,
+          amountMinor: schema.payment.amountMinor,
+          currency: schema.payment.currency,
         });
       if (!transitioned.length) return; // otro proceso ya lo verificó
 
@@ -168,6 +172,16 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
           payload: event.payload ?? null,
         })),
       );
+
+      // El pago recién confirmado entra a su caja (bancaria por llave PIX, o tránsito + alerta).
+      await routeVerifiedPaymentToBox(tx, {
+        tenantId: input.tenantId,
+        paymentId: input.paymentId,
+        receiverPixKey: transitioned[0].receiverPixKey,
+        amountMinor: transitioned[0].amountMinor,
+        currency: transitioned[0].currency,
+        createdBy: null,
+      });
     });
   }
 

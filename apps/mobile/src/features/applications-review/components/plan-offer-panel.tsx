@@ -39,6 +39,8 @@ type Props = {
   planOffer: PlanOfferView;
   offering: boolean;
   offerError: string | null;
+  /** Monto que el cliente solicitó por WhatsApp (unidades menores): prellena el campo Capital. */
+  requestedAmountMinor: number | null;
   /** Lanza la oferta; resuelve en éxito (cierra el modal) o rechaza (lo deja abierto con el error). */
   onOffer: (principalMinor: number) => Promise<void>;
 };
@@ -46,12 +48,21 @@ type Props = {
 /**
  * Panel de NEGOCIACIÓN del plan (Fase 10): muestra el sub-estado de la oferta + la bandera de
  * aceptación del cliente y ofrece el "botón azul" para ofertar planes por WhatsApp. El monto del
- * préstamo se captura en un modal; el resto de términos los aporta el plan (en el servidor).
+ * préstamo se captura en un modal (prellenado con lo que el cliente pidió por WhatsApp); el resto
+ * de términos los aporta el plan (en el servidor).
  */
-export function PlanOfferPanel({ planOffer, offering, offerError, onOffer }: Props) {
+export function PlanOfferPanel({
+  planOffer,
+  offering,
+  offerError,
+  requestedAmountMinor,
+  onOffer,
+}: Props) {
   const { t } = useT();
+  // Capital prellenado con el monto que el cliente declaró por WhatsApp (editable por el coordinador).
+  const requestedMajor = requestedAmountMinor != null ? String(minorToMajor(requestedAmountMinor)) : "";
   const [modalOpen, setModalOpen] = useState(false);
-  const [principal, setPrincipal] = useState("");
+  const [principal, setPrincipal] = useState(requestedMajor);
 
   const offered = planOffer.status !== "NOT_OFFERED";
 
@@ -61,10 +72,15 @@ export function PlanOfferPanel({ planOffer, offering, offerError, onOffer }: Pro
     try {
       await onOffer(minor);
       setModalOpen(false);
-      setPrincipal("");
     } catch {
       // El error se muestra vía `offerError`; el modal permanece abierto para reintentar.
     }
+  };
+
+  // Abre el modal reponiendo el monto solicitado por el cliente (prellenado editable).
+  const openModal = () => {
+    setPrincipal(requestedMajor);
+    setModalOpen(true);
   };
 
   return (
@@ -108,7 +124,7 @@ export function PlanOfferPanel({ planOffer, offering, offerError, onOffer }: Pro
         <Button
           label={offered ? t("offer.reoffer") : t("offer.offer")}
           loading={offering}
-          onPress={() => setModalOpen(true)}
+          onPress={openModal}
         />
       ) : null}
 

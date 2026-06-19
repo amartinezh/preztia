@@ -1,0 +1,78 @@
+name: CI
+
+# Gate de calidad obligatorio (CLAUDE.md §"verde en CI"): build + typecheck + lint + test
+# (unitarios y de integración) en cada push a main y en cada PR. Turbo cachea por tarea.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Postgres real para los tests de integración del dinero (RLS, advisory lock, ruteo).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: preztia
+          POSTGRES_PASSWORD: preztia
+          POSTGRES_DB: preztiaos
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U preztia -d preztiaos"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://preztia:preztia@localhost:5432/preztiaos
+      APP_DATABASE_URL: postgres://app:app@localhost:5432/preztiaos
+      PLATFORM_DATABASE_URL: postgres://platform:platform@localhost:5432/preztiaos
+      JWT_SECRET: test-secret-please-change
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm toma su versión del campo `packageManager` del package.json (pnpm@9).
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Build topológico primero: apps/api consume el dist/ de los paquetes.
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Los scripts de lint usan `--fix`; si tuvieron que corregir algo, el árbol queda
+      # sucio y fallamos (convierte el --fix en un gate real sin cambiar los scripts).
+      - name: Lint
+        run: |
+          pnpm lint
+          git diff --exit-code
+
+      - name: Test (unitarios)
+        run: pnpm test
+
+      # --- Integración: misma secuencia de bootstrap que el entorno local ---
+      # 1) roles app/platform + extensiones (ltree, pgcrypto); 2) migraciones (dueño preztia).
+      - name: Bootstrap DB roles
+        run: PGPASSWORD=preztia psql -h localhost -U preztia -d preztiaos -v ON_ERROR_STOP=1 -f docker/initdb/01-init.sql
+
+      - name: Migrate
+        run: pnpm db:migrate
+
+      - name: Test (integración del dinero)
+        run: pnpm --filter api test:integration

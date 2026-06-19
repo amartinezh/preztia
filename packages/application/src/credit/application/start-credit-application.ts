@@ -10,8 +10,9 @@ import type {
 } from "../../conversations/text/ports";
 import type { ApplicantRef, CreditApplicationRepository, RequiredDocumentCatalog } from "./ports";
 
-const INTRO =
-  "¡Perfecto! Iniciemos tu solicitud de crédito. Te pediré los documentos requeridos, uno a la vez.";
+const INTRO = "¡Perfecto! Iniciemos tu solicitud de crédito.";
+// El monto se captura primero (lo registra `RecordAmountReplyHandler`); luego se piden documentos.
+const AMOUNT_QUESTION = "¿Cuánto dinero deseas solicitar?";
 const RESUME = "Ya tienes una solicitud en curso. Continuemos donde quedamos.";
 const ALREADY_SUBMITTED =
   "Ya recibimos todos tus documentos y tu solicitud está *en revisión*; te avisaremos el resultado. " +
@@ -56,12 +57,9 @@ export class StartCreditApplicationHandler
     const application = createCreditApplication(specs.map((spec) => spec.key));
     await this.applications.create({ applicant: input, application });
 
-    const firstDocument = nextPendingDocument(application);
-    // createCreditApplication garantiza al menos un documento pendiente.
-    const firstSpec = firstDocument ? findDocumentSpec(specs, firstDocument) : undefined;
-    if (firstSpec) {
-      await this.sender.sendText(recipient, `${INTRO}\n\n${firstSpec.title}`);
-    }
+    // Primer paso del flujo: preguntar el monto. Al responderlo, `RecordAmountReplyHandler`
+    // registra el valor y pide el primer documento.
+    await this.sender.sendText(recipient, `${INTRO}\n\n${AMOUNT_QUESTION}`);
   }
 
   async restart(input: ApplicantRef): Promise<void> {
