@@ -246,6 +246,13 @@
       "when": 1781832710906,
       "tag": "0034_cash_tx_system_routing",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1781877699623,
+      "tag": "0035_tenant_currency",
+      "breakpoints": true
     }
   ]
 }

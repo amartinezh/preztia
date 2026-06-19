@@ -6,6 +6,7 @@ import {
   type TenantBankAccountRepository,
 } from '@preztiaos/application';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { decryptOptionalSecret } from '../shared/secret-cipher';
 
 /** Adaptador del puerto TenantBankAccountRepository (lectura bajo RLS). */
 @Injectable()
@@ -42,7 +43,8 @@ export class TenantBankAccountDrizzleRepository implements TenantBankAccountRepo
             eq(schema.tenantBankAccount.active, true),
           ),
         );
-      return row?.apiKey ?? null;
+      // Cifrada en reposo: se descifra para que el adaptador bancario consulte.
+      return decryptOptionalSecret(row?.apiKey);
     });
   }
 }

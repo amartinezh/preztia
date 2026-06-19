@@ -26,7 +26,7 @@ import { withTenantTxFor } from '../tenancy/unit-of-work';
 const signedSum = sql<number>`COALESCE(SUM(CASE WHEN ${schema.cashTransaction.direction} = 'IN' THEN ${schema.cashTransaction.amountMinor} ELSE -${schema.cashTransaction.amountMinor} END), 0)`;
 
 // Read models de CAJA: listado de gastos, historial de liquidadas y reporte diario. Solo
-// lectura; RLS aísla por tenant. La moneda del tenant la fija el despliegue (CREDIT_CURRENCY).
+// lectura; RLS aísla por tenant. La moneda la resuelve el controlador por tenant (tenant_config).
 
 @Injectable()
 export class CashQueryRepository {

@@ -11,6 +11,7 @@ import {
   type PixReceiptData,
 } from '@preztiaos/domain';
 import { fetchWithRetry } from '../../shared/fetch-retry';
+import { decryptOptionalSecret } from '../../shared/secret-cipher';
 import { withTenantTxFor } from '../../tenancy/unit-of-work';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -153,7 +154,7 @@ export class GeminiPaymentClassifier implements MediaClassifier {
         .select({ apiKey: schema.tenantConfig.aiApiKey })
         .from(schema.tenantConfig)
         .where(eq(schema.tenantConfig.tenantId, tenantId));
-      return row?.apiKey ?? null;
+      return decryptOptionalSecret(row?.apiKey);
     });
   }
 }

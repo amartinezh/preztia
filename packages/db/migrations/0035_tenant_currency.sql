@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_config" ADD COLUMN "currency" text DEFAULT 'COP' NOT NULL;

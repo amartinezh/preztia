@@ -30,16 +30,13 @@ import { Idempotent } from '../observability/idempotent.decorator';
 import { ExpenseDrizzleRepository } from './expense.repository';
 import { SettlementDrizzleRepository } from './settlement.repository';
 import { CashQueryRepository } from './cash-query.repository';
+import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
 const uuid = z.string().uuid();
 
 const DATA_PLANE_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
 // Revisar gastos y cerrar liquidadas es del socio/coordinador (maker-checker).
 const MANAGER_ROLES = ['ADMIN', 'COORDINATOR'] as const;
-
-function currency(): string {
-  return process.env.CREDIT_CURRENCY ?? 'COP';
-}
 
 /**
  * Frontera HTTP de CAJA: gastos (maker-checker), liquidadas (cierre encadenado) y reporte
@@ -140,7 +137,7 @@ export class CashController {
       cuentasNuevas: p.cuentasNuevas,
       cuentasTerminadas: p.cuentasTerminadas,
       periodStart: p.periodStart.toISOString(),
-      currency: currency(),
+      currency: await resolveTenantCurrency(tenant),
     };
   }
 
@@ -205,7 +202,7 @@ export class CashController {
     return this.queries.getDailyReport({
       tenantId: tenant,
       date,
-      currency: currency(),
+      currency: await resolveTenantCurrency(tenant),
     });
   }
 }

@@ -6,6 +6,7 @@ import type {
   AssistantConfigView,
 } from '@preztiaos/application';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { encryptSecret } from '../shared/secret-cipher';
 
 /**
  * Adaptador del asistente de WhatsApp: lee/escribe `tenant_config` (knowledge_base, ai_provider,
@@ -40,12 +41,18 @@ export class AssistantConfigRepository implements AssistantConfigStore {
     aiApiKey?: string;
   }): Promise<void> {
     const { tenantId, knowledgeBase, aiProvider, aiApiKey } = input;
-    // Solo se tocan las columnas presentes en el parche. `aiApiKey` vacío borra la credencial.
+    // Credencial de IA cifrada en reposo (AES-256-GCM). `aiApiKey` vacío borra la credencial.
+    const encryptedKey =
+      aiApiKey === undefined
+        ? undefined
+        : aiApiKey === ''
+          ? null
+          : encryptSecret(aiApiKey);
+    // Solo se tocan las columnas presentes en el parche.
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (knowledgeBase !== undefined) set.knowledgeBase = knowledgeBase;
     if (aiProvider !== undefined) set.aiProvider = aiProvider;
-    if (aiApiKey !== undefined)
-      set.aiApiKey = aiApiKey === '' ? null : aiApiKey;
+    if (encryptedKey !== undefined) set.aiApiKey = encryptedKey;
 
     await withTenantTxFor(tenantId, async (tx) => {
       await tx
@@ -54,7 +61,7 @@ export class AssistantConfigRepository implements AssistantConfigStore {
           tenantId,
           ...(knowledgeBase !== undefined ? { knowledgeBase } : {}),
           ...(aiProvider !== undefined ? { aiProvider } : {}),
-          ...(aiApiKey !== undefined && aiApiKey !== '' ? { aiApiKey } : {}),
+          ...(encryptedKey ? { aiApiKey: encryptedKey } : {}),
         })
         .onConflictDoUpdate({
           target: schema.tenantConfig.tenantId,

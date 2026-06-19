@@ -31,13 +31,12 @@ import { requireTenant } from '../../auth/require-tenant';
 import { requireReviewer } from '../../auth/require-reviewer';
 import { PaymentPlanRepository } from '../../credit/plans/payment-plan.repository';
 import { TenantConfigRepository } from '../../tenant-config/tenant-config.repository';
+import { resolveTenantCurrency } from '../../tenant-config/tenant-currency';
 import { ApplicationReviewQueryRepository } from './application-review-query.repository';
 import { ApplicationDecisionRepository } from './application-decision.repository';
 import { DocumentOriginalStorage } from './document-original.storage';
 import { PlanOfferRepository } from './plan-offer.repository';
 import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
-
-const CREDIT_CURRENCY = process.env.CREDIT_CURRENCY ?? 'COP';
 
 const uuid = z.string().uuid();
 
@@ -185,8 +184,8 @@ export class ApplicationReviewController {
       applicationId: uuid.parse(id),
       decidedBy: reviewer.userId,
       principalMinor: dto.principalMinor,
-      // La moneda la fija el servidor por despliegue, no el cliente.
-      currency: CREDIT_CURRENCY,
+      // La moneda la fija el servidor según la configuración del tenant, no el cliente.
+      currency: await resolveTenantCurrency(tenant),
     });
     return {
       applicationId: uuid.parse(id),
@@ -216,7 +215,7 @@ export class ApplicationReviewController {
       principalMinor: dto.principalMinor,
       interestPct: dto.interestPct,
       installmentsCount: dto.installmentsCount,
-      currency: process.env.CREDIT_CURRENCY ?? 'COP',
+      currency: await resolveTenantCurrency(tenant),
       ...(dto.borrowerPhone ? { borrowerPhone: dto.borrowerPhone } : {}),
     });
   }

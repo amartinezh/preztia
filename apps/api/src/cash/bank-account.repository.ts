@@ -7,6 +7,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type { BankAccount, BankAccountInput } from '@preztiaos/contracts';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
+import { encryptOptionalSecret } from '../shared/secret-cipher';
 
 type Row = typeof schema.tenantBankAccount.$inferSelect;
 
@@ -53,7 +54,8 @@ export class BankAccountDrizzleRepository {
             countryCode: input.countryCode,
             bankCode: input.bankCode,
             pixKey: input.pixKey ?? null,
-            apiKey: input.apiKey ?? null,
+            // Credencial bancaria cifrada en reposo (AES-256-GCM); nunca en claro.
+            apiKey: encryptOptionalSecret(input.apiKey),
             ...(input.unverifiedPolicy
               ? { unverifiedPolicy: input.unverifiedPolicy }
               : {}),
@@ -73,9 +75,17 @@ export class BankAccountDrizzleRepository {
   ): Promise<BankAccount> {
     return withTenantTxFor(tenantId, async (tx) => {
       try {
+        // Cifra la credencial si el parche la toca (`apiKey: null` la borra).
+        const set = {
+          ...patch,
+          ...('apiKey' in patch
+            ? { apiKey: encryptOptionalSecret(patch.apiKey) }
+            : {}),
+          updatedAt: new Date(),
+        };
         const [row] = await tx
           .update(schema.tenantBankAccount)
-          .set({ ...patch, updatedAt: new Date() })
+          .set(set)
           .where(eq(schema.tenantBankAccount.id, id))
           .returning();
         if (!row) throw new NotFoundException('Cuenta bancaria no encontrada');

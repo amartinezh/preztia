@@ -11,14 +11,11 @@ import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireRole } from '../auth/require-role';
 import { ReportingQueryRepository } from './reporting-query.repository';
+import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
 const uuid = z.string().uuid();
 const DATA_PLANE_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
 const MANAGER_ROLES = ['ADMIN', 'COORDINATOR'] as const;
-
-function currency(): string {
-  return process.env.CREDIT_CURRENCY ?? 'COP';
-}
 
 /** Frontera HTTP de REPORTERÍA: panel, resumen de cliente y export CSV. Protegido por JWT. */
 @Controller()
@@ -35,7 +32,7 @@ export class ReportingController {
     requireRole(authorization, MANAGER_ROLES);
     return this.queries.getDashboard({
       tenantId: tenant,
-      currency: currency(),
+      currency: await resolveTenantCurrency(tenant),
     });
   }
 

@@ -24,6 +24,7 @@ import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireRole } from '../auth/require-role';
 import { Idempotent } from '../observability/idempotent.decorator';
+import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
 const uuid = z.string().uuid();
 
@@ -64,11 +65,11 @@ export class CreditController {
   @Idempotent()
   async grant(@Body() body: unknown, @Headers('x-tenant-id') tenantId: string) {
     const dto = grantCreditInput.parse(body); // validación con zod en la frontera
-    // La moneda la fija el servidor por despliegue (Brasil → BRL), no el cliente.
+    // La moneda la fija el servidor según la configuración del tenant, no el cliente.
     return this.handler.execute({
       ...dto,
       tenantId,
-      currency: process.env.CREDIT_CURRENCY ?? 'COP',
+      currency: await resolveTenantCurrency(tenantId),
     });
   }
 

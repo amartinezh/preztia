@@ -22,10 +22,7 @@ import type {
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { balanceOfBox } from './cash-ledger';
 import { guardDomain } from './domain-guard';
-
-function currency(): string {
-  return process.env.CREDIT_CURRENCY ?? 'COP';
-}
+import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
 interface BoxRow {
   id: string;
@@ -83,6 +80,7 @@ export class CashBoxDrizzleRepository {
   }
 
   async create(tenantId: string, input: CreateCashBoxInput): Promise<CashBox> {
+    const tenantCurrency = await resolveTenantCurrency(tenantId);
     return withTenantTxFor(tenantId, async (tx) => {
       // Para una caja bancaria, la cuenta debe existir (RLS garantiza que es del tenant).
       if (input.type === 'BANK') {
@@ -101,7 +99,7 @@ export class CashBoxDrizzleRepository {
             tenantId,
             type: input.type,
             name: input.name,
-            currency: currency(),
+            currency: tenantCurrency,
             bankAccountId: input.type === 'BANK' ? input.bankAccountId! : null,
           })
           .returning();

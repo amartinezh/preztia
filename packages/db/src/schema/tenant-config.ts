@@ -43,6 +43,9 @@ export const tenantConfig = pgTable(
     // Base de conocimiento (texto largo): única fuente con la que el asistente puede
     // responder (cuotas, costos, requisitos del crédito).
     knowledgeBase: text("knowledge_base").notNull().default(""),
+    // Moneda del tenant (ISO 4217, ej. "COP"/"BRL"): toda la operación del tenant la usa.
+    // Reemplaza el env global CREDIT_CURRENCY por una configuración por empresa (multi-país).
+    currency: text("currency").notNull().default("COP"),
     // Proveedor y credencial de IA para analizar/responder el texto entrante.
     aiProvider: aiProvider("ai_provider").notNull().default("GEMINI"),
     aiApiKey: text("ai_api_key"),

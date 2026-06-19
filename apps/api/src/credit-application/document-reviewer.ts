@@ -14,6 +14,7 @@ import {
   isAcceptable,
 } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { decryptSecret } from '../shared/secret-cipher';
 import {
   extractWithGemini,
   type GeminiDocumentExtraction,
@@ -159,7 +160,8 @@ export class AiDocumentReviewer implements DocumentReviewer {
         .from(schema.tenantConfig)
         .where(eq(schema.tenantConfig.tenantId, tenantId));
       if (!row?.apiKey) return null;
-      return { provider: row.provider, apiKey: row.apiKey };
+      // Credencial de IA cifrada en reposo: se descifra para invocar al proveedor.
+      return { provider: row.provider, apiKey: decryptSecret(row.apiKey) };
     });
   }
 

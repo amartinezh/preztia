@@ -34,6 +34,8 @@ jobs:
       APP_DATABASE_URL: postgres://app:app@localhost:5432/preztiaos
       PLATFORM_DATABASE_URL: postgres://platform:platform@localhost:5432/preztiaos
       JWT_SECRET: test-secret-please-change
+      # Clave de 32 bytes (base64) para el cifrado de secretos en reposo (credenciales API).
+      SECRETS_ENCRYPTION_KEY: CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=
 
     steps:
       - uses: actions/checkout@v4

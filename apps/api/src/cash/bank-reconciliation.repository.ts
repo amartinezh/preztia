@@ -11,6 +11,7 @@ import { reconcileBalance, type BankBalanceVerdict } from '@preztiaos/domain';
 import type { BankSyncResultView } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { balanceOfBox } from './cash-ledger';
+import { decryptOptionalSecret } from '../shared/secret-cipher';
 import { BANK_BALANCE_PROVIDER } from './cash.tokens';
 
 interface SyncContext {
@@ -85,7 +86,12 @@ export class BankReconciliationDrizzleRepository {
         throw new NotFoundException('Cuenta bancaria no encontrada');
 
       const systemMinor = await balanceOfBox(tx, cashBoxId);
-      return { ...account, systemMinor };
+      // La credencial está cifrada en reposo: se descifra justo para consultar el banco.
+      return {
+        ...account,
+        apiKey: decryptOptionalSecret(account.apiKey),
+        systemMinor,
+      };
     });
   }
 

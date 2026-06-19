@@ -30,16 +30,13 @@ import { CashBoxDrizzleRepository } from './cash-box.repository';
 import { CashQueryRepository } from './cash-query.repository';
 import { CashCountDrizzleRepository } from './cash-count.repository';
 import { BankReconciliationDrizzleRepository } from './bank-reconciliation.repository';
+import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
 const uuid = z.string().uuid();
 
 // Reportería/lectura: todo el plano de datos. Mover dinero: socio/coordinador.
 const DATA_PLANE_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
 const MANAGER_ROLES = ['ADMIN', 'COORDINATOR'] as const;
-
-function currency(): string {
-  return process.env.CREDIT_CURRENCY ?? 'COP';
-}
 
 /**
  * Frontera HTTP de CAJAS: CRUD (ADMIN), movimientos (retiro/egreso de caja menor y
@@ -211,7 +208,7 @@ export class CashBoxController {
     requireRole(auth, DATA_PLANE_ROLES);
     return this.queries.getCashDashboard({
       tenantId: tenant,
-      currency: currency(),
+      currency: await resolveTenantCurrency(tenant),
     });
   }
 
