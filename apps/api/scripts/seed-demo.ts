@@ -31,7 +31,7 @@ const ZONE_ROOT_ID = '22222222-2222-4222-8222-222222222222';
 
 const TENANT_NAME = 'Preztia tenant';
 const TENANT_SLUG = 'preztia-tenant';
-const DEFAULT_WHATSAPP_PHONE_NUMBER_ID = '123456789012345';
+const DEFAULT_WHATSAPP_PHONE_NUMBER_ID = '1108588789011965';
 
 // Inter es banco de Brasil → PIX en BRL. Configurable por env.
 const CURRENCY = process.env.SEED_CURRENCY ?? 'BRL';
@@ -89,6 +89,8 @@ async function main() {
     cashBox: randomUUID(),
     bankBox: randomUUID(),
     transitBox: randomUUID(),
+    paymentPlan: randomUUID(),
+    whatsappChannel: randomUUID(),
   };
 
   const [superHash, adminHash, coordHash, collectorHash] = await Promise.all([
@@ -236,6 +238,31 @@ async function main() {
         currency: CURRENCY,
       },
     ]);
+
+    // 7) Plan de pago por defecto: sin él, "Ofertar planes" da 409 (no hay plan
+    //    activo/por defecto que ofrecer). Gota a gota típico: 20 cuotas diarias al 20%
+    //    (interés en base-mil: 200 = 20%).
+    await tx.insert(schema.paymentPlan).values({
+      id: ids.paymentPlan,
+      tenantId: TENANT_ID,
+      name: '20 días · 20%',
+      installmentsCount: 20,
+      frequency: 'DAILY',
+      interestPct: 200,
+      isActive: true,
+      isDefault: true,
+    });
+
+    // 8) Canal de WhatsApp (Fase 9): mapea la línea del negocio → zona. Sin esta fila la
+    //    zona NO se resuelve al aprobar ("No se pudo resolver la zona desde la línea de WhatsApp").
+    //    El número se mapea a la zona hija (Medellín), dentro del alcance del coordinador.
+    await tx.insert(schema.whatsappChannel).values({
+      id: ids.whatsappChannel,
+      tenantId: TENANT_ID,
+      phoneNumberId: whatsappPhoneNumberId,
+      zoneId: ids.zoneChild,
+      zonePath: 'antioquia.medellin',
+    });
   });
 
   await db.$client.end();

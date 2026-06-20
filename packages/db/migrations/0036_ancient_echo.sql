@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_config" ADD COLUMN "collection_reminder_settings" jsonb DEFAULT '{"enabled":false,"sendHourLocal":7,"timezone":"America/Bogota","pixKey":null}'::jsonb NOT NULL;

@@ -116,7 +116,11 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
 
         <Stack gap="sm">
           <Text variant="heading">{t("review.detail.documents")}</Text>
-          <DocumentsTable documents={detail.documents} onViewOriginal={setViewerDocument} />
+          <DocumentsTable
+            applicationId={applicationId}
+            documents={detail.documents}
+            onViewOriginal={setViewerDocument}
+          />
         </Stack>
 
         <Stack gap="sm">

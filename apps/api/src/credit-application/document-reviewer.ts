@@ -83,6 +83,26 @@ export class AiDocumentReviewer implements DocumentReviewer {
     return { decision, identifiedType: extraction?.identifiedType ?? null };
   }
 
+  /**
+   * Nueva pasada de IA pedida MANUALMENTE por el revisor sobre un documento ya almacenado: vuelve
+   * a extraer e identificar y PERSISTE una nueva extracción (la más reciente que verá el detalle).
+   * A diferencia de `review`, NO toca la máquina de estados del documento ni cuenta intentos
+   * fallidos (no auto-rechaza): es solo "intentar leer otra vez". null si la IA no pudo leerlo.
+   */
+  async reExtract(job: DocumentReviewJob): Promise<{
+    identifiedType: string | null;
+    matchesExpected: boolean;
+    confidence: number;
+  } | null> {
+    const extraction = await this.identify(job);
+    if (!extraction) return null;
+    return {
+      identifiedType: extraction.identifiedType,
+      matchesExpected: extraction.matchesExpected,
+      confidence: Math.round(extraction.confidence * 100),
+    };
+  }
+
   // Extrae e identifica con IA y persiste la extracción (trazabilidad). null si falla.
   private async identify(
     job: DocumentReviewJob,

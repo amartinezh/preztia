@@ -1,4 +1,5 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { CreditController } from './credit/credit.controller';
 import { ConversationsModule } from './conversations/conversations.module';
 import { AuthModule } from './auth/auth.module';
@@ -14,10 +15,13 @@ import { ReportingModule } from './reporting/reporting.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { PaymentPlanModule } from './credit/plans/payment-plan.module';
+import { CollectionsModule } from './collections/collections.module';
 import { tenantMiddleware } from './tenancy/tenant-context';
 
 @Module({
   imports: [
+    // Reloj de tareas programadas (cron de cobranza por WhatsApp).
+    ScheduleModule.forRoot(),
     ConversationsModule,
     AuthModule,
     CreditApplicationReviewModule,
@@ -32,6 +36,7 @@ import { tenantMiddleware } from './tenancy/tenant-context';
     ObservabilityModule,
     WhatsappModule,
     PaymentPlanModule,
+    CollectionsModule,
   ],
   controllers: [CreditController],
 })

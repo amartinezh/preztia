@@ -12,7 +12,10 @@ import {
 
 import { Screen } from "@/components/screen";
 import { useT } from "@/core/i18n";
+import { useSession } from "@/core/auth/session";
+import { can } from "@/core/auth/authorization";
 import { PaymentsList } from "@/features/payments/components/payments-list";
+import { CollectionSection } from "@/features/collections/components/collection-section";
 import { useAccountDetail } from "../api/queries";
 
 type InstallmentStatus = AccountDetail["installments"][number]["status"];
@@ -28,6 +31,7 @@ const CELL_BG: Record<InstallmentStatus, string> = {
 /** Detalle de préstamo: cabecera (cupo, interés, valor cuota, deuda, atraso) + cronograma. */
 export function AccountDetailScreen({ creditId }: { creditId: string }) {
   const { t } = useT();
+  const { role } = useSession();
   const query = useAccountDetail(creditId);
 
   if (query.isPending) return <Spinner label={t("common.loading")} />;
@@ -81,6 +85,8 @@ export function AccountDetailScreen({ creditId }: { creditId: string }) {
             ))}
           </View>
         </Stack>
+
+        {can(role, "application:review") ? <CollectionSection creditId={creditId} /> : null}
 
         <Stack gap="sm">
           <Text variant="heading">{t("accounts.detail.payments")}</Text>

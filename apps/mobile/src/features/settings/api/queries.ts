@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   SetDocumentRequirementsInput,
   UpdateAssistantConfigInput,
+  UpdateCollectionReminderSettingsInput,
   UpdateOperationalSettingsInput,
 } from "@preztiaos/contracts";
 
@@ -12,6 +13,7 @@ export const settingsKeys = {
   operational: () => [...settingsKeys.all, "operational"] as const,
   assistant: () => [...settingsKeys.all, "assistant"] as const,
   documents: () => [...settingsKeys.all, "documents"] as const,
+  collectionReminder: () => [...settingsKeys.all, "collection-reminder"] as const,
 };
 
 export function useOperationalSettings() {
@@ -45,6 +47,26 @@ export function useUpdateAssistantConfig() {
     mutationFn: async (patch: UpdateAssistantConfigInput) =>
       unwrap(await api.updateAssistantConfig({ headers: tenantHeader(), body: patch })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: settingsKeys.assistant() }),
+  });
+}
+
+// ── Cron de cobranza por WhatsApp (horario + zona + llave PIX), ADMIN ───────
+export function useCollectionReminderSettings() {
+  return useQuery({
+    queryKey: settingsKeys.collectionReminder(),
+    queryFn: async () =>
+      unwrap(await api.getCollectionReminderSettings({ headers: tenantHeader() })),
+  });
+}
+
+export function useUpdateCollectionReminderSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: UpdateCollectionReminderSettingsInput) =>
+      unwrap(
+        await api.updateCollectionReminderSettings({ headers: tenantHeader(), body: patch }),
+      ),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: settingsKeys.collectionReminder() }),
   });
 }
 

@@ -8,6 +8,7 @@ import { useSession } from "@/core/auth/session";
 import { can } from "@/core/auth/authorization";
 import { useT } from "@/core/i18n";
 import { PaymentsList } from "@/features/payments/components/payments-list";
+import { CollectionSection } from "@/features/collections/components/collection-section";
 import { useCreditPortfolio } from "../api/queries";
 
 type InstallmentStatus = "PENDING" | "PARTIALLY_PAID" | "PAID" | "OVERDUE";
@@ -53,6 +54,8 @@ export function CreditPortfolioScreen({ creditId }: { creditId: string }) {
         {can(role, "payment:register") ? (
           <Button label={t("payments.register")} block onPress={() => router.push(`/payment/${creditId}` as Href)} />
         ) : null}
+
+        {can(role, "application:review") ? <CollectionSection creditId={creditId} /> : null}
 
         <Stack gap="sm">
           <Text variant="heading">{t("credit.portfolio.installments")}</Text>

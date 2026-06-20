@@ -9,6 +9,7 @@ import {
   resolveTenantByWhatsappPhone,
   withTenantTxFor,
 } from '../../tenancy/unit-of-work';
+import { decryptOptionalSecret } from '../../shared/secret-cipher';
 
 /**
  * Adaptador: carga la configuración del asistente desde la BD.
@@ -34,7 +35,9 @@ export class TenantConfigDrizzleRepository implements TenantAssistantConfigRepos
         tenantId: row.tenantId,
         knowledgeBase: row.knowledgeBase,
         aiProvider: row.aiProvider,
-        aiApiKey: row.aiApiKey,
+        // La credencial va CIFRADA en reposo (AES-256-GCM): se descifra al leerla,
+        // igual que en el OCR de documentos y el clasificador de pagos.
+        aiApiKey: decryptOptionalSecret(row.aiApiKey),
       };
     });
   }

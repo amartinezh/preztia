@@ -37,6 +37,7 @@ import { ApplicationDecisionRepository } from './application-decision.repository
 import { DocumentOriginalStorage } from './document-original.storage';
 import { PlanOfferRepository } from './plan-offer.repository';
 import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
+import { ReExtractDocumentService } from './re-extract-document.service';
 
 const uuid = z.string().uuid();
 
@@ -60,6 +61,7 @@ export class ApplicationReviewController {
     private readonly plans: PaymentPlanRepository,
     private readonly tenantConfig: TenantConfigRepository,
     private readonly offerNotifier: PlanOfferWhatsappNotifier,
+    private readonly reExtractService: ReExtractDocumentService,
   ) {
     // Fase 10: el otorgamiento toma los términos del plan negociado y exige aceptación del cliente
     // (salvo override permitido por el tenant).
@@ -166,6 +168,23 @@ export class ApplicationReviewController {
       .setHeader('Content-Disposition', 'inline')
       .setHeader('Cache-Control', 'no-store')
       .send(original.bytes);
+  }
+
+  @Post('applications/:id/documents/:documentType/re-extract')
+  @HttpCode(200)
+  async reExtractDocument(
+    @Param('id') id: string,
+    @Param('documentType') documentType: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireReviewer(authorization);
+    return this.reExtractService.execute({
+      tenantId: tenant,
+      applicationId: uuid.parse(id),
+      documentType: requiredDocumentType.parse(documentType),
+    });
   }
 
   @Post('applications/:id/plan-offer')

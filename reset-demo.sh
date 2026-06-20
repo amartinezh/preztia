@@ -7,7 +7,7 @@
 #   2. Aplica migraciones pendientes (por si la BD es nueva).
 #   3. Construye el paquete @preztiaos/db (el seed importa su dist/).
 #   4. BORRA toda la información y siembra los datos base de demo (seed-demo.ts):
-#      tenant + config (conserva el número de WhatsApp que estaba funcionando),
+#      tenant + config (fija el Phone Number ID real de WhatsApp, ver abajo),
 #      usuarios de todos los roles, zonas, catálogo de documentos,
 #      una cuenta bancaria Inter (BR) y una caja de cada tipo (CASH/BANK/TRANSIT).
 #
@@ -24,6 +24,12 @@ cd "$(dirname "$0")"
 PG_CONTAINER="preztiaos-pg"
 PG_USER="preztia"
 PG_DB="preztiaos"
+
+# Phone Number ID real del número de WhatsApp en Meta (NO el número telefónico).
+# El seed lo usa con máxima precedencia (env ?? valor previo ?? default), así el
+# reset siempre deja el mapeo correcto número→tenant. Override puntual:
+#   SEED_WHATSAPP_PHONE_NUMBER_ID=otro ./reset-demo.sh
+export SEED_WHATSAPP_PHONE_NUMBER_ID="${SEED_WHATSAPP_PHONE_NUMBER_ID:-1108588789011965}"
 
 echo "▶ 1/4 Levantando Postgres…"
 docker compose up -d postgres >/dev/null

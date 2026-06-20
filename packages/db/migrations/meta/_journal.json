@@ -253,6 +253,13 @@
       "when": 1781877699623,
       "tag": "0035_tenant_currency",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1781981679293,
+      "tag": "0036_ancient_echo",
+      "breakpoints": true
     }
   ]
 }

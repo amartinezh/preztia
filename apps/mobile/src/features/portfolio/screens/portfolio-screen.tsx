@@ -22,6 +22,7 @@ import { useT } from "@/core/i18n";
 import { useExportAccounts } from "@/features/reporting/api/queries";
 import { creditStatusBadge } from "@/features/credit/components/credit-status";
 import { useAccountsList } from "@/features/accounts/api/queries";
+import { WhatsappReminderButton } from "@/features/collections/components/whatsapp-reminder-button";
 
 // Filtro de estado de la cartera. "En mora" se resuelve en servidor (onlyOverdue); el resto
 // filtra sobre las páginas ya cargadas (la API de cuentas no expone filtro por estado).
@@ -49,6 +50,7 @@ export function PortfolioScreen() {
 
   const canExport = can(role, "borrower:manage") && csvDownloadAvailable();
   const canCreate = can(role, "credit:create");
+  const canRemind = can(role, "application:review");
   const runExport = () =>
     exportCsv.mutate(undefined, { onSuccess: (res) => downloadCsv(res.filename, res.csv) });
 
@@ -135,26 +137,33 @@ export function PortfolioScreen() {
         }
         renderItem={({ item }) => {
           const badge = creditStatusBadge(item.status);
+          // La fila (navega al detalle) y el botón de WhatsApp van como HERMANOS: anidar un
+          // Pressable dentro del ListItem interactivo produciría <button> dentro de <button> en web.
           return (
-            <ListItem
-              title={item.borrowerName ?? item.nationalId ?? item.creditId.slice(0, 8)}
-              subtitle={`${t("accounts.field.paid")}: ${item.paidCount}/${item.installmentsCount} · ${t("accounts.field.dueToday")}: ${minorToMajor(item.dueTodayMinor)}`}
-              onPress={() => router.push(`/account/${item.creditId}` as Href)}
-              trailing={
-                <Stack gap="xs" className="items-end">
-                  <MoneyText
-                    variant="label"
-                    amountMinor={item.outstandingMinor}
-                    currency={item.currency}
-                  />
-                  {item.daysOverdue > 0 ? (
-                    <Badge label={`${item.daysOverdue}d`} tone="danger" />
-                  ) : (
-                    <Badge label={badge.label} tone={badge.tone} />
-                  )}
-                </Stack>
-              }
-            />
+            <Row className="items-center gap-2">
+              <View className="flex-1">
+                <ListItem
+                  title={item.borrowerName ?? item.nationalId ?? item.creditId.slice(0, 8)}
+                  subtitle={`${t("accounts.field.paid")}: ${item.paidCount}/${item.installmentsCount} · ${t("accounts.field.dueToday")}: ${minorToMajor(item.dueTodayMinor)}`}
+                  onPress={() => router.push(`/account/${item.creditId}` as Href)}
+                  trailing={
+                    <Stack gap="xs" className="items-end">
+                      <MoneyText
+                        variant="label"
+                        amountMinor={item.outstandingMinor}
+                        currency={item.currency}
+                      />
+                      {item.daysOverdue > 0 ? (
+                        <Badge label={`${item.daysOverdue}d`} tone="danger" />
+                      ) : (
+                        <Badge label={badge.label} tone={badge.tone} />
+                      )}
+                    </Stack>
+                  }
+                />
+              </View>
+              {canRemind ? <WhatsappReminderButton creditId={item.creditId} /> : null}
+            </Row>
           );
         }}
         ListFooterComponent={query.isFetchingNextPage ? <Spinner /> : null}

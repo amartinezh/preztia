@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Modal as RNModal, Pressable, View } from "react-native";
+import { Modal as RNModal, Pressable, ScrollView, View } from "react-native";
 import { Text } from "../primitives/text";
 
 export type ModalProps = {
@@ -52,7 +52,12 @@ export function Modal({ visible, onClose, title, children }: ModalProps) {
               </Text>
             </Pressable>
           </View>
-          {children}
+          {/* Cuerpo scrolleable: el panel crece con el contenido hasta `max-h-[90%]` y, si lo
+              supera (formularios largos, pantallas bajas), hace scroll en vez de recortarse.
+              `shrink` evita forzar la altura máxima en modales cortos (p. ej. rechazo). */}
+          <ScrollView className="shrink" keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
         </View>
       </View>
     </RNModal>

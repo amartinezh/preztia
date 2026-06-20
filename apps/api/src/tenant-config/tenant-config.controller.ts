@@ -15,11 +15,13 @@ import {
 import {
   setDocumentRequirementsInput,
   updateAssistantConfigInput,
+  updateCollectionReminderSettingsInput,
   updateOperationalSettingsInput,
 } from '@preztiaos/contracts';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireRole } from '../auth/require-role';
+import { requireReviewer } from '../auth/require-reviewer';
 import { TenantConfigRepository } from './tenant-config.repository';
 import { AssistantConfigRepository } from './assistant-config.repository';
 import { DocumentRequirementsRepository } from './document-requirements.repository';
@@ -58,7 +60,9 @@ export class TenantConfigController {
     @Headers('authorization') authorization: string | undefined,
   ) {
     const tenant = requireTenant(tenantId);
-    requireRole(authorization, ADMIN_ONLY);
+    // Lectura para revisores (ADMIN/COORDINATOR): el Coordinador la ve en solo lectura.
+    // La escritura (PATCH) sigue restringida al ADMIN.
+    requireReviewer(authorization);
     return this.config.get(tenant);
   }
 
@@ -72,6 +76,29 @@ export class TenantConfigController {
     requireRole(authorization, ADMIN_ONLY);
     const patch = updateOperationalSettingsInput.parse(body);
     return this.updateHandler.execute({ tenantId: tenant, patch });
+  }
+
+  @Get('tenant-config/collection-reminder')
+  async getCollectionReminder(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    // Lectura para revisores (ADMIN/COORDINATOR); la escritura (PATCH) sigue en ADMIN.
+    requireReviewer(authorization);
+    return this.config.getReminderSettings(tenant);
+  }
+
+  @Patch('tenant-config/collection-reminder')
+  async updateCollectionReminder(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireRole(authorization, ADMIN_ONLY);
+    const patch = updateCollectionReminderSettingsInput.parse(body);
+    return this.config.updateReminderSettings({ tenantId: tenant, patch });
   }
 
   @Get('tenant-config/assistant')

@@ -5,6 +5,7 @@ import {
   DEFAULT_OPERATIONAL_SETTINGS,
   type OperationalSettings,
 } from '@preztiaos/domain';
+import type { UpdateCollectionReminderSettingsInput } from '@preztiaos/contracts';
 import type {
   DefaultCreditLimitProvider,
   TenantSettingsStore,
@@ -57,5 +58,43 @@ export class TenantConfigRepository
   async defaultCreditLimitMinor(tenantId: string): Promise<number> {
     const settings = await this.get(tenantId);
     return settings.defaultCreditLimitMinor;
+  }
+
+  /** Configuración del cron de cobranza; mezcla sobre los defaults (filas anteriores a la feature). */
+  async getReminderSettings(
+    tenantId: string,
+  ): Promise<schema.CollectionReminderSettings> {
+    return withTenantTxFor(tenantId, async (tx) => {
+      const [row] = await tx
+        .select({ settings: schema.tenantConfig.collectionReminderSettings })
+        .from(schema.tenantConfig)
+        .where(eq(schema.tenantConfig.tenantId, tenantId))
+        .limit(1);
+      return row?.settings
+        ? { ...schema.DEFAULT_COLLECTION_REMINDER_SETTINGS, ...row.settings }
+        : schema.DEFAULT_COLLECTION_REMINDER_SETTINGS;
+    });
+  }
+
+  /** Aplica un patch parcial sobre la configuración actual de cobranza y devuelve el resultado. */
+  async updateReminderSettings(input: {
+    tenantId: string;
+    patch: UpdateCollectionReminderSettingsInput;
+  }): Promise<schema.CollectionReminderSettings> {
+    const current = await this.getReminderSettings(input.tenantId);
+    const next: schema.CollectionReminderSettings = {
+      ...current,
+      ...input.patch,
+    };
+    await withTenantTxFor(input.tenantId, async (tx) => {
+      await tx
+        .insert(schema.tenantConfig)
+        .values({ tenantId: input.tenantId, collectionReminderSettings: next })
+        .onConflictDoUpdate({
+          target: schema.tenantConfig.tenantId,
+          set: { collectionReminderSettings: next, updatedAt: new Date() },
+        });
+    });
+    return next;
   }
 }

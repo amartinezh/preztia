@@ -22,4 +22,5 @@ export * from "./conversations-inbox";
 export * from "./credit-application-review";
 export * from "./credit-document-requirements";
 export * from "./payments";
+export * from "./collections";
 export * from "./whatsapp-webhook";

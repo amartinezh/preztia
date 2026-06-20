@@ -1,9 +1,9 @@
 import { useEffect } from "react";
-import { Image, Linking, View } from "react-native";
+import { Alert, Image, Linking, View } from "react-native";
 import { Button, Modal, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
-import { useDocumentOriginal } from "../api/queries";
+import { useDocumentOriginal, useReExtractDocument } from "../api/queries";
 import { documentLabel } from "./review-status";
 
 type Props = {
@@ -21,7 +21,23 @@ type Props = {
 export function DocumentViewer({ applicationId, documentType, onClose }: Props) {
   const { t } = useT();
   const query = useDocumentOriginal(applicationId, documentType);
+  const reExtract = useReExtractDocument(applicationId);
   const url = query.data?.url;
+
+  // Nueva pasada de IA sobre este documento; informa el resultado y refresca el detalle.
+  const onReExtract = () => {
+    if (!documentType) return;
+    reExtract.mutate(documentType, {
+      onSuccess: (result) =>
+        Alert.alert(
+          result.extracted ? "Lectura completada" : "No se pudo leer",
+          result.extracted
+            ? `IA identificó: ${result.identifiedType ?? "—"} · Confianza ${result.confidence ?? 0}%`
+            : (result.reason ?? "Inténtalo de nuevo."),
+        ),
+      onError: () => Alert.alert("Error", "No se pudo reintentar la lectura con IA."),
+    });
+  };
 
   // Limpieza: revoca el objectURL cuando cambia o se desmonta (sin setState).
   useEffect(() => {
@@ -59,6 +75,19 @@ export function DocumentViewer({ applicationId, documentType, onClose }: Props) 
             </Stack>
           )
         ) : null}
+
+        {/* Nueva pasada de IA: cuando la extracción automática no leyó bien el documento. */}
+        <View className="pt-4">
+          <Button
+            label="Reintentar lectura con IA"
+            block
+            loading={reExtract.isPending}
+            onPress={onReExtract}
+          />
+          <Text variant="caption" tone="muted" className="pt-2">
+            Vuelve a pasar el documento por la IA si no identificó bien la información.
+          </Text>
+        </View>
       </View>
     </Modal>
   );

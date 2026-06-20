@@ -19,6 +19,23 @@ export interface OperationalSettings {
   readonly allowAdminOverride: boolean; // Permitir crear crédito sin aceptación del cliente
 }
 
+// Configuración del recordatorio de cobro por WhatsApp (Cron por tenant). La hora es LOCAL del
+// tenant (su zona horaria), por lo que el cron horario evalúa `sendHourLocal` contra la hora
+// actual en `timezone`. La llave PIX se incluye en el mensaje para invitar al pago.
+export interface CollectionReminderSettings {
+  readonly enabled: boolean; // ¿Enviar recordatorios automáticos?
+  readonly sendHourLocal: number; // Hora local de envío (0–23). Default: 7 (primera hora de la mañana).
+  readonly timezone: string; // Zona horaria IANA del tenant (ej. "America/Bogota", "America/Sao_Paulo").
+  readonly pixKey: string | null; // Llave PIX del tenant para recibir el pago (se incluye en el mensaje).
+}
+
+export const DEFAULT_COLLECTION_REMINDER_SETTINGS: CollectionReminderSettings = {
+  enabled: false,
+  sendHourLocal: 7,
+  timezone: "America/Bogota",
+  pixKey: null,
+};
+
 export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   rechargesEnabled: false,
   manualRoute: false,
@@ -54,6 +71,11 @@ export const tenantConfig = pgTable(
       .$type<OperationalSettings>()
       .notNull()
       .default(DEFAULT_OPERATIONAL_SETTINGS),
+    // Configuración del cron de cobranza por WhatsApp (hora local + zona horaria + llave PIX).
+    collectionReminderSettings: jsonb("collection_reminder_settings")
+      .$type<CollectionReminderSettings>()
+      .notNull()
+      .default(DEFAULT_COLLECTION_REMINDER_SETTINGS),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

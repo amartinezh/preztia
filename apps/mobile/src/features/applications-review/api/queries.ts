@@ -4,6 +4,7 @@ import type {
   CreditApplicationStatus,
   OfferPlansInput,
   RejectApplicationInput,
+  RequiredDocumentTypeContract,
 } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
@@ -100,6 +101,26 @@ export function useRejectApplication(id: string) {
       void qc.invalidateQueries({ queryKey: reviewKeys.all });
       void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) });
     },
+  });
+}
+
+/**
+ * Nueva pasada de IA (re-extracción) sobre un documento del expediente. Para cuando la IA no leyó
+ * bien (p. ej. el documento de identidad sobre un fondo difícil). Al terminar refresca el detalle
+ * para reflejar la nueva identificación/confianza.
+ */
+export function useReExtractDocument(applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (documentType: string) =>
+      unwrap(
+        await api.reExtractDocument({
+          headers: tenantHeader(),
+          params: { id: applicationId, documentType: documentType as RequiredDocumentTypeContract },
+          body: {},
+        }),
+      ),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: reviewKeys.detail(applicationId) }),
   });
 }
 

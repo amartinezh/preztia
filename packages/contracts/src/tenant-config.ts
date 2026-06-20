@@ -26,6 +26,23 @@ export type OperationalSettings = z.infer<typeof operationalSettings>;
 export const updateOperationalSettingsInput = operationalSettings.partial();
 export type UpdateOperationalSettingsInput = z.infer<typeof updateOperationalSettingsInput>;
 
+// ── Configuración del CRON DE COBRANZA por WhatsApp (hora local + zona horaria + llave PIX) ──
+// `sendHourLocal` es la hora (0–23) en la `timezone` del tenant; el cron horario la compara con
+// la hora actual. Default del modelo: deshabilitado, 7:00 AM, America/Bogota.
+export const collectionReminderSettings = z.object({
+  enabled: z.boolean(),
+  sendHourLocal: z.number().int().min(0).max(23),
+  timezone: z.string().min(1).max(64),
+  pixKey: z.string().trim().min(1).max(140).nullable(),
+});
+export type CollectionReminderSettings = z.infer<typeof collectionReminderSettings>;
+
+// Actualización parcial: solo se aplican los campos presentes.
+export const updateCollectionReminderSettingsInput = collectionReminderSettings.partial();
+export type UpdateCollectionReminderSettingsInput = z.infer<
+  typeof updateCollectionReminderSettingsInput
+>;
+
 // ── Configuración del asistente de WhatsApp por tenant (base de conocimiento + IA) ──────────
 // Espeja el enum `ai_provider` de la BD. Hoy solo GEMINI está implementado en el servidor.
 export const assistantAiProvider = z.enum(["GEMINI", "OPENAI", "CLAUDE"]);
@@ -66,6 +83,21 @@ export const tenantConfigContract = c.router({
     body: updateOperationalSettingsInput,
     responses: { 200: operationalSettings },
     summary: "Actualiza los ajustes operativos del tenant (ADMIN)",
+  },
+  getCollectionReminderSettings: {
+    method: "GET",
+    path: "/tenant-config/collection-reminder",
+    headers: tenantHeaders,
+    responses: { 200: collectionReminderSettings },
+    summary: "Configuración del cron de cobranza por WhatsApp del tenant",
+  },
+  updateCollectionReminderSettings: {
+    method: "PATCH",
+    path: "/tenant-config/collection-reminder",
+    headers: tenantHeaders,
+    body: updateCollectionReminderSettingsInput,
+    responses: { 200: collectionReminderSettings },
+    summary: "Actualiza el horario/zona/PIX del cron de cobranza (ADMIN)",
   },
   getAssistantConfig: {
     method: "GET",

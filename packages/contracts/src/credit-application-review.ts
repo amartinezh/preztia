@@ -220,6 +220,17 @@ export const rejectApplicationOutput = z.object({
 
 const idParam = z.object({ id: z.string().uuid() });
 
+// Resultado de una nueva pasada de IA (re-extracción) sobre un documento del expediente.
+// `extracted=false` con un motivo cuando la IA no pudo leerlo (sin credencial o falló el modelo).
+export const reExtractDocumentOutput = z.object({
+  extracted: z.boolean(),
+  identifiedType: z.string().nullable(),
+  matchesExpected: z.boolean().nullable(),
+  confidence: z.number().int().nullable(),
+  reason: z.string().nullable(),
+});
+export type ReExtractDocumentOutput = z.infer<typeof reExtractDocumentOutput>;
+
 // Contrato ts-rest de la revisión antifraude de cartera: misma fuente de verdad para
 // API (NestJS) y cliente (móvil/web). El binario del documento original NO va aquí
 // (se sirve por una ruta dedicada que descifra y streamea).
@@ -282,5 +293,14 @@ export const creditApplicationReviewContract = c.router({
     body: rejectApplicationInput,
     responses: { 200: rejectApplicationOutput },
     summary: "Rechaza el expediente (decisión manual del coordinador)",
+  },
+  reExtractDocument: {
+    method: "POST",
+    path: "/applications/:id/documents/:documentType/re-extract",
+    pathParams: z.object({ id: z.string().uuid(), documentType: requiredDocumentType }),
+    headers: tenantHeaders,
+    body: z.object({}),
+    responses: { 200: reExtractDocumentOutput },
+    summary: "Reintenta la extracción de IA de un documento (nueva pasada manual del revisor)",
   },
 });
