@@ -1,7 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, inArray, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  lte,
+  or,
+  type SQL,
+} from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type {
+  BankStatusContract,
   PaymentDetail,
   PaymentStatusContract,
   PaymentSummary,
@@ -52,22 +65,22 @@ export class PaymentsQueryRepository {
     });
   }
 
-  /** Listado de intentos de pago a nivel tenant (auditoría), filtrable por estado. */
+  /** Listado de intentos de pago a nivel tenant (auditoría) con filtros avanzados. */
   async listPaymentAttempts(input: {
     tenantId: string;
     page: number;
     pageSize: number;
     status?: PaymentStatusContract;
     failedOnly?: boolean;
+    q?: string;
+    bankStatus?: BankStatusContract;
+    minAmountMinor?: number;
+    maxAmountMinor?: number;
+    fromDate?: string;
+    toDate?: string;
   }): Promise<{ items: PaymentSummary[]; total: number }> {
     return withTenantTxFor(input.tenantId, async (tx) => {
-      const filters: SQL[] = [];
-      if (input.status) {
-        filters.push(eq(schema.payment.status, input.status));
-      } else if (input.failedOnly) {
-        filters.push(inArray(schema.payment.status, FAILED_STATUSES));
-      }
-      const where = filters.length ? and(...filters) : undefined;
+      const where = buildAttemptFilters(input);
 
       const [totalRow] = await tx
         .select({ value: count() })
@@ -207,6 +220,62 @@ function extractFlagReasons(payloads: unknown[]): string[] | null {
     }
   }
   return null;
+}
+
+/**
+ * Construye el `WHERE` de los filtros avanzados de auditoría de pagos. Cada filtro es
+ * opcional e independiente; se combinan con AND. La búsqueda de texto (`q`) abarca pagador,
+ * CPF/CNPJ, banco emisor y end-to-end id (el revisor está autorizado a ver la PII completa).
+ */
+function buildAttemptFilters(input: {
+  status?: PaymentStatusContract;
+  failedOnly?: boolean;
+  q?: string;
+  bankStatus?: BankStatusContract;
+  minAmountMinor?: number;
+  maxAmountMinor?: number;
+  fromDate?: string;
+  toDate?: string;
+}): SQL | undefined {
+  const filters: SQL[] = [];
+
+  if (input.status) {
+    filters.push(eq(schema.payment.status, input.status));
+  } else if (input.failedOnly) {
+    filters.push(inArray(schema.payment.status, FAILED_STATUSES));
+  }
+
+  if (input.bankStatus) {
+    filters.push(eq(schema.payment.bankStatus, input.bankStatus));
+  }
+
+  if (input.q) {
+    const like = `%${input.q}%`;
+    const text = or(
+      ilike(schema.payment.payerName, like),
+      ilike(schema.payment.payerTaxId, like),
+      ilike(schema.payment.payerBankName, like),
+      ilike(schema.payment.endToEndId, like),
+    );
+    if (text) filters.push(text);
+  }
+
+  if (input.minAmountMinor !== undefined) {
+    filters.push(gte(schema.payment.amountMinor, input.minAmountMinor));
+  }
+  if (input.maxAmountMinor !== undefined) {
+    filters.push(lte(schema.payment.amountMinor, input.maxAmountMinor));
+  }
+
+  // Rango de la fecha de pago: [fromDate 00:00, toDate 23:59:59.999] inclusivo.
+  if (input.fromDate) {
+    filters.push(gte(schema.payment.paidAt, new Date(`${input.fromDate}T00:00:00.000Z`)));
+  }
+  if (input.toDate) {
+    filters.push(lte(schema.payment.paidAt, new Date(`${input.toDate}T23:59:59.999Z`)));
+  }
+
+  return filters.length ? and(...filters) : undefined;
 }
 
 /** Mapea una fila de pago al resumen del contrato (CPF/CNPJ enmascarado: PII fuera del API). */

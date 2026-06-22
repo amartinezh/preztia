@@ -73,6 +73,8 @@ export const cashBox = z.object({
   name: z.string(),
   currency: z.string(),
   bankAccountId: z.string().uuid().nullable(),
+  /** Cobrador dueño de la caja de ruta; null = caja de oficina/menor o no asignada. */
+  assignedTo: z.string().uuid().nullable(),
   active: z.boolean(),
   createdAt: z.string(),
 });
@@ -81,11 +83,13 @@ export type CashBox = z.infer<typeof cashBox>;
 export const listCashBoxesOutput = z.object({ items: z.array(cashBox) });
 
 // Crear caja: BANK exige bankAccountId; CASH/TRANSIT lo prohíben (espejo del CHECK en BD).
+// assignedTo (cobrador de ruta) solo es válido para cajas CASH.
 export const createCashBoxInput = z
   .object({
     type: cashBoxType,
     name: z.string().trim().min(1).max(80),
     bankAccountId: z.string().uuid().optional(),
+    assignedTo: z.string().uuid().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.type === "BANK" && !v.bankAccountId) {
@@ -94,14 +98,20 @@ export const createCashBoxInput = z
     if (v.type !== "BANK" && v.bankAccountId) {
       ctx.addIssue({ code: "custom", path: ["bankAccountId"], message: "Solo las cajas bancarias se vinculan a una cuenta" });
     }
+    if (v.type !== "CASH" && v.assignedTo) {
+      ctx.addIssue({ code: "custom", path: ["assignedTo"], message: "Solo una caja de efectivo se asigna a un cobrador" });
+    }
   });
 export type CreateCashBoxInput = z.infer<typeof createCashBoxInput>;
 
-// Editar caja: nombre/estado (el tipo y la cuenta son inmutables: protegen el libro mayor).
+// Editar caja: nombre/estado y reasignación de cobrador (assignedTo: null lo desvincula).
+// El tipo y la cuenta son inmutables: protegen el libro mayor.
 export const updateCashBoxInput = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   active: z.boolean().optional(),
+  assignedTo: z.string().uuid().nullable().optional(),
 });
+export type UpdateCashBoxInput = z.infer<typeof updateCashBoxInput>;
 
 // --- Movimientos ------------------------------------------------------------
 
@@ -151,11 +161,14 @@ export const listCashTransactionsOutput = z.object({
 });
 
 // Historial detallado con filtros (Req 5): por caja, tipo, sentido, usuario y rango de fechas.
+// `userId` filtra por quien REGISTRÓ el asiento; `collectorId`, por el cobrador DUEÑO de la caja
+// (su efectivo de ruta), aunque el asiento lo haya registrado otro o el sistema.
 export const listCashTransactionsQuery = paginationQuery.extend({
   cashBoxId: z.string().uuid().optional(),
   kind: cashTxKind.optional(),
   direction: cashTxDirection.optional(),
   userId: z.string().uuid().optional(),
+  collectorId: z.string().uuid().optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 });
@@ -168,6 +181,10 @@ export const bankSyncStatus = z.enum(["MATCHED", "MISMATCH", "UNAVAILABLE"]);
 export const lastReconciliation = z.object({
   status: bankSyncStatus,
   differenceMinor: z.number().int().nullable(),
+  /** Saldo real reportado por el banco en esa sync; null si UNAVAILABLE (Nivel 2). */
+  bankMinor: z.number().int().nullable(),
+  /** Cuándo ocurrió la última sincronización (para el "conectado hace X" del Nivel 2). */
+  syncedAt: z.string(),
 });
 
 export const dashboardBox = z.object({
@@ -178,13 +195,27 @@ export const dashboardBox = z.object({
   balanceMinor: z.number().int(),
   bankAccountId: z.string().uuid().nullable(),
   bankName: z.string().nullable(),
+  /** Número de cuenta abreviado (últimos 4 dígitos) para la grilla; null si no aplica (Nivel 2). */
+  accountNumberMasked: z.string().nullable(),
+  /** Cobrador dueño de la caja de ruta; null = caja de oficina/menor (Nivel 2). */
+  assignedTo: z.string().uuid().nullable(),
+  /** Email del cobrador asignado, para mostrarlo en la grilla; null si no aplica (Nivel 2). */
+  assignedToEmail: z.string().nullable(),
+  /** Caja de ruta que carga efectivo y no se ha arqueado hoy: requiere cierre urgente (Nivel 2). */
+  needsClose: z.boolean(),
   /** Resultado de la última sincronización bancaria; null si nunca se sincronizó (Req 7). */
   lastReconciliation: lastReconciliation.nullable(),
 });
 
 export const cashDashboardOutput = z.object({
-  /** Σ saldo de todas las cajas activas del tenant. */
+  /** Σ saldo de todas las cajas activas del tenant (efectivo + bancos + tránsito). */
   totalMinor: z.number().int(),
+  /** Efectivo Total en Custodia: Σ cajas CASH activas (Nivel 1). */
+  cashTotalMinor: z.number().int(),
+  /** Dinero Bancario Total: Σ cajas BANK activas (Nivel 1). */
+  bankTotalMinor: z.number().int(),
+  /** Liquidez Total disponible: efectivo + bancos (excluye tránsito) (Nivel 1). */
+  liquidityTotalMinor: z.number().int(),
   currency: z.string(),
   boxes: z.array(dashboardBox),
   /** Saldo retenido en la caja de tránsito: alerta para coordinador/admin si > 0 (Req 4). */

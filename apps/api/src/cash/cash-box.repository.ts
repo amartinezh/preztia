@@ -18,6 +18,7 @@ import type {
   CashBox,
   CashTransactionRow,
   CreateCashBoxInput,
+  UpdateCashBoxInput,
 } from '@preztiaos/contracts';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { balanceOfBox } from './cash-ledger';
@@ -30,6 +31,39 @@ interface BoxRow {
   name: string;
   currency: string;
   active: boolean;
+}
+
+function toBoxView(row: typeof schema.cashBox.$inferSelect): CashBox {
+  return {
+    id: row.id,
+    type: row.type,
+    name: row.name,
+    currency: row.currency,
+    bankAccountId: row.bankAccountId,
+    assignedTo: row.assignedTo,
+    active: row.active,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/**
+ * Valida que el cobrador a asignar exista, esté activo y tenga rol COLLECTOR en el tenant
+ * (RLS aísla por tenant dentro de la tx). Una caja de ruta es el efectivo de un cobrador.
+ */
+async function assertAssignableCollector(
+  tx: Tx,
+  assignedTo: string,
+): Promise<void> {
+  const [user] = await tx
+    .select({ role: schema.appUser.role, active: schema.appUser.active })
+    .from(schema.appUser)
+    .where(eq(schema.appUser.id, assignedTo))
+    .limit(1);
+  if (!user || !user.active || user.role !== 'COLLECTOR') {
+    throw new BadRequestException(
+      'El cobrador asignado no existe o no es un cobrador activo',
+    );
+  }
 }
 
 /** Un asiento a postear contra una caja (la naturaleza la decide el caso de uso). */
@@ -67,15 +101,7 @@ export class CashBoxDrizzleRepository {
         .select()
         .from(schema.cashBox)
         .orderBy(desc(schema.cashBox.createdAt));
-      return rows.map((row) => ({
-        id: row.id,
-        type: row.type,
-        name: row.name,
-        currency: row.currency,
-        bankAccountId: row.bankAccountId,
-        active: row.active,
-        createdAt: row.createdAt.toISOString(),
-      }));
+      return rows.map(toBoxView);
     });
   }
 
@@ -92,6 +118,8 @@ export class CashBoxDrizzleRepository {
         if (!account)
           throw new NotFoundException('Cuenta bancaria no encontrada');
       }
+      // Una caja de ruta exige un cobrador válido (el CHECK ya garantiza que sea CASH).
+      if (input.assignedTo) await assertAssignableCollector(tx, input.assignedTo);
       try {
         const [row] = await tx
           .insert(schema.cashBox)
@@ -101,17 +129,10 @@ export class CashBoxDrizzleRepository {
             name: input.name,
             currency: tenantCurrency,
             bankAccountId: input.type === 'BANK' ? input.bankAccountId! : null,
+            assignedTo: input.type === 'CASH' ? (input.assignedTo ?? null) : null,
           })
           .returning();
-        return {
-          id: row.id,
-          type: row.type,
-          name: row.name,
-          currency: row.currency,
-          bankAccountId: row.bankAccountId,
-          active: row.active,
-          createdAt: row.createdAt.toISOString(),
-        };
+        return toBoxView(row);
       } catch (err) {
         // Una sola caja de tránsito por tenant / una sola caja por cuenta bancaria.
         if (isUnique(err)) {
@@ -127,24 +148,27 @@ export class CashBoxDrizzleRepository {
   async update(
     tenantId: string,
     id: string,
-    patch: { name?: string; active?: boolean },
+    patch: UpdateCashBoxInput,
   ): Promise<CashBox> {
     return withTenantTxFor(tenantId, async (tx) => {
+      // Asignar un cobrador exige que la caja sea de efectivo y el cobrador sea válido.
+      if (patch.assignedTo) {
+        const box = await loadBox(tx, id);
+        if (!box) throw new NotFoundException('Caja no encontrada');
+        if (box.type !== 'CASH') {
+          throw new BadRequestException(
+            'Solo una caja de efectivo se asigna a un cobrador',
+          );
+        }
+        await assertAssignableCollector(tx, patch.assignedTo);
+      }
       const [row] = await tx
         .update(schema.cashBox)
         .set({ ...patch, updatedAt: new Date() })
         .where(eq(schema.cashBox.id, id))
         .returning();
       if (!row) throw new NotFoundException('Caja no encontrada');
-      return {
-        id: row.id,
-        type: row.type,
-        name: row.name,
-        currency: row.currency,
-        bankAccountId: row.bankAccountId,
-        active: row.active,
-        createdAt: row.createdAt.toISOString(),
-      };
+      return toBoxView(row);
     });
   }
 

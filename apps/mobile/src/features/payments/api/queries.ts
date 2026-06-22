@@ -5,6 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type {
+  BankStatusContract,
   ManualVerifyPaymentInput,
   PaymentStatusContract,
 } from "@preztiaos/contracts";
@@ -36,9 +37,15 @@ export const paymentKeys = {
 export interface PaymentAttemptsParams {
   status?: PaymentStatusContract;
   failedOnly?: boolean;
+  q?: string;
+  bankStatus?: BankStatusContract;
+  minAmountMinor?: number;
+  maxAmountMinor?: number;
+  fromDate?: string;
+  toDate?: string;
 }
 
-/** Intentos de pago a nivel tenant (auditoría), filtrables por estado. Reviewer-only en el server. */
+/** Intentos de pago a nivel tenant (auditoría) con filtros avanzados. Reviewer-only en el server. */
 export function usePaymentAttempts(params: PaymentAttemptsParams = {}) {
   return useInfiniteQuery({
     queryKey: paymentKeys.attempts(params),
@@ -52,6 +59,12 @@ export function usePaymentAttempts(params: PaymentAttemptsParams = {}) {
             pageSize: PAGE_SIZE,
             ...(params.status ? { status: params.status } : {}),
             ...(params.failedOnly ? { failedOnly: true } : {}),
+            ...(params.q ? { q: params.q } : {}),
+            ...(params.bankStatus ? { bankStatus: params.bankStatus } : {}),
+            ...(params.minAmountMinor !== undefined ? { minAmountMinor: params.minAmountMinor } : {}),
+            ...(params.maxAmountMinor !== undefined ? { maxAmountMinor: params.maxAmountMinor } : {}),
+            ...(params.fromDate ? { fromDate: params.fromDate } : {}),
+            ...(params.toDate ? { toDate: params.toDate } : {}),
           },
         }),
       ),

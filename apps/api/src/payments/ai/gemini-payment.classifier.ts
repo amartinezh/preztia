@@ -103,7 +103,7 @@ export class GeminiPaymentClassifier implements MediaClassifier {
     apiKey: string,
     media: DownloadedMedia,
   ): Promise<MediaClassification> {
-    const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+    const model = process.env.GEMINI_VISION_MODEL ?? DEFAULT_MODEL;
     const url = `${ENDPOINT}/${model}:generateContent?key=${apiKey}`;
     const base64 = Buffer.from(media.bytes).toString('base64');
 

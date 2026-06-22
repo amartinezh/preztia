@@ -70,9 +70,19 @@ export function CashBoxesScreen() {
         {query.data ? (
           <Stack gap="md">
             <Card>
-              <Stack gap="xs">
-                <Text tone="muted">{t("cash.boxes.total")}</Text>
-                <MoneyText variant="heading" amountMinor={query.data.totalMinor} currency={query.data.currency} />
+              <Stack gap="sm">
+                <Stack gap="xs">
+                  <Text tone="muted">{t("cash.boxes.liquidity")}</Text>
+                  <MoneyText variant="heading" amountMinor={query.data.liquidityTotalMinor} currency={query.data.currency} />
+                </Stack>
+                <Row className="justify-between">
+                  <Text tone="muted">{t("cash.boxes.cashCustody")}</Text>
+                  <MoneyText variant="label" amountMinor={query.data.cashTotalMinor} currency={query.data.currency} />
+                </Row>
+                <Row className="justify-between">
+                  <Text tone="muted">{t("cash.boxes.bankTotal")}</Text>
+                  <MoneyText variant="label" amountMinor={query.data.bankTotalMinor} currency={query.data.currency} />
+                </Row>
               </Stack>
             </Card>
 
@@ -135,18 +145,36 @@ function BoxCard({
         <Row className="justify-between items-center">
           <Stack gap="xs">
             <Text variant="label">{box.name}</Text>
-            <Badge label={t(`cash.boxes.type.${box.type}`)} tone={box.type === "TRANSIT" ? "warning" : "neutral"} />
+            <Row className="items-center gap-2">
+              <Badge label={t(`cash.boxes.type.${box.type}`)} tone={box.type === "TRANSIT" ? "warning" : "neutral"} />
+              {box.needsClose ? <Badge label={t("cash.boxes.needsClose")} tone="danger" /> : null}
+            </Row>
+            {box.bankName ? (
+              <Text variant="caption" tone="muted">
+                {box.accountNumberMasked ? `${box.bankName} · ${box.accountNumberMasked}` : box.bankName}
+              </Text>
+            ) : null}
+            {box.assignedToEmail ? (
+              <Text variant="caption" tone="muted">
+                {t("cash.boxes.collector")}: {box.assignedToEmail}
+              </Text>
+            ) : null}
           </Stack>
           <MoneyText variant="heading" amountMinor={box.balanceMinor} currency={box.currency} />
         </Row>
 
         {last ? (
-          <Row className="justify-between items-center">
-            <Badge label={t(`cash.sync.${syncKey(last.status)}`)} tone={SYNC_TONE[last.status]} />
-            {last.status === "MISMATCH" && last.differenceMinor !== null ? (
-              <MoneyText variant="label" tone="danger" amountMinor={last.differenceMinor} currency={box.currency} />
-            ) : null}
-          </Row>
+          <Stack gap="xs">
+            <Row className="justify-between items-center">
+              <Badge label={t(`cash.sync.${syncKey(last.status)}`)} tone={SYNC_TONE[last.status]} />
+              {last.status === "MISMATCH" && last.differenceMinor !== null ? (
+                <MoneyText variant="label" tone="danger" amountMinor={last.differenceMinor} currency={box.currency} />
+              ) : null}
+            </Row>
+            <Text variant="caption" tone="muted">
+              {t("cash.boxes.lastSync")}: {new Date(last.syncedAt).toLocaleString()}
+            </Text>
+          </Stack>
         ) : null}
 
         {error ? <Banner tone="danger" title={error} /> : null}

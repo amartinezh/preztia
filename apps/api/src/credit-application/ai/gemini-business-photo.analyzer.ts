@@ -92,7 +92,7 @@ export class GeminiBusinessPhotoAnalyzer implements BusinessPhotoVisionAnalyzer 
     photo: DownloadedMedia,
     registry: BusinessRegistrySnapshot,
   ): Promise<BusinessPhotoVerdict> {
-    const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+    const model = process.env.GEMINI_VISION_MODEL ?? DEFAULT_MODEL;
     const url = `${ENDPOINT}/${model}:generateContent?key=${apiKey}`;
     const prompt = PROMPT.replace('{{registry}}', JSON.stringify(registry));
     const base64 = Buffer.from(photo.bytes).toString('base64');
@@ -196,7 +196,7 @@ export class GeminiBusinessPhotoAnalyzer implements BusinessPhotoVisionAnalyzer 
         applicantPhone: input.applicantPhone,
         mediaId: input.mediaId,
         provider: 'GEMINI',
-        model: process.env.GEMINI_MODEL ?? DEFAULT_MODEL,
+        model: process.env.GEMINI_VISION_MODEL ?? DEFAULT_MODEL,
         identifiedType: 'business_photo',
         matchesExpected: verdict.matchesRegistry,
         confidence: verdict.veracityScore,

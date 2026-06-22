@@ -183,8 +183,17 @@ export class CashBoxController {
   ) {
     const tenant = requireTenant(tenantId);
     requireRole(auth, DATA_PLANE_ROLES);
-    const { page, pageSize, cashBoxId, kind, direction, userId, from, to } =
-      listCashTransactionsQuery.parse(query);
+    const {
+      page,
+      pageSize,
+      cashBoxId,
+      kind,
+      direction,
+      userId,
+      collectorId,
+      from,
+      to,
+    } = listCashTransactionsQuery.parse(query);
     const { items, total } = await this.queries.listCashTransactions({
       tenantId: tenant,
       page,
@@ -193,6 +202,7 @@ export class CashBoxController {
       ...(kind ? { kind } : {}),
       ...(direction ? { direction } : {}),
       ...(userId ? { userId } : {}),
+      ...(collectorId ? { collectorId } : {}),
       ...(from ? { from } : {}),
       ...(to ? { to } : {}),
     });

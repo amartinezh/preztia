@@ -40,6 +40,11 @@ export interface TransactionFilters {
     | "ADJUSTMENT"
     | "UNIDENTIFIED";
   direction?: "IN" | "OUT";
+  /** Cobrador dueño de la caja (su efectivo de ruta). */
+  collectorId?: string;
+  /** Rango de fechas (datetime ISO inclusivo): desde el inicio y hasta el fin del día. */
+  from?: string;
+  to?: string;
 }
 
 // --- Lecturas ---------------------------------------------------------------
@@ -84,6 +89,9 @@ export function useCashTransactions(filters: TransactionFilters = {}) {
             ...(filters.cashBoxId ? { cashBoxId: filters.cashBoxId } : {}),
             ...(filters.kind ? { kind: filters.kind } : {}),
             ...(filters.direction ? { direction: filters.direction } : {}),
+            ...(filters.collectorId ? { collectorId: filters.collectorId } : {}),
+            ...(filters.from ? { from: filters.from } : {}),
+            ...(filters.to ? { to: filters.to } : {}),
           },
         }),
       ),
@@ -163,7 +171,12 @@ export function useSyncBankBalance() {
 export function useCreateCashBox() {
   const invalidate = useInvalidateCash();
   return useMutation({
-    mutationFn: async (input: { type: CashBoxType; name: string; bankAccountId?: string }) =>
+    mutationFn: async (input: {
+      type: CashBoxType;
+      name: string;
+      bankAccountId?: string;
+      assignedTo?: string;
+    }) =>
       unwrap(
         await api.createCashBox({
           headers: tenantHeader(),
@@ -171,6 +184,30 @@ export function useCreateCashBox() {
             type: input.type,
             name: input.name,
             ...(input.bankAccountId ? { bankAccountId: input.bankAccountId } : {}),
+            ...(input.assignedTo ? { assignedTo: input.assignedTo } : {}),
+          },
+        }),
+      ),
+    onSuccess: invalidate,
+  });
+}
+
+/** Edita una caja: nombre y/o cobrador (assignedTo: null lo desvincula). */
+export function useUpdateCashBox() {
+  const invalidate = useInvalidateCash();
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      name?: string;
+      assignedTo?: string | null;
+    }) =>
+      unwrap(
+        await api.updateCashBox({
+          headers: tenantHeader(),
+          params: { id: input.id },
+          body: {
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.assignedTo !== undefined ? { assignedTo: input.assignedTo } : {}),
           },
         }),
       ),

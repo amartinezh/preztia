@@ -45,11 +45,29 @@ export const paymentStatusEnum = z.enum([
 ]);
 export type PaymentStatusContract = z.infer<typeof paymentStatusEnum>;
 
-// Listado de intentos a nivel tenant (auditoría). `failedOnly` filtra los no verificados.
+// Estado de la verificación bancaria (filtro de auditoría).
+export const bankStatusEnum = z.enum(["CONFIRMED", "NOT_FOUND", "UNAVAILABLE"]);
+export type BankStatusContract = z.infer<typeof bankStatusEnum>;
+
+// Fecha de negocio (YYYY-MM-DD) para acotar rangos sin acoplar la zona horaria del cliente.
+const businessDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida (YYYY-MM-DD)");
+
+// Listado de intentos a nivel tenant (auditoría) con filtros avanzados.
+// `failedOnly` filtra los no verificados; `q` busca en pagador/CPF/banco/E2E;
+// el rango de monto/fecha acota la búsqueda. El servidor valida la frontera.
 export const listPaymentAttemptsQuery = paginationQuery.extend({
   status: paymentStatusEnum.optional(),
   failedOnly: z.coerce.boolean().optional(),
+  // Texto libre: nombre del pagador, CPF/CNPJ, banco emisor o end-to-end id.
+  q: z.string().trim().min(1).max(80).optional(),
+  bankStatus: bankStatusEnum.optional(),
+  minAmountMinor: z.coerce.number().int().nonnegative().optional(),
+  maxAmountMinor: z.coerce.number().int().nonnegative().optional(),
+  // Rango de la fecha de pago del comprobante (inclusivo).
+  fromDate: businessDate.optional(),
+  toDate: businessDate.optional(),
 });
+export type ListPaymentAttemptsQuery = z.infer<typeof listPaymentAttemptsQuery>;
 
 // Una entrada del proceso (bitácora append-only `payment_event`): qué pasó y cuándo.
 export const paymentEventView = z.object({

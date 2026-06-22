@@ -12,6 +12,7 @@ import { OperationsModule } from './operations/operations.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { TenantConfigModule } from './tenant-config/tenant-config.module';
 import { ReportingModule } from './reporting/reporting.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { PaymentPlanModule } from './credit/plans/payment-plan.module';
@@ -33,6 +34,7 @@ import { tenantMiddleware } from './tenancy/tenant-context';
     TrackingModule,
     TenantConfigModule,
     ReportingModule,
+    DashboardModule,
     ObservabilityModule,
     WhatsappModule,
     PaymentPlanModule,

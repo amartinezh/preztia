@@ -1,6 +1,8 @@
 import { View } from "react-native";
+import { useRouter } from "expo-router";
 import type { AccountDetail } from "@preztiaos/contracts";
 import {
+  Button,
   Card,
   ErrorState,
   MoneyText,
@@ -31,6 +33,7 @@ const CELL_BG: Record<InstallmentStatus, string> = {
 /** Detalle de préstamo: cabecera (cupo, interés, valor cuota, deuda, atraso) + cronograma. */
 export function AccountDetailScreen({ creditId }: { creditId: string }) {
   const { t } = useT();
+  const router = useRouter();
   const { role } = useSession();
   const query = useAccountDetail(creditId);
 
@@ -85,6 +88,14 @@ export function AccountDetailScreen({ creditId }: { creditId: string }) {
             ))}
           </View>
         </Stack>
+
+        {can(role, "payment:register") ? (
+          <Button
+            label={t("payments.register")}
+            block
+            onPress={() => router.push(`/payment/${creditId}`)}
+          />
+        ) : null}
 
         {can(role, "application:review") ? <CollectionSection creditId={creditId} /> : null}
 

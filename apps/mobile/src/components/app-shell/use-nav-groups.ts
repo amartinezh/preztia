@@ -29,8 +29,13 @@ export function useNavGroups(): NavGroup[] {
 
   const groups: NavGroup[] = [];
 
+  // Panel de bienvenida: es la RUTA RAÍZ ("/" → index), por lo que es lo primero que se ve al
+  // abrir la app y tras iniciar sesión. La autoridad fina la imponen backend + RLS; aquí solo
+  // decidimos qué se ofrece.
+  groups.push({ name: "index", href: "/" as Href, label: t("nav.inicio") });
+
   if (can(role, "credit:read")) {
-    groups.push({ name: "index", href: "/" as Href, label: t("nav.cartera") });
+    groups.push({ name: "cartera", href: "/cartera" as Href, label: t("nav.cartera") });
   }
   if (can(role, "application:review")) {
     groups.push({ name: "applications", href: "/applications" as Href, label: t("review.tab") });

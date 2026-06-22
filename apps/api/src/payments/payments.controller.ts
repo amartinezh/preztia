@@ -115,14 +115,30 @@ export class PaymentsController {
   ) {
     const tenant = requireTenant(tenantId);
     requireReviewer(authorization);
-    const { page, pageSize, status, failedOnly } =
-      listPaymentAttemptsQuery.parse(query);
+    const {
+      page,
+      pageSize,
+      status,
+      failedOnly,
+      q,
+      bankStatus,
+      minAmountMinor,
+      maxAmountMinor,
+      fromDate,
+      toDate,
+    } = listPaymentAttemptsQuery.parse(query);
     const { items, total } = await this.queries.listPaymentAttempts({
       tenantId: tenant,
       page,
       pageSize,
       ...(status ? { status } : {}),
       ...(failedOnly ? { failedOnly } : {}),
+      ...(q ? { q } : {}),
+      ...(bankStatus ? { bankStatus } : {}),
+      ...(minAmountMinor !== undefined ? { minAmountMinor } : {}),
+      ...(maxAmountMinor !== undefined ? { maxAmountMinor } : {}),
+      ...(fromDate ? { fromDate } : {}),
+      ...(toDate ? { toDate } : {}),
     });
     return { items, page, pageSize, total };
   }

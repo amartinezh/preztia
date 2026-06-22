@@ -17,6 +17,7 @@ export * from "./tracking";
 export * from "./borrower-lists";
 export * from "./tenant-config";
 export * from "./reporting";
+export * from "./dashboard";
 export * from "./whatsapp-channels";
 export * from "./conversations-inbox";
 export * from "./credit-application-review";

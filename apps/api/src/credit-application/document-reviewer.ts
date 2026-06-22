@@ -115,7 +115,7 @@ export class AiDocumentReviewer implements DocumentReviewer {
         );
         return null;
       }
-      const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+      const model = process.env.GEMINI_VISION_MODEL ?? DEFAULT_MODEL;
       const extraction = await this.extract(credentials, model, job);
       await this.persist(job, credentials.provider, model, extraction);
       this.logger.log(

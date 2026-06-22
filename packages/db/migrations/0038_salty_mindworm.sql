@@ -1,0 +1,2 @@
+ALTER TABLE "cash_box" ADD COLUMN "assigned_to" uuid;--> statement-breakpoint
+ALTER TABLE "cash_box" ADD CONSTRAINT "cash_box_assignee_only_cash_chk" CHECK ("cash_box"."assigned_to" is null or "cash_box"."type" = 'CASH');

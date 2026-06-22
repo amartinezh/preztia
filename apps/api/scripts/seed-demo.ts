@@ -105,15 +105,60 @@ async function main() {
     await tx
       .insert(schema.tenant)
       .values({ id: TENANT_ID, name: TENANT_NAME, slug: TENANT_SLUG });
-    await tx.insert(schema.tenantConfig).values({
-      tenantId: TENANT_ID,
-      whatsappPhoneNumberId,
-      currency: CURRENCY,
-      knowledgeBase:
-        'Preztia tenant: crédito de ruta. Cuotas diarias. Requisitos: documento de identidad, registro del negocio y recibo de servicio público.',
-      aiProvider: 'GEMINI',
-      ...(aiApiKeyPlain ? { aiApiKey: encryptSecret(aiApiKeyPlain) } : {}),
-    });
+      await tx.insert(schema.tenantConfig).values({
+        tenantId: TENANT_ID,
+        whatsappPhoneNumberId,
+        currency: CURRENCY,
+        knowledgeBase: `
+  # Base de Conocimiento: Línea de Crédito Comercial "Rápido, Fácil e Seguro"
+  
+  ## 1. Información General del Producto
+  * **Descripción:** Préstamos comerciales dirigidos a emprendedores y negocios que no reciben apoyo de la banca tradicional ("O banco não te socorre?").
+  * **Público Objetivo:** Exclusivo para propietarios de tiendas y negocios ("Exclusivo para proprietários de loja").
+  * **Promesa de Valor:** Un préstamo rápido, fácil y seguro ("rápido, fácil e seguro").
+  * **Canal de Contacto Principal:** WhatsApp: (37) 99968-5759.
+  
+  ## 2. Requisitos y Proceso de Verificación
+  Para procesar la solicitud de crédito, el cliente debe cumplir con los siguientes requisitos documentales y de ubicación:
+  
+  * **Documentos Obligatorios:**
+    1. Documento de identidad (Cédula).
+    2. Registro mercantil del negocio.
+    3. Recibo de servicios públicos.
+  * **Verificación de Ubicación en Tiempo Real:** 
+    * Al momento de elevar la solicitud, el cliente **debe encontrarse físicamente en su negocio o en su casa**.
+    * El sistema o agente solicitará que comparta su **ubicación en tiempo real** a través de WhatsApp.
+  * **Validación Fotográfica:** Se exigirá el envío de una **fotografía del lugar** (negocio o domicilio) en el momento de la solicitud para realizar verificaciones antifraude y de existencia.
+  
+  ## 3. Tablas de Amortización y Planes de Pago
+  
+  A continuación, se detallan los planes de pago según el valor del préstamo solicitado. Todos los valores están expresados en Reales Brasileños (R$).
+  
+  * **Planes Oficiales:** 11, 20 y 24 parcelas (cuotas).
+  * **Planes de Prueba (Ficticios):** 10 y 15 parcelas (cuotas creadas para el entorno de pruebas del sistema).
+  
+  | Valor do Empréstimo | 10 parcelas (Ficticio) | 11 parcelas (Oficial) | 15 parcelas (Ficticio) | 20 parcelas (Oficial) | 24 parcelas (Oficial) |
+  | :--- | :--- | :--- | :--- | :--- | :--- |
+  | **R$ 200,00** | R$ 22,00 | R$ 20,00 | R$ 16,00 | R$ 12,00 | R$ 10,00 |
+  | **R$ 300,00** | R$ 33,00 | R$ 30,00 | R$ 24,00 | R$ 18,00 | R$ 15,00 |
+  | **R$ 400,00** | R$ 44,00 | R$ 40,00 | R$ 32,00 | R$ 24,00 | R$ 20,00 |
+  | **R$ 500,00** | R$ 55,00 | R$ 50,00 | R$ 40,00 | R$ 30,00 | R$ 25,00 |
+  | **R$ 600,00** | R$ 66,00 | R$ 60,00 | R$ 48,00 | R$ 36,00 | R$ 30,00 |
+  | **R$ 700,00** | R$ 77,00 | R$ 70,00 | R$ 56,00 | R$ 42,00 | R$ 35,00 |
+  | **R$ 800,00** | R$ 88,00 | R$ 80,00 | R$ 64,00 | R$ 48,00 | R$ 40,00 |
+  | **R$ 1.000,00** | R$ 110,00 | R$ 100,00 | R$ 80,00 | R$ 60,00 | R$ 50,00 |
+  | **R$ 2.000,00** | R$ 220,00 | R$ 200,00 | R$ 160,00 | R$ 120,00 | R$ 100,00 |
+  | **R$ 3.000,00** | R$ 330,00 | R$ 300,00 | R$ 240,00 | R$ 180,00 | R$ 150,00 |
+  
+  ## 4. Notas para el Agente (Chatbot)
+  * **Restricciones de Solicitud:** Si el usuario no es dueño de un negocio o tienda, debes informarle amablemente que este crédito es exclusivo para propietarios de negocios.
+  * **Control de Requisitos:** Antes de confirmar cualquier crédito, debes asegurarte de pedir explícitamente los 3 documentos (Cédula, Registro mercantil, Recibo de servicios públicos).
+  * **Control de Ubicación:** Debes indicar claramente al usuario: "Para continuar con tu solicitud, por favor envíame tu ubicación en tiempo real y una foto del lugar. Recuerda que debes estar en tu negocio o en tu casa en este momento". Si el usuario se niega o no puede enviar la ubicación/foto, el proceso no puede continuar.
+  * **Montos:** El préstamo mínimo es de R$ 200,00 y el máximo listado es de R$ 3.000,00.
+  * **Redirección a Ventas/Validación:** Si se completan los pasos o si hay dudas fuera de este flujo, redirige la solicitud o transfiere al agente humano en el WhatsApp oficial: (37) 99968-5759.`,
+        aiProvider: 'GEMINI',
+        ...(aiApiKeyPlain ? { aiApiKey: encryptSecret(aiApiKeyPlain) } : {}),
+      });
 
     // 1b) Catálogo de documentos requeridos: lo que el bot pide al iniciar la solicitud.
     await tx.insert(schema.creditDocumentRequirement).values([

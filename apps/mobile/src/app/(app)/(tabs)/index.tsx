@@ -1,3 +1,5 @@
-import { PortfolioScreen } from "@/features/portfolio/screens/portfolio-screen";
+import { DashboardScreen } from "@/features/dashboard/screens/dashboard-screen";
 
-export default PortfolioScreen;
+// Ruta raíz del flujo autenticado ("/"): el panel de bienvenida es lo primero que se ve al
+// abrir la app y tras iniciar sesión. La Cartera vive ahora en "/cartera".
+export default DashboardScreen;

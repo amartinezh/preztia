@@ -30,6 +30,10 @@ export const cashBox = pgTable(
     currency: text("currency").notNull(),
     // Obligatoria si type=BANK; NULL en CASH/TRANSIT (garantizado por el CHECK).
     bankAccountId: uuid("bank_account_id").references(() => tenantBankAccount.id),
+    // Cobrador (app_user) dueño de la caja de RUTA: el efectivo que lleva en la calle.
+    // Solo aplica a cajas CASH (garantizado por el CHECK). NULL = caja de oficina/menor.
+    // Sin FK, igual que created_by/performed_by (RLS aísla por tenant).
+    assignedTo: uuid("assigned_to"),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -40,6 +44,11 @@ export const cashBox = pgTable(
       "cash_box_bank_link_chk",
       sql`(${t.type} = 'BANK' and ${t.bankAccountId} is not null)
        or (${t.type} <> 'BANK' and ${t.bankAccountId} is null)`,
+    ),
+    // Solo una caja de efectivo (de ruta) puede tener cobrador asignado.
+    assigneeOnlyCash: check(
+      "cash_box_assignee_only_cash_chk",
+      sql`${t.assignedTo} is null or ${t.type} = 'CASH'`,
     ),
     // Una sola caja de tránsito por tenant.
     oneTransit: uniqueIndex("cash_box_one_transit_idx")
