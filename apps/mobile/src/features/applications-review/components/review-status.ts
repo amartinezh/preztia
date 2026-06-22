@@ -70,6 +70,7 @@ export function severityTone(severidad: string): BadgeTone {
 export const DOCUMENT_LABELS: Record<string, string> = {
   IDENTITY_DOCUMENT: "Documento de identidad",
   BUSINESS_VALIDITY_CERTIFICATE: "Certificado de actividad",
+  BUSINESS_PHOTO: "Foto del negocio",
   PUBLIC_SERVICES_RECEIPT: "Recibo de servicios",
   BANK_STATEMENT: "Extracto bancario",
   INCOME_PROOF: "Comprobante de ingresos",

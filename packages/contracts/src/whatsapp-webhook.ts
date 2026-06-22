@@ -27,6 +27,15 @@ const whatsappMessage = z
     audio: mediaObject.optional(),
     image: mediaObject.optional(),
     document: mediaObject.optional(),
+    // Ubicación compartida con la función nativa de WhatsApp (type === "location").
+    location: z
+      .object({
+        latitude: z.number(),
+        longitude: z.number(),
+        name: z.string().optional(),
+        address: z.string().optional(),
+      })
+      .optional(),
   })
   .passthrough();
 

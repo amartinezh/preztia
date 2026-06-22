@@ -35,7 +35,14 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "PreztiaOS usa tu ubicación para trazar la ruta de cobro desde tu posición actual."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

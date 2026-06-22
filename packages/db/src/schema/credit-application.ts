@@ -5,6 +5,7 @@ import {
   text,
   integer,
   bigint,
+  doublePrecision,
   jsonb,
   boolean,
   timestamp,
@@ -20,6 +21,7 @@ import { ltree } from "./zone";
 export const requiredDocument = pgEnum("required_document", [
   "IDENTITY_DOCUMENT",
   "BUSINESS_VALIDITY_CERTIFICATE",
+  "BUSINESS_PHOTO",
   "PUBLIC_SERVICES_RECEIPT",
   "BANK_STATEMENT",
   "INCOME_PROOF",
@@ -79,6 +81,12 @@ export const creditApplication = pgTable(
     offerExpiresAt: timestamp("offer_expires_at", { withTimezone: true }),
     // Sello de la aceptación del cliente por WhatsApp (bandera para el botón final).
     clientAcceptedAt: timestamp("client_accepted_at", { withTimezone: true }),
+    // ── Geolocalización compartida por WhatsApp (verificación geográfica) ─────────────────────
+    // Coordenadas que el cliente comparte con la función nativa de WhatsApp (idealmente en su
+    // negocio/domicilio). Fecha de negocio (no auditoría). El front pintará el marcador (fase post).
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    locationSharedAt: timestamp("location_shared_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

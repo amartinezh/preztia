@@ -3,6 +3,7 @@ import type {
   DocumentMessage,
   ImageMessage,
   InboundMessage,
+  LocationMessage,
   TextMessage,
 } from "@preztiaos/domain";
 
@@ -27,6 +28,11 @@ export interface ImageMessageDispatcher {
 /** El archivo adjunto (PDF, etc.) se despacha al servicio de documentos (posible documento KYC). */
 export interface DocumentMessageDispatcher {
   dispatch(message: DocumentMessage): Promise<void>;
+}
+
+/** La ubicación compartida se captura en la solicitud activa (verificación geográfica). */
+export interface LocationMessageDispatcher {
+  dispatch(message: LocationMessage): Promise<void>;
 }
 
 /**

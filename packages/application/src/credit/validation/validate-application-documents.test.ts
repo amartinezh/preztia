@@ -87,6 +87,20 @@ const recibo: PersistedDocumentExtraction = {
   fileMetadata: null,
 };
 
+// La foto del local se persiste como extracción BUSINESS_PHOTO con el veredicto de visión.
+const fotoNegocio: PersistedDocumentExtraction = {
+  documentType: "BUSINESS_PHOTO",
+  applicantPhone: "5561999998888",
+  fields: {
+    riskLevel: "LOW",
+    veracityScore: 90,
+    matchesRegistry: true,
+    inconsistencies: [],
+    summary: "Local coherente con el registro.",
+  },
+  fileMetadata: null,
+};
+
 interface Overrides {
   extractions?: readonly PersistedDocumentExtraction[];
   cnpj?: (cnpj: string) => Promise<CnpjRegistryRecord | null>;
@@ -97,7 +111,7 @@ interface Overrides {
 function makeHandler(over: Overrides = {}) {
   const saved: DocumentValidationReport[] = [];
   const handler = new ValidateApplicationDocumentsHandler(
-    { findLatestByApplication: async () => over.extractions ?? [identidad, negocio, recibo] },
+    { findLatestByApplication: async () => over.extractions ?? [identidad, negocio, recibo, fotoNegocio] },
     { findByCnpj: over.cnpj ?? cnpjPorDefecto },
     { findByCep: over.cep ?? (async () => cepBrasilia) },
     { findByDdd: async () => ({ state: "DF" }) },
@@ -159,7 +173,7 @@ describe("ValidateApplicationDocumentsHandler", () => {
     const { handler } = makeHandler({ extractions: [identidad] });
     const report = await handler.execute(CMD);
     const faltantes = report.alerts.filter((a) => a.campo === "extraccion");
-    expect(faltantes).toHaveLength(2);
+    expect(faltantes).toHaveLength(3);
     expect(report.status).toBe("suspicious");
   });
 

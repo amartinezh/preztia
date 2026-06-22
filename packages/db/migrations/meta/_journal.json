@@ -260,6 +260,13 @@
       "when": 1781981679293,
       "tag": "0036_ancient_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1782096716073,
+      "tag": "0037_low_hemingway",
+      "breakpoints": true
     }
   ]
 }

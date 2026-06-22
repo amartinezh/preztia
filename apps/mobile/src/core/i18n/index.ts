@@ -468,6 +468,7 @@ const es = {
   "docs.empty.warning": "Activa al menos un documento para poder iniciar solicitudes.",
   "docs.type.IDENTITY_DOCUMENT": "Documento de identidad",
   "docs.type.BUSINESS_VALIDITY_CERTIFICATE": "Certificado del negocio",
+  "docs.type.BUSINESS_PHOTO": "Foto del negocio",
   "docs.type.PUBLIC_SERVICES_RECEIPT": "Recibo de servicios públicos",
   "docs.type.BANK_STATEMENT": "Extracto bancario",
   "docs.type.INCOME_PROOF": "Comprobante de ingresos",

@@ -2,8 +2,12 @@ import { Module } from '@nestjs/common';
 import {
   AnswerTextMessageHandler,
   type AntifraudService,
+  type ApplicantLocationStore,
   type ApplicationCompletionNotifier,
+  type BusinessPhotoVisionAnalyzer,
   type AudioMessageDispatcher,
+  CaptureApplicantLocationHandler,
+  type LocationMessageDispatcher,
   type ConversationLog,
   type CreditApplicationRepository,
   type CreditApplicationRestarter,
@@ -50,6 +54,8 @@ import { PlanOfferWhatsappNotifier } from '../credit-application/review/plan-off
 import { PaymentPlanModule } from '../credit/plans/payment-plan.module';
 import { PaymentPlanRepository } from '../credit/plans/payment-plan.repository';
 import { AudioDispatchAdapter } from './adapters/audio-dispatch.adapter';
+import { LocationDispatchAdapter } from './adapters/location-dispatch.adapter';
+import { ApplicantLocationRepository } from '../credit-application/applicant-location.repository';
 import { TenantConfigDrizzleRepository } from './text/tenant-config.repository';
 import { KnowledgeAssistantRouter } from './ai/knowledge-assistant.router';
 import { WhatsappTextSender } from './text/whatsapp-text-sender';
@@ -72,6 +78,7 @@ import { BrasilApiCepLookup } from '../credit-application/validation/brasilapi-c
 import { BrasilApiDddLookup } from '../credit-application/validation/brasilapi-ddd.client';
 import { SerproCpfVerifier } from '../credit-application/validation/serpro-cpf.client';
 import { AiDocumentReviewer } from '../credit-application/document-reviewer';
+import { GeminiBusinessPhotoAnalyzer } from '../credit-application/ai/gemini-business-photo.analyzer';
 import { WhatsappMediaDownloader } from '../credit-application/whatsapp-media.downloader';
 import { MinioDocumentStorage } from '../credit-application/minio-document.storage';
 import { StructuralAntifraudService } from '../credit-application/antifraud.service';
@@ -82,6 +89,7 @@ import {
   ANTIFRAUD_SERVICE,
   APPLICATION_COMPLETION_NOTIFIER,
   AUDIO_DISPATCHER,
+  BUSINESS_PHOTO_VISION_ANALYZER,
   CEP_LOOKUP,
   CNPJ_REGISTRY_LOOKUP,
   CONFIG_REPOSITORY,
@@ -98,6 +106,8 @@ import {
   IMAGE_DISPATCHER,
   INBOUND_MESSAGE_DEDUPLICATOR,
   KNOWLEDGE_ASSISTANT,
+  LOCATION_DISPATCHER,
+  APPLICANT_LOCATION_STORE,
   MEDIA_DOWNLOADER,
   OUTBOUND_TEXT_SENDER,
   PENDING_DOCUMENT_REMINDER,
@@ -163,6 +173,33 @@ import {
     // enrutador de media, que decide entre protocolo KYC y recepción de pagos.
     { provide: TEXT_CONSUMER, useClass: WhatsappTextConsumer },
     { provide: AUDIO_DISPATCHER, useClass: AudioDispatchAdapter },
+
+    // Captura de ubicación compartida por WhatsApp → solicitud activa (verificación geográfica).
+    {
+      provide: APPLICANT_LOCATION_STORE,
+      useClass: ApplicantLocationRepository,
+    },
+    {
+      provide: CaptureApplicantLocationHandler,
+      inject: [
+        TENANT_RESOLVER,
+        INBOUND_MESSAGE_DEDUPLICATOR,
+        APPLICANT_LOCATION_STORE,
+        OUTBOUND_TEXT_SENDER,
+      ],
+      useFactory: (
+        tenants: TenantResolver,
+        dedup: InboundMessageDeduplicator,
+        store: ApplicantLocationStore,
+        sender: OutboundTextSender,
+      ) => new CaptureApplicantLocationHandler(tenants, dedup, store, sender),
+    },
+    {
+      provide: LOCATION_DISPATCHER,
+      inject: [CaptureApplicantLocationHandler],
+      useFactory: (handler: CaptureApplicantLocationHandler) =>
+        new LocationDispatchAdapter(handler),
+    },
     MediaRouterDispatcher,
     { provide: IMAGE_DISPATCHER, useExisting: MediaRouterDispatcher },
     { provide: DOCUMENT_DISPATCHER, useExisting: MediaRouterDispatcher },
@@ -282,6 +319,10 @@ import {
         new AntifraudValidationCompletionNotifier(validate),
     },
     { provide: DOCUMENT_REVIEWER, useClass: AiDocumentReviewer },
+    {
+      provide: BUSINESS_PHOTO_VISION_ANALYZER,
+      useClass: GeminiBusinessPhotoAnalyzer,
+    },
     { provide: MEDIA_DOWNLOADER, useClass: WhatsappMediaDownloader },
     { provide: DOCUMENT_STORAGE, useClass: MinioDocumentStorage },
     { provide: ANTIFRAUD_SERVICE, useClass: StructuralAntifraudService },
@@ -325,6 +366,7 @@ import {
         OUTBOUND_TEXT_SENDER,
         APPLICATION_COMPLETION_NOTIFIER,
         DOCUMENT_REVIEWER,
+        BUSINESS_PHOTO_VISION_ANALYZER,
       ],
       useFactory: (
         tenants: TenantResolver,
@@ -337,6 +379,7 @@ import {
         sender: OutboundTextSender,
         completion: ApplicationCompletionNotifier,
         reviewer: DocumentReviewer,
+        businessPhotoVision: BusinessPhotoVisionAnalyzer,
       ) =>
         new SubmitApplicationDocumentHandler(
           tenants,
@@ -349,6 +392,7 @@ import {
           sender,
           completion,
           reviewer,
+          businessPhotoVision,
         ),
     },
 
@@ -392,6 +436,7 @@ import {
         AUDIO_DISPATCHER,
         IMAGE_DISPATCHER,
         DOCUMENT_DISPATCHER,
+        LOCATION_DISPATCHER,
         CONVERSATION_LOG,
       ],
       useFactory: (
@@ -399,8 +444,17 @@ import {
         audio: AudioMessageDispatcher,
         image: ImageMessageDispatcher,
         document: DocumentMessageDispatcher,
+        location: LocationMessageDispatcher,
         log: ConversationLog,
-      ) => new ProcessInboundMessageHandler(text, audio, image, document, log),
+      ) =>
+        new ProcessInboundMessageHandler(
+          text,
+          audio,
+          image,
+          document,
+          location,
+          log,
+        ),
     },
   ],
 })

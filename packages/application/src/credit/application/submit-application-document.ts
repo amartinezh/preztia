@@ -9,6 +9,7 @@ import type { OutboundTextSender } from "../../conversations/text/ports";
 import type {
   AntifraudService,
   ApplicationCompletionNotifier,
+  BusinessPhotoVisionAnalyzer,
   CreditApplicationRepository,
   DocumentReviewer,
   DocumentStorage,
@@ -36,7 +37,8 @@ export interface SubmitDocumentCommand {
 }
 
 const COMPLETED =
-  "¡Gracias! Recibimos todos tus documentos. Tu solicitud está *en revisión*; te avisaremos el resultado.";
+  "¡Gracias! Recibimos todos tus documentos. Por último, comparte tu *ubicación* actual con el " +
+  "clip 📎 → Ubicación (idealmente desde tu negocio o domicilio) para completar tu solicitud.";
 
 /**
  * Caso de uso: recibe un documento del solicitante y, según la revisión (antifraude
@@ -58,6 +60,8 @@ export class SubmitApplicationDocumentHandler {
     private readonly sender: OutboundTextSender,
     private readonly completion: ApplicationCompletionNotifier,
     private readonly reviewer: DocumentReviewer,
+    // Opcional: análisis antifraude por visión de la foto del local (BUSINESS_PHOTO).
+    private readonly businessPhotoVision?: BusinessPhotoVisionAnalyzer,
   ) {}
 
   async execute(cmd: SubmitDocumentCommand): Promise<void> {
@@ -113,6 +117,18 @@ export class SubmitApplicationDocumentHandler {
     const stored = accepted
       ? await this.storage.store({ tenantId, applicationId: active.id, documentType, media })
       : null;
+
+    // Análisis antifraude por VISIÓN del local: solo para la foto del negocio aceptada. Best-effort
+    // (el adaptador traga sus fallos y devuelve null): no debe bloquear la continuidad del checklist.
+    if (accepted && documentType === "BUSINESS_PHOTO" && this.businessPhotoVision) {
+      await this.businessPhotoVision.analyze({
+        tenantId,
+        applicationId: active.id,
+        applicantPhone: cmd.applicant,
+        mediaId: cmd.media.mediaId,
+        photo: media,
+      });
+    }
 
     const application = recordDocumentResult(active.application, documentType, accepted);
     await this.applications.saveDocumentOutcome({

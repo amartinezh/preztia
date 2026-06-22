@@ -2,7 +2,7 @@
 // Es el resultado de "clasificar": una unión discriminada por `kind` que el
 // caso de uso enruta a destinos distintos. El dominio no conoce HTTP ni Meta.
 
-export type MessageKind = "text" | "audio" | "image" | "document";
+export type MessageKind = "text" | "audio" | "image" | "document" | "location";
 
 export interface InboundMessageBase {
   /** id único del mensaje en el proveedor (wamid). Útil para idempotencia. */
@@ -49,4 +49,20 @@ export interface DocumentMessage extends InboundMessageBase {
   readonly filename?: string;
 }
 
-export type InboundMessage = TextMessage | AudioMessage | ImageMessage | DocumentMessage;
+/**
+ * Ubicación compartida con la función nativa de WhatsApp (clip → Ubicación). El cliente la envía
+ * estando idealmente en su negocio/domicilio; se persiste en la solicitud activa para apoyar la
+ * verificación geográfica (y, en una fase posterior, pintarla en un mapa).
+ */
+export interface LocationMessage extends InboundMessageBase {
+  readonly kind: "location";
+  readonly latitude: number;
+  readonly longitude: number;
+}
+
+export type InboundMessage =
+  | TextMessage
+  | AudioMessage
+  | ImageMessage
+  | DocumentMessage
+  | LocationMessage;

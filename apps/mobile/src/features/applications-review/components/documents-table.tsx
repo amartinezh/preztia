@@ -4,6 +4,7 @@ import type { ApplicationDocumentDetail } from "@preztiaos/contracts";
 
 import { useT } from "@/core/i18n";
 import { useReExtractDocument } from "../api/queries";
+import { AntifraudVisionPanel } from "./antifraud-vision-panel";
 import { documentLabel, documentStatusBadge } from "./review-status";
 
 type Props = {
@@ -100,6 +101,8 @@ function DocumentCard({
         </Stack>
       ) : null}
 
+      {doc.visionVerdict ? <AntifraudVisionPanel verdict={doc.visionVerdict} /> : null}
+
       <Row className="flex-wrap gap-2 pt-1">
         <Button
           label={t("review.detail.viewOriginal")}
@@ -109,7 +112,7 @@ function DocumentCard({
           onPress={() => onViewOriginal(doc.documentType)}
         />
         <Button
-          label="Reintentar lectura con IA"
+          label={doc.documentType === "BUSINESS_PHOTO" ? "Re-estudiar con IA" : "Reintentar lectura con IA"}
           size="sm"
           loading={reExtract.isPending}
           disabled={!doc.hasOriginal}

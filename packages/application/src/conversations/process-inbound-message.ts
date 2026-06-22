@@ -4,11 +4,16 @@ import type {
   ConversationLog,
   DocumentMessageDispatcher,
   ImageMessageDispatcher,
+  LocationMessageDispatcher,
   TextMessageConsumer,
 } from "./ports";
 
 /** Destino al que se enrutó el mensaje; útil para logging/observabilidad. */
-export type MessageDestination = "console" | "audio-service" | "document-service";
+export type MessageDestination =
+  | "console"
+  | "audio-service"
+  | "document-service"
+  | "location-service";
 
 /**
  * Clasifica un mensaje entrante por su tipo y lo enruta al puerto correspondiente.
@@ -20,6 +25,7 @@ export class ProcessInboundMessageHandler {
     private readonly audio: AudioMessageDispatcher,
     private readonly image: ImageMessageDispatcher,
     private readonly document: DocumentMessageDispatcher,
+    private readonly location: LocationMessageDispatcher,
     private readonly conversationLog: ConversationLog,
   ) {}
 
@@ -40,6 +46,9 @@ export class ProcessInboundMessageHandler {
       case "document":
         await this.document.dispatch(message);
         return "document-service";
+      case "location":
+        await this.location.dispatch(message);
+        return "location-service";
     }
   }
 }

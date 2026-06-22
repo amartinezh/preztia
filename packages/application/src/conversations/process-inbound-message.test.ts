@@ -4,6 +4,7 @@ import type {
   DocumentMessage,
   ImageMessage,
   InboundMessage,
+  LocationMessage,
   TextMessage,
 } from "@preztiaos/domain";
 import { ProcessInboundMessageHandler } from "./process-inbound-message";
@@ -12,6 +13,7 @@ import type {
   ConversationLog,
   DocumentMessageDispatcher,
   ImageMessageDispatcher,
+  LocationMessageDispatcher,
   TextMessageConsumer,
 } from "./ports";
 
@@ -31,6 +33,10 @@ class SpyDocumentDispatcher implements DocumentMessageDispatcher {
   received: DocumentMessage[] = [];
   async dispatch(m: DocumentMessage) { this.received.push(m); }
 }
+class SpyLocationDispatcher implements LocationMessageDispatcher {
+  received: LocationMessage[] = [];
+  async dispatch(m: LocationMessage) { this.received.push(m); }
+}
 class SpyConversationLog implements ConversationLog {
   inbound: InboundMessage[] = [];
   async recordInbound(m: InboundMessage) { this.inbound.push(m); }
@@ -44,6 +50,7 @@ describe("ProcessInboundMessageHandler", () => {
   let audio: SpyAudioDispatcher;
   let image: SpyImageDispatcher;
   let document: SpyDocumentDispatcher;
+  let location: SpyLocationDispatcher;
   let log: SpyConversationLog;
   let handler: ProcessInboundMessageHandler;
 
@@ -52,8 +59,9 @@ describe("ProcessInboundMessageHandler", () => {
     audio = new SpyAudioDispatcher();
     image = new SpyImageDispatcher();
     document = new SpyDocumentDispatcher();
+    location = new SpyLocationDispatcher();
     log = new SpyConversationLog();
-    handler = new ProcessInboundMessageHandler(text, audio, image, document, log);
+    handler = new ProcessInboundMessageHandler(text, audio, image, document, location, log);
   });
 
   it("registra cada mensaje entrante en el transcript", async () => {
@@ -91,6 +99,14 @@ describe("ProcessInboundMessageHandler", () => {
     expect(await handler.execute(msg)).toBe("document-service");
     expect(document.received).toEqual([msg]);
     expect(image.received).toHaveLength(0);
+    expect(text.received).toHaveLength(0);
+  });
+
+  it("la ubicación va al servicio de geolocalización", async () => {
+    const msg: InboundMessage = { ...base, kind: "location", latitude: 6.25, longitude: -75.56 };
+    expect(await handler.execute(msg)).toBe("location-service");
+    expect(location.received).toEqual([msg]);
+    expect(document.received).toHaveLength(0);
     expect(text.received).toHaveLength(0);
   });
 });

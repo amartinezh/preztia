@@ -16,6 +16,7 @@ import { PlanOfferRepository } from './plan-offer.repository';
 import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
 import { ReExtractDocumentService } from './re-extract-document.service';
 import { AiDocumentReviewer } from '../document-reviewer';
+import { GeminiBusinessPhotoAnalyzer } from '../ai/gemini-business-photo.analyzer';
 import { RequiredDocumentCatalogDrizzleRepository } from '../required-document-catalog.repository';
 import { DrizzleDocumentExtractionReader } from '../validation/document-extraction.reader';
 import { DrizzleValidationReportRepository } from '../validation/validation-report.repository';
@@ -48,6 +49,7 @@ import { TenantConfigModule } from '../../tenant-config/tenant-config.module';
 
     // Re-extracción de IA pedida por el revisor + su pipeline de validación.
     AiDocumentReviewer,
+    GeminiBusinessPhotoAnalyzer,
     RequiredDocumentCatalogDrizzleRepository,
     {
       provide: ValidateApplicationDocumentsHandler,

@@ -75,8 +75,18 @@ function normalize(
           }
         : null;
 
+    case 'location':
+      return message.location
+        ? {
+            ...base,
+            kind: 'location',
+            latitude: message.location.latitude,
+            longitude: message.location.longitude,
+          }
+        : null;
+
     default:
-      return null; // ubicaciones, stickers, etc.: aún no soportados
+      return null; // stickers, contactos, etc.: aún no soportados
   }
 }
 

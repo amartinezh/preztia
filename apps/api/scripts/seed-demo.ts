@@ -133,10 +133,18 @@ async function main() {
       },
       {
         tenantId: TENANT_ID,
+        documentKey: 'BUSINESS_PHOTO',
+        title: 'Envía una foto clara y actual de la fachada o interior de tu negocio.',
+        description:
+          'Foto del local (rótulo, mostrador o interior) tomada hoy; sirve para verificar el negocio.',
+        sortOrder: 3,
+      },
+      {
+        tenantId: TENANT_ID,
         documentKey: 'PUBLIC_SERVICES_RECEIPT',
         title: 'Envía un recibo de servicios públicos reciente.',
         description: 'Recibo de agua, luz o gas con la dirección visible.',
-        sortOrder: 3,
+        sortOrder: 4,
       },
     ]);
 

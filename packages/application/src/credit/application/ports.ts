@@ -172,3 +172,47 @@ export interface InboundMessageDeduplicator {
 export interface TenantResolver {
   resolveByChannel(channelId: string): Promise<string | null>;
 }
+
+/** Datos del registro comercial (extraídos del certificado) contra los que se contrasta la foto. */
+export interface BusinessRegistrySnapshot {
+  readonly legalName: string | null;
+  readonly tradeName: string | null;
+  readonly address: string | null;
+  readonly activity: string | null;
+}
+
+/** Dictamen del análisis antifraude por visión de la foto del local. */
+export interface BusinessPhotoVerdict {
+  readonly riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  readonly veracityScore: number; // 0..100
+  readonly matchesRegistry: boolean;
+  readonly inconsistencies: readonly string[];
+  readonly summary: string;
+}
+
+/**
+ * Puerto: analiza con IA de VISIÓN la foto del local de un negocio y la contrasta con los datos del
+ * registro comercial, emitiendo un dictamen de veracidad/fraude. La implementación obtiene el
+ * snapshot del registro (de la extracción del certificado), llama al proveedor y PERSISTE el
+ * veredicto para trazabilidad. Devuelve null si la IA no pudo analizar (degradación elegante).
+ */
+export interface BusinessPhotoVisionAnalyzer {
+  analyze(input: {
+    tenantId: string;
+    applicationId: string;
+    applicantPhone: string;
+    mediaId: string;
+    photo: DownloadedMedia;
+  }): Promise<BusinessPhotoVerdict | null>;
+}
+
+/** Puerto: persiste la geolocalización compartida por WhatsApp en la solicitud ACTIVA. */
+export interface ApplicantLocationStore {
+  /** Guarda lat/lng en la solicitud activa del solicitante; `true` si actualizó alguna. */
+  saveActiveApplicationLocation(input: {
+    tenantId: string;
+    applicant: string;
+    latitude: number;
+    longitude: number;
+  }): Promise<boolean>;
+}

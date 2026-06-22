@@ -38,6 +38,50 @@ export const sendReminderOutput = z.object({
 });
 export type SendReminderOutput = z.infer<typeof sendReminderOutput>;
 
+// ── Mapa de cobro: clientes críticos por alta mora (ruta de cobranza inteligente) ───────────
+// Cliente CRÍTICO: crédito activo con nº de cuotas vencidas ≥ umbral (env CRITICAL_OVERDUE_THRESHOLD)
+// y con coordenadas del cliente registradas (para poder ubicarlo y rutearlo).
+export const criticalClient = z.object({
+  creditId: z.string().uuid(),
+  borrowerName: z.string(),
+  latitude: z.number(),
+  longitude: z.number(),
+  overdueCount: z.number().int(),
+  daysOverdue: z.number().int(),
+  outstandingMinor: z.number().int(),
+  currency: z.string(),
+});
+export type CriticalClient = z.infer<typeof criticalClient>;
+
+export const listCriticalClientsOutput = z.object({
+  // Umbral vigente (nº de cuotas vencidas) con el que se marcó "crítico"; informa la UI.
+  threshold: z.number().int(),
+  items: z.array(criticalClient),
+});
+
+// Un punto de la geografía (cliente o punto de partida del cobrador).
+export const geoPoint = z.object({ latitude: z.number(), longitude: z.number() });
+
+// Parada optimizada de la ruta crítica (en el orden de visita sugerido).
+export const routeStop = criticalClient.extend({ order: z.number().int() });
+
+export const criticalRouteInput = z.object({
+  // Punto de consulta: ubicación actual del cobrador (origen de la ruta).
+  start: geoPoint,
+});
+
+export const criticalRouteOutput = z.object({
+  // Paradas en el ORDEN óptimo de visita (1..N) calculado por el motor de rutas.
+  stops: z.array(routeStop),
+  // Geometría de la ruta como lista de puntos para dibujar la polilínea en el mapa.
+  geometry: z.array(geoPoint),
+  distanceMeters: z.number(),
+  durationSeconds: z.number(),
+  // true si el motor de rutas no estuvo disponible y se devolvió un orden de respaldo sin geometría.
+  degraded: z.boolean(),
+});
+export type CriticalRouteOutput = z.infer<typeof criticalRouteOutput>;
+
 export const collectionsContract = c.router({
   getCreditCollection: {
     method: "GET",
@@ -56,5 +100,20 @@ export const collectionsContract = c.router({
     responses: { 200: sendReminderOutput },
     summary:
       "Envía manualmente el recordatorio de cobro por WhatsApp (idempotente por crédito y día)",
+  },
+  listCriticalClients: {
+    method: "GET",
+    path: "/collections/critical-clients",
+    headers: tenantHeaders,
+    responses: { 200: listCriticalClientsOutput },
+    summary: "Clientes en mora crítica (≥ umbral de cuotas vencidas) con coordenadas, para el mapa",
+  },
+  criticalRoute: {
+    method: "POST",
+    path: "/collections/critical-route",
+    headers: tenantHeaders,
+    body: criticalRouteInput,
+    responses: { 200: criticalRouteOutput },
+    summary: "Genera la ruta de cobro óptima (OSRM) que visita a los clientes críticos desde el origen",
   },
 });

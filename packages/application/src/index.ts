@@ -40,5 +40,6 @@ export * from "./credit/collection/run-tenant-collection-reminders";
 export * from "./conversations/ports";
 export * from "./conversations/process-inbound-message";
 export * from "./conversations/route-inbound-media";
+export * from "./conversations/capture-applicant-location";
 export * from "./conversations/text/ports";
 export * from "./conversations/text/answer-text-message";

@@ -9,6 +9,8 @@ import {
 } from '@preztiaos/application';
 import { CollectionsController } from './collections.controller';
 import { DueCreditsRepository } from './due-credits.repository';
+import { CriticalClientsRepository } from './critical-clients.repository';
+import { OsrmRouteOptimizer } from './osrm-route-optimizer';
 import { DueTenantsRepository } from './due-tenants.repository';
 import { ReminderIdempotencyRepository } from './reminder-idempotency.repository';
 import { CollectionAuditLogAdapter } from './collection-audit.log';
@@ -29,6 +31,8 @@ import { ConversationMessageLog } from '../conversations/conversation-message.lo
   providers: [
     DueCreditsRepository,
     DueTenantsRepository,
+    CriticalClientsRepository,
+    OsrmRouteOptimizer,
     ReminderIdempotencyRepository,
     CollectionAuditLogAdapter,
 

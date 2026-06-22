@@ -14,6 +14,7 @@ import {
 } from "../api/queries";
 import { applicationStatusBadge } from "../components/review-status";
 import { DocumentsTable } from "../components/documents-table";
+import { LocationCard } from "../components/location-card";
 import { VerdictHistory } from "../components/verdict-history";
 import { ConversationPanel } from "../components/conversation-panel";
 import { DocumentViewer } from "../components/document-viewer";
@@ -123,6 +124,8 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
           />
         </Stack>
 
+        {detail.location ? <LocationCard location={detail.location} /> : null}
+
         <Stack gap="sm">
           <Text variant="heading">{t("review.detail.history")}</Text>
           <VerdictHistory history={detail.verdictHistory} />
@@ -149,7 +152,14 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
       </Stack>
 
       <ConversationPanel applicationId={applicationId} visible={conversationOpen} onClose={() => setConversationOpen(false)} />
-      <DocumentViewer applicationId={applicationId} documentType={viewerDocument} onClose={() => setViewerDocument(null)} />
+      <DocumentViewer
+        applicationId={applicationId}
+        documentType={viewerDocument}
+        visionVerdict={
+          detail.documents.find((d) => d.documentType === viewerDocument)?.visionVerdict ?? null
+        }
+        onClose={() => setViewerDocument(null)}
+      />
       <DecisionModal
         mode={decision}
         applicantPhone={detail.applicantPhone}

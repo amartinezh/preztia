@@ -144,14 +144,17 @@ describe("SubmitApplicationDocumentHandler", () => {
 
   it("acepta el último documento: avisa revisión y completitud", async () => {
     let app = createCreditApplication(REQUESTED_DOCUMENTS);
-    app = recordDocumentResult(app, DOC1, true);
-    app = recordDocumentResult(app, REQUESTED_DOCUMENTS[1], true);
+    // Marca todos los documentos salvo el último como aceptados; al recibir el último, completa.
+    for (const key of REQUESTED_DOCUMENTS.slice(0, -1)) {
+      app = recordDocumentResult(app, key, true);
+    }
     const setup = build({ active: { id: "app-1", application: app }, decision: review({ kind: "accepted" }) });
 
     await setup.handler.execute(command);
 
     expect(setup.repo.saved[0]?.application.status).toBe("IN_REVIEW");
-    expect(setup.sender.sent[0]?.body).toContain("revisión");
+    // Al completar, el bot pide la ubicación como último paso (verificación geográfica).
+    expect(setup.sender.sent[0]?.body).toContain("ubicación");
     expect(setup.completion.completed).toEqual([
       { tenantId, applicationId: "app-1", applicant: "573001112233" },
     ]);

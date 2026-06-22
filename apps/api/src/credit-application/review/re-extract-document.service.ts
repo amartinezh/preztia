@@ -10,6 +10,7 @@ import { findDocumentSpec, type RequiredDocumentType } from '@preztiaos/domain';
 import type { ReExtractDocumentOutput } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../../tenancy/unit-of-work';
 import { AiDocumentReviewer } from '../document-reviewer';
+import { GeminiBusinessPhotoAnalyzer } from '../ai/gemini-business-photo.analyzer';
 import { RequiredDocumentCatalogDrizzleRepository } from '../required-document-catalog.repository';
 import { DocumentOriginalStorage } from './document-original.storage';
 
@@ -30,6 +31,7 @@ export class ReExtractDocumentService {
     private readonly reviewer: AiDocumentReviewer,
     private readonly catalog: RequiredDocumentCatalogDrizzleRepository,
     private readonly validate: ValidateApplicationDocumentsHandler,
+    private readonly businessPhotoVision: GeminiBusinessPhotoAnalyzer,
   ) {}
 
   async execute(input: {
@@ -39,6 +41,40 @@ export class ReExtractDocumentService {
   }): Promise<ReExtractDocumentOutput> {
     const context = await this.loadContext(input);
     const original = await this.originals.fetch(input);
+
+    // La foto del local NO se "lee" con OCR: se RE-ESTUDIA con visión antifraude (contraste con el
+    // registro comercial). Persiste un nuevo veredicto que pasa a ser el más reciente del detalle.
+    if (input.documentType === 'BUSINESS_PHOTO') {
+      const verdict = await this.businessPhotoVision.analyze({
+        tenantId: input.tenantId,
+        applicationId: input.applicationId,
+        applicantPhone: context.applicantPhone,
+        mediaId: context.mediaId ?? '',
+        photo: {
+          bytes: original.bytes,
+          mimeType: original.mimeType,
+          sizeBytes: original.bytes.length,
+          sha256: createHash('sha256').update(original.bytes).digest('hex'),
+        },
+      });
+      if (!verdict) {
+        return {
+          extracted: false,
+          identifiedType: null,
+          matchesExpected: null,
+          confidence: null,
+          reason:
+            'La IA no pudo analizar la foto del local (sin credencial de IA o el modelo falló). Inténtalo de nuevo.',
+        };
+      }
+      return {
+        extracted: true,
+        identifiedType: 'business_photo',
+        matchesExpected: verdict.matchesRegistry,
+        confidence: verdict.veracityScore,
+        reason: null,
+      };
+    }
 
     const specs = await this.catalog.listRequested(input.tenantId);
     const spec = findDocumentSpec(specs, input.documentType);

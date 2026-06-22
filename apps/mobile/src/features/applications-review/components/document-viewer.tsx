@@ -1,14 +1,18 @@
 import { useEffect } from "react";
 import { Alert, Image, Linking, View } from "react-native";
+import type { BusinessPhotoVerdict } from "@preztiaos/contracts";
 import { Button, Modal, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
 import { useDocumentOriginal, useReExtractDocument } from "../api/queries";
+import { AntifraudVisionPanel } from "./antifraud-vision-panel";
 import { documentLabel } from "./review-status";
 
 type Props = {
   applicationId: string;
   documentType: string | null; // null = cerrado
+  // Dictamen de visión cuando el documento abierto es la foto del negocio (BUSINESS_PHOTO).
+  visionVerdict?: BusinessPhotoVerdict | null;
   onClose: () => void;
 };
 
@@ -18,11 +22,12 @@ type Props = {
  * imagen; en otro caso (PDF, etc.) ofrece abrir en el navegador. Libera el objectURL al
  * cambiar/cerrar (no deja PII en memoria).
  */
-export function DocumentViewer({ applicationId, documentType, onClose }: Props) {
+export function DocumentViewer({ applicationId, documentType, visionVerdict, onClose }: Props) {
   const { t } = useT();
   const query = useDocumentOriginal(applicationId, documentType);
   const reExtract = useReExtractDocument(applicationId);
   const url = query.data?.url;
+  const isBusinessPhoto = documentType === "BUSINESS_PHOTO";
 
   // Nueva pasada de IA sobre este documento; informa el resultado y refresca el detalle.
   const onReExtract = () => {
@@ -76,16 +81,25 @@ export function DocumentViewer({ applicationId, documentType, onClose }: Props) 
           )
         ) : null}
 
-        {/* Nueva pasada de IA: cuando la extracción automática no leyó bien el documento. */}
+        {/* Análisis antifraude por visión (solo la foto del negocio), junto a la imagen. */}
+        {visionVerdict ? (
+          <View className="pt-4">
+            <AntifraudVisionPanel verdict={visionVerdict} />
+          </View>
+        ) : null}
+
+        {/* Nueva pasada de IA: re-leer un documento o re-estudiar la foto del negocio. */}
         <View className="pt-4">
           <Button
-            label="Reintentar lectura con IA"
+            label={isBusinessPhoto ? "Re-estudiar con IA" : "Reintentar lectura con IA"}
             block
             loading={reExtract.isPending}
             onPress={onReExtract}
           />
           <Text variant="caption" tone="muted" className="pt-2">
-            Vuelve a pasar el documento por la IA si no identificó bien la información.
+            {isBusinessPhoto
+              ? "Vuelve a analizar la foto del local con IA de visión si el dictamen no es correcto."
+              : "Vuelve a pasar el documento por la IA si no identificó bien la información."}
           </Text>
         </View>
       </View>

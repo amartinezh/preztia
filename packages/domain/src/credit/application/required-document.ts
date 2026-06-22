@@ -10,6 +10,7 @@
 export type RequiredDocumentType =
   | "IDENTITY_DOCUMENT"
   | "BUSINESS_VALIDITY_CERTIFICATE"
+  | "BUSINESS_PHOTO" // foto de la fachada/interior del negocio (análisis antifraude por visión)
   | "PUBLIC_SERVICES_RECEIPT"
   | "BANK_STATEMENT" // futuro: aún no se solicita
   | "INCOME_PROOF"; // futuro: aún no se solicita
@@ -34,6 +35,7 @@ export interface RequiredDocumentSpec {
 export const REQUESTED_DOCUMENTS = [
   "IDENTITY_DOCUMENT",
   "BUSINESS_VALIDITY_CERTIFICATE",
+  "BUSINESS_PHOTO", // se pide inmediatamente después del certificado de comercio
   "PUBLIC_SERVICES_RECEIPT",
 ] as const satisfies readonly RequiredDocumentType[];
 

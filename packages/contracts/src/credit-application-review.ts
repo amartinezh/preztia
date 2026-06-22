@@ -11,6 +11,7 @@ const c = initContract();
 export const requiredDocumentType = z.enum([
   "IDENTITY_DOCUMENT",
   "BUSINESS_VALIDITY_CERTIFICATE",
+  "BUSINESS_PHOTO",
   "PUBLIC_SERVICES_RECEIPT",
   "BANK_STATEMENT",
   "INCOME_PROOF",
@@ -109,6 +110,16 @@ export const validationRunView = z.object({
 });
 export type ValidationRunView = z.infer<typeof validationRunView>;
 
+// Dictamen del análisis antifraude por visión sobre la foto del local (contraste con el registro).
+export const businessPhotoVerdict = z.object({
+  riskLevel: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  veracityScore: z.number().int().min(0).max(100),
+  matchesRegistry: z.boolean(),
+  inconsistencies: z.array(z.string()),
+  summary: z.string(),
+});
+export type BusinessPhotoVerdict = z.infer<typeof businessPhotoVerdict>;
+
 // Detalle de cada documento del expediente, con su veredicto y trazabilidad de extracción.
 export const applicationDocumentDetail = z.object({
   documentType: requiredDocumentType,
@@ -122,6 +133,9 @@ export const applicationDocumentDetail = z.object({
   identifiedType: z.string().nullable(),
   matchesExpected: z.boolean().nullable(),
   confidence: z.number().int().nullable(),
+  // Dictamen del análisis antifraude por VISIÓN (solo BUSINESS_PHOTO): qué piensa la IA, nivel de
+  // riesgo, coherencia con el registro comercial e inconsistencias detectadas. Null para el resto.
+  visionVerdict: businessPhotoVerdict.nullable(),
 });
 export type ApplicationDocumentDetail = z.infer<typeof applicationDocumentDetail>;
 
@@ -165,6 +179,11 @@ export const applicationReviewDetail = z.object({
   verdictHistory: z.array(validationRunView),
   // Negociación del plan de pago (Fase 10).
   planOffer: planOfferView,
+  // Geolocalización compartida por WhatsApp (verificación geográfica). Null si aún no la compartió.
+  // El front pintará un marcador en un mapa en una fase posterior (este es el paso preparatorio).
+  location: z
+    .object({ latitude: z.number(), longitude: z.number(), sharedAt: z.string() })
+    .nullable(),
 });
 export type ApplicationReviewDetail = z.infer<typeof applicationReviewDetail>;
 

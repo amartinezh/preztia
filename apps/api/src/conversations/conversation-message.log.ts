@@ -120,5 +120,13 @@ function describeInbound(message: InboundMessage): MessageRow {
         mediaId: message.media.mediaId,
         mimeType: message.media.mimeType,
       };
+    case 'location':
+      return {
+        kind: 'location',
+        // El cuerpo del transcript guarda las coordenadas legibles (sin media).
+        body: `📍 ${message.latitude}, ${message.longitude}`,
+        mediaId: null,
+        mimeType: null,
+      };
   }
 }

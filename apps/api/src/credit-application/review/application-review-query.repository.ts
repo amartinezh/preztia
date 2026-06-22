@@ -106,6 +106,9 @@ export class ApplicationReviewQueryRepository {
           clientAcceptedAt: schema.creditApplication.clientAcceptedAt,
           requestedAmountMinor: schema.creditApplication.requestedAmountMinor,
           zonePath: schema.creditApplication.zonePath,
+          latitude: schema.creditApplication.latitude,
+          longitude: schema.creditApplication.longitude,
+          locationSharedAt: schema.creditApplication.locationSharedAt,
         })
         .from(schema.creditApplication)
         .where(
@@ -224,6 +227,11 @@ export class ApplicationReviewQueryRepository {
             identifiedType: extraction?.identifiedType ?? null,
             matchesExpected: extraction?.matchesExpected ?? null,
             confidence: extraction?.confidence ?? null,
+            // Solo la foto del local lleva dictamen de visión (guardado en `fields`).
+            visionVerdict:
+              d.documentType === 'BUSINESS_PHOTO'
+                ? toVisionVerdict(extraction?.fields ?? null)
+                : null,
           };
         }),
         verdictHistory,
@@ -240,6 +248,14 @@ export class ApplicationReviewQueryRepository {
             ? app.clientAcceptedAt.toISOString()
             : null,
         },
+        location:
+          app.latitude != null && app.longitude != null
+            ? {
+                latitude: app.latitude,
+                longitude: app.longitude,
+                sharedAt: (app.locationSharedAt ?? app.createdAt).toISOString(),
+              }
+            : null,
       };
     });
   }
@@ -411,6 +427,7 @@ export class ApplicationReviewQueryRepository {
         identifiedType: string | null;
         matchesExpected: boolean | null;
         confidence: number | null;
+        fields: Record<string, unknown> | null;
       }
     >
   > {
@@ -420,6 +437,7 @@ export class ApplicationReviewQueryRepository {
         identifiedType: schema.documentExtraction.identifiedType,
         matchesExpected: schema.documentExtraction.matchesExpected,
         confidence: schema.documentExtraction.confidence,
+        fields: schema.documentExtraction.fields,
         createdAt: schema.documentExtraction.createdAt,
       })
       .from(schema.documentExtraction)
@@ -431,6 +449,7 @@ export class ApplicationReviewQueryRepository {
         identifiedType: string | null;
         matchesExpected: boolean | null;
         confidence: number | null;
+        fields: Record<string, unknown> | null;
       }
     >();
     for (const row of rows) {
@@ -439,6 +458,7 @@ export class ApplicationReviewQueryRepository {
         identifiedType: row.identifiedType ?? null,
         matchesExpected: row.matchesExpected ?? null,
         confidence: row.confidence ?? null,
+        fields: row.fields ?? null,
       });
     }
     return map;
@@ -482,4 +502,26 @@ export class ApplicationReviewQueryRepository {
 function maskPhone(phone: string): string {
   if (phone.length <= 4) return phone;
   return `••• ${phone.slice(-4)}`;
+}
+
+/** Traduce los `fields` de la extracción BUSINESS_PHOTO al dictamen de visión del contrato. */
+function toVisionVerdict(
+  fields: Record<string, unknown> | null,
+): ApplicationReviewDetail['documents'][number]['visionVerdict'] {
+  if (!fields) return null;
+  const risk = fields.riskLevel;
+  if (risk !== 'LOW' && risk !== 'MEDIUM' && risk !== 'HIGH') return null;
+  const inconsistencies = Array.isArray(fields.inconsistencies)
+    ? fields.inconsistencies.filter((i): i is string => typeof i === 'string')
+    : [];
+  return {
+    riskLevel: risk,
+    veracityScore:
+      typeof fields.veracityScore === 'number'
+        ? Math.round(fields.veracityScore)
+        : 0,
+    matchesRegistry: fields.matchesRegistry === true,
+    inconsistencies,
+    summary: typeof fields.summary === 'string' ? fields.summary : '',
+  };
 }

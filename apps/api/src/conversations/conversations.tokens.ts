@@ -7,6 +7,8 @@ export const CONVERSATION_LOG = Symbol('ConversationLog');
 export const AUDIO_DISPATCHER = Symbol('AudioMessageDispatcher');
 export const IMAGE_DISPATCHER = Symbol('ImageMessageDispatcher');
 export const DOCUMENT_DISPATCHER = Symbol('DocumentMessageDispatcher');
+export const LOCATION_DISPATCHER = Symbol('LocationMessageDispatcher');
+export const APPLICANT_LOCATION_STORE = Symbol('ApplicantLocationStore');
 
 // Caso de uso de texto (answer-text-message).
 export const CONFIG_REPOSITORY = Symbol('TenantAssistantConfigRepository');
@@ -27,6 +29,9 @@ export const APPLICATION_COMPLETION_NOTIFIER = Symbol(
   'ApplicationCompletionNotifier',
 );
 export const DOCUMENT_REVIEWER = Symbol('DocumentReviewer');
+export const BUSINESS_PHOTO_VISION_ANALYZER = Symbol(
+  'BusinessPhotoVisionAnalyzer',
+);
 export const MEDIA_DOWNLOADER = Symbol('MediaDownloader');
 export const DOCUMENT_STORAGE = Symbol('DocumentStorage');
 export const ANTIFRAUD_SERVICE = Symbol('AntifraudService');

@@ -85,6 +85,14 @@ export function PortfolioScreen() {
                 </Text>
               </Stack>
               <Row gap="sm">
+                {canRemind ? (
+                  <Button
+                    label="Mapa de cobro"
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => router.push("/collection-map" as Href)}
+                  />
+                ) : null}
                 {canExport ? (
                   <Button
                     label={t("accounts.export")}
