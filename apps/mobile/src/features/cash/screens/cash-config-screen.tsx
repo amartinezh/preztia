@@ -2,6 +2,8 @@ import { useState } from "react";
 import type {
   BankAccount,
   BankAccountInput,
+  BankProviderType,
+  BankReportConfig,
   CashBox,
   CashBoxType,
 } from "@preztiaos/contracts";
@@ -37,6 +39,7 @@ import {
   useDeleteCashBox,
   useUpdateBankAccount,
   useUpdateCashBox,
+  useVerifyBankCredentials,
 } from "../api/boxes-queries";
 
 /** Botón cuadrado pequeño para acciones por fila (editar/eliminar). */
@@ -119,11 +122,19 @@ function BankAccountsSection() {
               <Stack gap="xs" className="flex-1 pr-3">
                 <Text variant="label">{a.label}</Text>
                 <Text variant="caption" tone="muted">
-                  {a.bankName} · {a.countryCode}:{a.bankCode}
+                  {a.bankName} · {t(`cash.accounts.provider.${a.providerType}`)}
                 </Text>
-                {a.hasApiKey ? (
-                  <Badge label={t("cash.accounts.hasApiKey")} tone="info" />
-                ) : null}
+                <Row className="gap-1 flex-wrap">
+                  {a.hasApiKey ? (
+                    <Badge label={t("cash.accounts.hasApiKey")} tone="info" />
+                  ) : null}
+                  {a.hasPublicKey ? (
+                    <Badge label={t("cash.accounts.hasPublicKey")} tone="info" />
+                  ) : null}
+                  {a.hasAccessToken ? (
+                    <Badge label={t("cash.accounts.hasAccessToken")} tone="success" />
+                  ) : null}
+                </Row>
               </Stack>
               <Row className="gap-2">
                 <IconButton glyph="✎" label={t("common.edit")} onPress={() => setEditor({ account: a })} />
@@ -153,7 +164,9 @@ function BankAccountModal({
   const { t } = useT();
   const create = useCreateBankAccount();
   const update = useUpdateBankAccount();
+  const verify = useVerifyBankCredentials();
   const isEdit = account !== undefined;
+  // Campos de texto (todos string) → editables con el helper `set`.
   const [form, setForm] = useState({
     label: account?.label ?? "",
     bankName: account?.bankName ?? "",
@@ -162,16 +175,62 @@ function BankAccountModal({
     accountNumber: account?.accountNumber ?? "",
     pixKey: account?.pixKey ?? "",
     apiKey: "",
+    receiverTaxId: account?.receiverTaxId ?? "",
+    receiverName: account?.receiverName ?? "",
+    publicKey: "",
+    accessToken: "",
+    webhookSecret: "",
+    timezone: account?.reportConfig?.timezone ?? "",
+    windowDays:
+      account?.reportConfig?.windowDays != null
+        ? String(account.reportConfig.windowDays)
+        : "",
   });
+  // Campos no-string con su propio estado tipado.
+  const [providerType, setProviderType] = useState<BankProviderType>(
+    account?.providerType ?? "MANUAL",
+  );
+  const [reportTranslation, setReportTranslation] = useState<string>(
+    account?.reportConfig?.reportTranslation ?? "",
+  );
   const [error, setError] = useState<string | null>(null);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  const isMercadoPago = providerType === "MERCADOPAGO";
+
+  const providerOptions: SelectOption<BankProviderType>[] = [
+    { value: "MANUAL", label: t("cash.accounts.provider.MANUAL") },
+    { value: "INTER", label: t("cash.accounts.provider.INTER") },
+    { value: "MERCADOPAGO", label: t("cash.accounts.provider.MERCADOPAGO") },
+  ];
+  const translationOptions: SelectOption<string>[] = [
+    { value: "", label: t("cash.accounts.reportTranslationDefault") },
+    { value: "en", label: "en" },
+    { value: "es", label: "es" },
+    { value: "pt", label: "pt" },
+  ];
 
   const onError = (err: unknown) =>
     setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
 
+  // Arma reportConfig solo con lo que el operador llenó (undefined = no enviar).
+  const buildReportConfig = (): BankReportConfig | undefined => {
+    const rc: BankReportConfig = {};
+    if (reportTranslation)
+      rc.reportTranslation = reportTranslation as "en" | "es" | "pt";
+    if (form.timezone.trim()) rc.timezone = form.timezone.trim();
+    const wd = Number.parseInt(form.windowDays, 10);
+    if (Number.isFinite(wd) && wd > 0) rc.windowDays = wd;
+    return Object.keys(rc).length ? rc : undefined;
+  };
+
   const submit = () => {
     setError(null);
+    const reportConfig = buildReportConfig();
     if (isEdit) {
       update.mutate(
         {
@@ -180,8 +239,20 @@ function BankAccountModal({
             label: form.label.trim(),
             bankName: form.bankName.trim(),
             accountNumber: form.accountNumber.trim() || null,
+            providerType,
             pixKey: form.pixKey.trim() || null,
+            receiverTaxId: form.receiverTaxId.trim() || null,
+            receiverName: form.receiverName.trim() || null,
+            reportConfig: reportConfig ?? null,
+            // Secretos: solo si el operador escribió algo (vacío = no cambiar).
             ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+            ...(form.publicKey.trim() ? { publicKey: form.publicKey.trim() } : {}),
+            ...(form.accessToken.trim()
+              ? { accessToken: form.accessToken.trim() }
+              : {}),
+            ...(form.webhookSecret.trim()
+              ? { webhookSecret: form.webhookSecret.trim() }
+              : {}),
           },
         },
         { onSuccess: onClose, onError },
@@ -193,15 +264,51 @@ function BankAccountModal({
       bankName: form.bankName.trim(),
       countryCode: form.countryCode.trim(),
       bankCode: form.bankCode.trim(),
-      ...(form.accountNumber.trim() ? { accountNumber: form.accountNumber.trim() } : {}),
+      providerType,
+      ...(form.accountNumber.trim()
+        ? { accountNumber: form.accountNumber.trim() }
+        : {}),
       ...(form.pixKey.trim() ? { pixKey: form.pixKey.trim() } : {}),
+      ...(form.receiverTaxId.trim()
+        ? { receiverTaxId: form.receiverTaxId.trim() }
+        : {}),
+      ...(form.receiverName.trim()
+        ? { receiverName: form.receiverName.trim() }
+        : {}),
       ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+      ...(form.publicKey.trim() ? { publicKey: form.publicKey.trim() } : {}),
+      ...(form.accessToken.trim()
+        ? { accessToken: form.accessToken.trim() }
+        : {}),
+      ...(form.webhookSecret.trim()
+        ? { webhookSecret: form.webhookSecret.trim() }
+        : {}),
+      ...(reportConfig ? { reportConfig } : {}),
     };
     create.mutate(payload, { onSuccess: onClose, onError });
   };
 
+  const runTest = () => {
+    if (!account) return;
+    setTestMsg(null);
+    verify.mutate(account.id, {
+      onSuccess: (r) =>
+        setTestMsg({
+          ok: r.ok,
+          text: r.ok
+            ? t("cash.accounts.testOk")
+            : r.detail ?? t("cash.accounts.testFail"),
+        }),
+      onError: () => setTestMsg({ ok: false, text: t("cash.accounts.testFail") }),
+    });
+  };
+
   return (
-    <Modal visible onClose={onClose} title={isEdit ? t("cash.accounts.edit") : t("cash.accounts.create")}>
+    <Modal
+      visible
+      onClose={onClose}
+      title={isEdit ? t("cash.accounts.edit") : t("cash.accounts.create")}
+    >
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Field label={t("cash.accounts.label")} required>
@@ -209,6 +316,13 @@ function BankAccountModal({
         </Field>
         <Field label={t("cash.accounts.bankName")} required>
           <Input value={form.bankName} onChangeText={set("bankName")} />
+        </Field>
+        <Field label={t("cash.accounts.provider")} required>
+          <Select
+            value={providerType}
+            options={providerOptions}
+            onChange={setProviderType}
+          />
         </Field>
         {isEdit ? (
           // País y código son inmutables (protegen la conciliación): solo lectura al editar.
@@ -235,14 +349,94 @@ function BankAccountModal({
         <Field label={t("cash.accounts.pixKey")}>
           <Input value={form.pixKey} onChangeText={set("pixKey")} />
         </Field>
-        <Field label={t("cash.accounts.apiKey")}>
-          <Input
-            value={form.apiKey}
-            onChangeText={set("apiKey")}
-            secureTextEntry
-            placeholder={isEdit ? t("cash.accounts.apiKeyKeep") : undefined}
-          />
-        </Field>
+
+        {isMercadoPago ? (
+          <>
+            <Text variant="label">{t("cash.accounts.receiver")}</Text>
+            <Field label={t("cash.accounts.receiverTaxId")}>
+              <Input value={form.receiverTaxId} onChangeText={set("receiverTaxId")} />
+            </Field>
+            <Field label={t("cash.accounts.receiverName")}>
+              <Input value={form.receiverName} onChangeText={set("receiverName")} />
+            </Field>
+
+            <Text variant="label">{t("cash.accounts.credentials")}</Text>
+            <Field label={t("cash.accounts.publicKey")}>
+              <Input
+                value={form.publicKey}
+                onChangeText={set("publicKey")}
+                secureTextEntry
+                placeholder={account?.hasPublicKey ? t("cash.accounts.secretKeep") : undefined}
+              />
+            </Field>
+            <Field label={t("cash.accounts.accessToken")}>
+              <Input
+                value={form.accessToken}
+                onChangeText={set("accessToken")}
+                secureTextEntry
+                placeholder={account?.hasAccessToken ? t("cash.accounts.secretKeep") : undefined}
+              />
+            </Field>
+            <Field label={t("cash.accounts.webhookSecret")}>
+              <Input
+                value={form.webhookSecret}
+                onChangeText={set("webhookSecret")}
+                secureTextEntry
+                placeholder={account?.hasWebhookSecret ? t("cash.accounts.secretKeep") : undefined}
+              />
+            </Field>
+
+            <Text variant="label">{t("cash.accounts.report")}</Text>
+            <Field label={t("cash.accounts.reportTranslation")}>
+              <Select
+                value={reportTranslation}
+                options={translationOptions}
+                onChange={setReportTranslation}
+              />
+            </Field>
+            <Field label={t("cash.accounts.timezone")}>
+              <Input
+                value={form.timezone}
+                onChangeText={set("timezone")}
+                placeholder="America/Sao_Paulo"
+              />
+            </Field>
+            <Field label={t("cash.accounts.windowDays")}>
+              <Input
+                value={form.windowDays}
+                onChangeText={set("windowDays")}
+                keyboardType="number-pad"
+              />
+            </Field>
+
+            {isEdit ? (
+              <>
+                <Button
+                  label={t("cash.accounts.testCredentials")}
+                  variant="secondary"
+                  loading={verify.isPending}
+                  onPress={runTest}
+                />
+                {testMsg ? (
+                  <Banner
+                    tone={testMsg.ok ? "success" : "danger"}
+                    title={testMsg.text}
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </>
+        ) : (
+          <Field label={t("cash.accounts.apiKey")}>
+            <Input
+              value={form.apiKey}
+              onChangeText={set("apiKey")}
+              secureTextEntry
+              placeholder={isEdit ? t("cash.accounts.apiKeyKeep") : undefined}
+            />
+          </Field>
+        )}
+
         <Button
           label={isEdit ? t("common.save") : t("cash.accounts.create")}
           loading={create.isPending || update.isPending}

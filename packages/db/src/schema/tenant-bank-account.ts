@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // Política para pagos que el banco aún no confirma (UNVERIFIED):
@@ -7,10 +7,34 @@ import { sql } from "drizzle-orm";
 //    o para tenants que asumen el riesgo).
 export const unverifiedPaymentPolicy = pgEnum("unverified_payment_policy", ["HOLD", "ALLOCATE"]);
 
+// Tipo de PROVEEDOR/integración de la cuenta. Decide QUÉ adaptador y capacidades aplican
+// (qué credenciales pide, si tiene reporte de liquidación, etc.), desacoplado de la identidad
+// del banco (bankName/bankCode):
+//  - MANUAL:      sin integración por API; conciliación manual.
+//  - INTER:       API del Banco Inter (saldo + verificación por PIX).
+//  - MERCADOPAGO: API de Mercado Pago (settlement_report; sin saldo en tiempo real).
+// Extensible: un proveedor nuevo agrega un valor al enum (migración).
+export const bankProviderType = pgEnum("bank_provider_type", ["MANUAL", "INTER", "MERCADOPAGO"]);
+
+// Configuración NO secreta del reporte de liquidación del proveedor (ej. Mercado Pago
+// settlement_report). Los secretos viven cifrados en `bank_credential`; esto solo parametriza
+// la generación/lectura del reporte.
+export interface BankReportConfig {
+  // Prefijo del archivo de reporte en la cuenta del proveedor.
+  prefix?: string;
+  // Idioma de los encabezados del CSV (fijarlo ata el parser a un set conocido).
+  reportTranslation?: "en" | "es" | "pt";
+  // Zona horaria para acotar la ventana del reporte.
+  timezone?: string;
+  // Tamaño de la ventana de conciliación, en días.
+  windowDays?: number;
+}
+
 // Cuenta bancaria recaudadora del tenant, organizada por país y entidad
 // (ej. BR + INTER). La conciliación resuelve el verificador por (country, bank).
-// api_key sigue el precedente de tenant_config.ai_api_key (en claro bajo RLS);
-// mejora futura: cifrarla en reposo.
+// `api_key` se guarda CIFRADA en reposo (AES-256-GCM, prefijo `enc:v1:`). Para proveedores
+// con varias credenciales (ej. Mercado Pago: public_key + access_token) los secretos viven,
+// también cifrados, en `bank_credential` (N por cuenta).
 export const tenantBankAccount = pgTable(
   "tenant_bank_account",
   {
@@ -26,11 +50,19 @@ export const tenantBankAccount = pgTable(
     countryCode: text("country_code").notNull(),
     // Código interno de la entidad (ej. "INTER").
     bankCode: text("bank_code").notNull(),
+    // Proveedor/integración que aplica a esta cuenta (resuelve el adaptador).
+    providerType: bankProviderType("provider_type").notNull().default("MANUAL"),
     // Llave PIX recaudadora del tenant: llave de emparejamiento de pagos entrantes
     // por WhatsApp (receiver_pix_key del comprobante → esta cuenta).
     pixKey: text("pix_key"),
+    // Identidad del RECEBEDOR para el match antifraude del comprobante: el CPF/CNPJ y el
+    // titular del recibo deben coincidir con esta cuenta. PII: nunca en logs.
+    receiverTaxId: text("receiver_tax_id"),
+    receiverName: text("receiver_name"),
     // Credencial para consultar el API del banco.
     apiKey: text("api_key"),
+    // Parámetros NO secretos del reporte de liquidación (ver BankReportConfig).
+    reportConfig: jsonb("report_config").$type<BankReportConfig>(),
     unverifiedPolicy: unverifiedPaymentPolicy("unverified_policy").notNull().default("HOLD"),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

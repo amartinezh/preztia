@@ -7,6 +7,9 @@ import { SettlementDrizzleRepository } from './settlement.repository';
 import { CashQueryRepository } from './cash-query.repository';
 import { CashBoxDrizzleRepository } from './cash-box.repository';
 import { BankAccountDrizzleRepository } from './bank-account.repository';
+import { BankCredentialDrizzleRepository } from './bank-credential.repository';
+import { BankProviderVerifierService } from './bank-provider-verifier.service';
+import { MercadoPagoAccountClient } from './banking/mercadopago/mp-account.client';
 import { CashCountDrizzleRepository } from './cash-count.repository';
 import { BankReconciliationDrizzleRepository } from './bank-reconciliation.repository';
 import { BankBalanceProviderRegistry } from './banking/bank-balance.registry';
@@ -27,6 +30,9 @@ import { BANK_BALANCE_PROVIDER } from './cash.tokens';
     CashQueryRepository,
     CashBoxDrizzleRepository,
     BankAccountDrizzleRepository,
+    BankCredentialDrizzleRepository,
+    BankProviderVerifierService,
+    MercadoPagoAccountClient,
     CashCountDrizzleRepository,
     BankReconciliationDrizzleRepository,
 
@@ -41,5 +47,7 @@ import { BANK_BALANCE_PROVIDER } from './cash.tokens';
         new BankBalanceProviderRegistry(new Map([['BR:INTER', inter]])),
     },
   ],
+  // Expuesto para que los adaptadores de proveedores (ej. Mercado Pago) lean sus secretos.
+  exports: [BankCredentialDrizzleRepository],
 })
 export class CashModule {}

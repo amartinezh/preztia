@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { routeVerifiedPaymentToBox } from './payment-box-router';
 import { CashBoxDrizzleRepository } from './cash-box.repository';
 import { BankAccountDrizzleRepository } from './bank-account.repository';
+import { BankCredentialDrizzleRepository } from './bank-credential.repository';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { owner, cleanupTenant, closeOwner, hasDb } from '../../test/db-helpers';
 
@@ -10,7 +11,9 @@ import { owner, cleanupTenant, closeOwner, hasDb } from '../../test/db-helpers';
 const describeDb = hasDb() ? describe : describe.skip;
 
 const boxes = new CashBoxDrizzleRepository();
-const accounts = new BankAccountDrizzleRepository();
+const accounts = new BankAccountDrizzleRepository(
+  new BankCredentialDrizzleRepository(),
+);
 
 interface RoutedRow {
   cash_box_id: string;

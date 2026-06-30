@@ -7,6 +7,7 @@ import {
   type PaymentAntifraudService,
   type PaymentReceiptStorage,
   type ReconciliationRepository,
+  type SettlementSource,
   type TenantBankAccountRepository,
 } from '@preztiaos/application';
 import { ManualVerifyPaymentRepository } from './manual-verify-payment.repository';
@@ -19,7 +20,9 @@ import { CreditPortfolioDrizzleRepository } from './credit-portfolio.repository'
 import { PaymentReconciliationDrizzleRepository } from './payment-reconciliation.repository';
 import {
   DuplicateEndToEndRule,
+  E2EWellFormedRule,
   PaymentAntifraudComposite,
+  ReceiverMatchRule,
   Sha256ReuseRule,
   StaleReceiptRule,
 } from './payment-antifraud.service';
@@ -28,6 +31,15 @@ import { TenantBankAccountDrizzleRepository } from './tenant-bank-account.reposi
 import { BankVerifierRegistry } from './banking/bank-verifier.registry';
 import { InterApiClient } from './banking/inter/inter-api.client';
 import { InterPaymentVerifier } from './banking/inter/inter-payment.verifier';
+import { SettlementSourceRegistry } from './banking/settlement-source.registry';
+import { MercadoPagoReportClient } from './banking/mercadopago/mp-report.client';
+import { MercadoPagoContextDrizzleReader } from './banking/mercadopago/mp-account-context.reader';
+import { MercadoPagoSettlementAdapter } from './banking/mercadopago/mp-settlement.adapter';
+import { MercadoPagoWebhookContextDrizzleReader } from './banking/mercadopago/mp-webhook-context.reader';
+import { IncomingCreditDrizzleRepository } from './incoming-credit.repository';
+import { IngestSettlementWebhookService } from './ingest-settlement-webhook.service';
+import { MercadoPagoWebhookController } from './mercadopago-webhook.controller';
+import { RunSettlementReconciliationService } from './run-settlement-reconciliation.service';
 import { PaymentsQueryRepository } from './payments-query.repository';
 import { CashPaymentDrizzleRepository } from './cash-payment.repository';
 import { PaymentsController } from './payments.controller';
@@ -39,6 +51,7 @@ import {
   PAYMENT_ANTIFRAUD_SERVICE,
   PAYMENT_RECEIPT_STORAGE,
   RECONCILIATION_REPOSITORY,
+  SETTLEMENT_SOURCE,
   TENANT_BANK_ACCOUNT_REPOSITORY,
 } from './payments.tokens';
 
@@ -58,7 +71,7 @@ function reconciliationMaxAttempts(): number {
  */
 @Module({
   imports: [AuthModule],
-  controllers: [PaymentsController],
+  controllers: [PaymentsController, MercadoPagoWebhookController],
   providers: [
     CashPaymentDrizzleRepository,
     // Puertos del slice → adaptadores.
@@ -72,9 +85,11 @@ function reconciliationMaxAttempts(): number {
       provide: TENANT_BANK_ACCOUNT_REPOSITORY,
       useClass: TenantBankAccountDrizzleRepository,
     },
+    // Instancia única compartida por el puerto (per-PIX) y el servicio de settlement.
+    PaymentReconciliationDrizzleRepository,
     {
       provide: RECONCILIATION_REPOSITORY,
-      useClass: PaymentReconciliationDrizzleRepository,
+      useExisting: PaymentReconciliationDrizzleRepository,
     },
     PaymentsQueryRepository,
     ManualVerifyPaymentRepository,
@@ -89,6 +104,8 @@ function reconciliationMaxAttempts(): number {
         new PaymentAntifraudComposite([
           new Sha256ReuseRule(),
           new DuplicateEndToEndRule(),
+          new E2EWellFormedRule(),
+          new ReceiverMatchRule(),
           new StaleReceiptRule(),
         ]),
     },
@@ -102,6 +119,56 @@ function reconciliationMaxAttempts(): number {
       inject: [InterPaymentVerifier],
       useFactory: (inter: InterPaymentVerifier) =>
         new BankVerifierRegistry(new Map([['BR:INTER', inter]])),
+    },
+
+    // Fuente de créditos (ground truth Fase 2) por (país, entidad). PUNTO DE EXTENSIÓN:
+    // un proveedor nuevo se registra con su clave "PAÍS:BANCO".
+    MercadoPagoReportClient,
+    MercadoPagoContextDrizzleReader,
+    {
+      provide: MercadoPagoSettlementAdapter,
+      inject: [MercadoPagoContextDrizzleReader, MercadoPagoReportClient],
+      useFactory: (
+        reader: MercadoPagoContextDrizzleReader,
+        client: MercadoPagoReportClient,
+      ) => new MercadoPagoSettlementAdapter(reader, client),
+    },
+    {
+      provide: SETTLEMENT_SOURCE,
+      inject: [MercadoPagoSettlementAdapter],
+      useFactory: (mp: MercadoPagoSettlementAdapter) =>
+        new SettlementSourceRegistry(new Map([['BR:MERCADOPAGO', mp]])),
+    },
+
+    // Webhook "reporte listo": valida firma e ingiere créditos (ground truth) idempotente.
+    IncomingCreditDrizzleRepository,
+    MercadoPagoWebhookContextDrizzleReader,
+    IngestSettlementWebhookService,
+
+    // Ciclo de conciliación Fase 2 (settlement): ingiere → empareja → confirma. Endpoint
+    // /payments/reconcile-settlement; listo para un cron por tenant.
+    {
+      provide: RunSettlementReconciliationService,
+      inject: [
+        SETTLEMENT_SOURCE,
+        IncomingCreditDrizzleRepository,
+        PaymentReconciliationDrizzleRepository,
+        WhatsappTextSender,
+        ConversationMessageLog,
+      ],
+      useFactory: (
+        source: SettlementSource,
+        credits: IncomingCreditDrizzleRepository,
+        reconciliation: PaymentReconciliationDrizzleRepository,
+        sender: WhatsappTextSender,
+        log: ConversationMessageLog,
+      ) =>
+        new RunSettlementReconciliationService(
+          source,
+          credits,
+          reconciliation,
+          new LoggingTextSender(sender, log),
+        ),
     },
 
     // Envío de WhatsApp con registro en el transcript (instancia propia del slice).

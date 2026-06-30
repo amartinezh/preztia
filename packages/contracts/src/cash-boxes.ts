@@ -24,6 +24,22 @@ export const cashTxKind = z.enum([
 
 // --- Cuentas bancarias ------------------------------------------------------
 
+// Proveedor/integración de la cuenta: decide el adaptador y las capacidades (qué credenciales
+// pide, si tiene reporte de liquidación, saldo en tiempo real, etc.).
+export const bankProviderType = z.enum(["MANUAL", "INTER", "MERCADOPAGO"]);
+export type BankProviderType = z.infer<typeof bankProviderType>;
+
+// Configuración NO secreta del reporte de liquidación del proveedor (ej. Mercado Pago).
+export const bankReportConfig = z
+  .object({
+    prefix: z.string().trim().min(1).max(60).optional(),
+    reportTranslation: z.enum(["en", "es", "pt"]).optional(),
+    timezone: z.string().trim().min(1).max(60).optional(),
+    windowDays: z.number().int().positive().max(90).optional(),
+  })
+  .strict();
+export type BankReportConfig = z.infer<typeof bankReportConfig>;
+
 // Vista de una cuenta. `apiKey` es secreto: se expone solo `hasApiKey` (booleano).
 export const bankAccount = z.object({
   id: z.string().uuid(),
@@ -32,8 +48,17 @@ export const bankAccount = z.object({
   accountNumber: z.string().nullable(),
   countryCode: z.string(),
   bankCode: z.string(),
+  providerType: bankProviderType,
   pixKey: z.string().nullable(),
+  // Identidad del recebedor para el match antifraude (CPF/CNPJ y titular configurados).
+  receiverTaxId: z.string().nullable(),
+  receiverName: z.string().nullable(),
+  // Presencia de secretos (write-only): nunca se devuelve el valor, solo si está configurado.
   hasApiKey: z.boolean(),
+  hasPublicKey: z.boolean(),
+  hasAccessToken: z.boolean(),
+  hasWebhookSecret: z.boolean(),
+  reportConfig: bankReportConfig.nullable(),
   unverifiedPolicy: z.enum(["HOLD", "ALLOCATE"]),
   active: z.boolean(),
   createdAt: z.string(),
@@ -48,8 +73,16 @@ export const bankAccountInput = z.object({
   accountNumber: z.string().trim().min(1).max(60).optional(),
   countryCode: z.string().trim().length(2).toUpperCase(),
   bankCode: z.string().trim().min(1).max(40).toUpperCase(),
+  providerType: bankProviderType.optional(),
   pixKey: z.string().trim().min(1).max(140).optional(),
+  receiverTaxId: z.string().trim().min(1).max(40).optional(),
+  receiverName: z.string().trim().min(1).max(140).optional(),
   apiKey: z.string().trim().min(1).max(400).optional(),
+  // Secretos del proveedor (ej. Mercado Pago); se guardan cifrados, nunca se devuelven.
+  publicKey: z.string().trim().min(1).max(400).optional(),
+  accessToken: z.string().trim().min(1).max(400).optional(),
+  webhookSecret: z.string().trim().min(1).max(400).optional(),
+  reportConfig: bankReportConfig.optional(),
   unverifiedPolicy: z.enum(["HOLD", "ALLOCATE"]).optional(),
 });
 export type BankAccountInput = z.infer<typeof bankAccountInput>;
@@ -59,10 +92,24 @@ export const bankAccountPatch = z.object({
   label: z.string().trim().min(1).max(80).optional(),
   bankName: z.string().trim().min(1).max(80).optional(),
   accountNumber: z.string().trim().min(1).max(60).nullable().optional(),
+  providerType: bankProviderType.optional(),
   pixKey: z.string().trim().min(1).max(140).nullable().optional(),
+  receiverTaxId: z.string().trim().min(1).max(40).nullable().optional(),
+  receiverName: z.string().trim().min(1).max(140).nullable().optional(),
   apiKey: z.string().trim().min(1).max(400).nullable().optional(),
+  // Secretos del proveedor: string setea, null borra, ausente no toca.
+  publicKey: z.string().trim().min(1).max(400).nullable().optional(),
+  accessToken: z.string().trim().min(1).max(400).nullable().optional(),
+  webhookSecret: z.string().trim().min(1).max(400).nullable().optional(),
+  reportConfig: bankReportConfig.nullable().optional(),
   unverifiedPolicy: z.enum(["HOLD", "ALLOCATE"]).optional(),
   active: z.boolean().optional(),
+});
+
+// Resultado de "Probar credenciales": sin secretos, solo si el proveedor las acepta.
+export const verifyCredentialsOutput = z.object({
+  ok: z.boolean(),
+  detail: z.string().optional(),
 });
 
 // --- Cajas ------------------------------------------------------------------
@@ -292,6 +339,15 @@ export const cashBoxesContract = c.router({
     body: z.object({}),
     responses: { 200: z.object({ id: z.string().uuid() }) },
     summary: "Elimina una cuenta bancaria sin caja vinculada (ADMIN)",
+  },
+  verifyBankCredentials: {
+    method: "POST",
+    path: "/bank-accounts/:id/verify-credentials",
+    pathParams: idParam,
+    headers: tenantHeaders,
+    body: z.object({}),
+    responses: { 200: verifyCredentialsOutput },
+    summary: "Prueba las credenciales del proveedor sin exponerlas (ADMIN)",
   },
 
   // Cajas (CRUD solo ADMIN).

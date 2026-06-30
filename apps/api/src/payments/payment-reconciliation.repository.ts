@@ -9,8 +9,9 @@ import {
   type ReconciliationRepository,
 } from '@preztiaos/application';
 import { type AllocationResult, type PixReceiptData } from '@preztiaos/domain';
-import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
+import { recordFraudAssessmentTx } from './fraud-assessment.recorder';
 
 /**
  * Adaptador del puerto ReconciliationRepository: persistencia de la conciliación
@@ -122,66 +123,180 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         });
       if (!transitioned.length) return; // otro proceso ya lo verificó
 
-      const creditId = transitioned[0].creditId;
-      for (const allocation of input.allocation.allocations) {
-        const updated = await tx
-          .update(schema.installment)
-          .set({
-            paidMinor: sql`${schema.installment.paidMinor} + ${allocation.amountMinor}`,
-            status: sql`case when ${schema.installment.paidMinor} + ${allocation.amountMinor} >= ${schema.installment.amountDueMinor} then 'PAID'::installment_status else 'PARTIALLY_PAID'::installment_status end`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(schema.installment.id, allocation.installmentId),
-              sql`${schema.installment.paidMinor} + ${allocation.amountMinor} <= ${schema.installment.amountDueMinor}`,
-            ),
-          )
-          .returning({ id: schema.installment.id });
-        if (!updated.length) {
-          throw new Error(
-            `Conciliación rechazada: la cuota ${allocation.installmentId} ya no admite el monto`,
-          );
-        }
-      }
-
-      if (input.allocation.allocations.length) {
-        await tx.insert(schema.paymentAllocation).values(
-          input.allocation.allocations.map((a) => ({
-            tenantId: input.tenantId,
-            paymentId: input.paymentId,
-            installmentId: a.installmentId,
-            amountMinor: a.amountMinor,
-          })),
-        );
-      }
-
-      if (input.allocation.creditSettled && creditId) {
-        await tx
-          .update(schema.credit)
-          .set({ status: 'SETTLED' })
-          .where(eq(schema.credit.id, creditId));
-      }
-
-      await tx.insert(schema.paymentEvent).values(
-        input.events.map((event) => ({
-          tenantId: input.tenantId,
-          paymentId: input.paymentId,
-          creditId,
-          type: event.type,
-          payload: event.payload ?? null,
-        })),
-      );
-
-      // El pago recién confirmado entra a su caja (bancaria por llave PIX, o tránsito + alerta).
-      await routeVerifiedPaymentToBox(tx, {
+      await this.applyAllocationTx(tx, {
         tenantId: input.tenantId,
         paymentId: input.paymentId,
+        creditId: transitioned[0].creditId,
+        allocation: input.allocation,
+        events: input.events,
         receiverPixKey: transitioned[0].receiverPixKey,
         amountMinor: transitioned[0].amountMinor,
         currency: transitioned[0].currency,
-        createdBy: null,
       });
+    });
+  }
+
+  /**
+   * Confirmación de la Fase 2 (settlement): CONSUME un crédito real y VERIFICA el pago en UNA
+   * sola transacción. Bloquea ambas filas (FOR UPDATE) y solo procede si el pago sigue
+   * UNVERIFIED y el crédito sigue libre → no hay doble consumo (I1) ni doble abono. Si otra
+   * ejecución se adelantó, devuelve `confirmed: false` sin tocar nada.
+   */
+  async confirmWithCredit(input: {
+    tenantId: string;
+    paymentId: string;
+    creditSourceId: string;
+    allocation: AllocationResult;
+    events: readonly PaymentAuditEvent[];
+  }): Promise<{ confirmed: boolean }> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const [pay] = await tx
+        .select({
+          status: schema.payment.status,
+          creditId: schema.payment.creditId,
+          receiverPixKey: schema.payment.receiverPixKey,
+          amountMinor: schema.payment.amountMinor,
+          currency: schema.payment.currency,
+        })
+        .from(schema.payment)
+        .where(eq(schema.payment.id, input.paymentId))
+        .for('update');
+      if (!pay || pay.status !== 'UNVERIFIED') return { confirmed: false };
+
+      const [credit] = await tx
+        .select({
+          id: schema.incomingCredit.id,
+          consumedByPaymentId: schema.incomingCredit.consumedByPaymentId,
+        })
+        .from(schema.incomingCredit)
+        .where(eq(schema.incomingCredit.sourceId, input.creditSourceId))
+        .for('update')
+        .limit(1);
+      if (!credit || credit.consumedByPaymentId !== null) {
+        return { confirmed: false };
+      }
+
+      await tx
+        .update(schema.incomingCredit)
+        .set({ consumedByPaymentId: input.paymentId })
+        .where(eq(schema.incomingCredit.id, credit.id));
+
+      await tx
+        .update(schema.payment)
+        .set({
+          status: 'VERIFIED',
+          bankStatus: 'CONFIRMED',
+          bankResponse: {
+            via: 'settlement_report',
+            sourceId: input.creditSourceId,
+          },
+          verifiedAt: new Date(),
+          lastReconciliationAt: new Date(),
+        })
+        .where(eq(schema.payment.id, input.paymentId));
+
+      await this.applyAllocationTx(tx, {
+        tenantId: input.tenantId,
+        paymentId: input.paymentId,
+        creditId: pay.creditId,
+        allocation: input.allocation,
+        events: input.events,
+        receiverPixKey: pay.receiverPixKey,
+        amountMinor: pay.amountMinor,
+        currency: pay.currency,
+      });
+
+      // Traza antifraude de la Fase 2: confirmación contra el crédito real (ground truth).
+      await recordFraudAssessmentTx(tx, {
+        tenantId: input.tenantId,
+        paymentId: input.paymentId,
+        phase: 'PHASE2_SETTLEMENT',
+        status: 'CONFIRMED',
+        score: null,
+        reasons: [
+          `Crédito real conciliado (SOURCE_ID ${input.creditSourceId})`,
+        ],
+      });
+      return { confirmed: true };
+    });
+  }
+
+  /**
+   * Abono + bitácora + ruteo a caja para un pago ya transicionado a VERIFIED, dentro de la
+   * transacción del llamador. Compartido por la conciliación per-PIX (`applyVerification`) y la
+   * de settlement (`confirmWithCredit`) para no duplicar la lógica de abono.
+   */
+  private async applyAllocationTx(
+    tx: Tx,
+    input: {
+      tenantId: string;
+      paymentId: string;
+      creditId: string | null;
+      allocation: AllocationResult;
+      events: readonly PaymentAuditEvent[];
+      receiverPixKey: string | null;
+      amountMinor: number | null;
+      currency: string;
+    },
+  ): Promise<void> {
+    for (const allocation of input.allocation.allocations) {
+      const updated = await tx
+        .update(schema.installment)
+        .set({
+          paidMinor: sql`${schema.installment.paidMinor} + ${allocation.amountMinor}`,
+          status: sql`case when ${schema.installment.paidMinor} + ${allocation.amountMinor} >= ${schema.installment.amountDueMinor} then 'PAID'::installment_status else 'PARTIALLY_PAID'::installment_status end`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.installment.id, allocation.installmentId),
+            sql`${schema.installment.paidMinor} + ${allocation.amountMinor} <= ${schema.installment.amountDueMinor}`,
+          ),
+        )
+        .returning({ id: schema.installment.id });
+      if (!updated.length) {
+        throw new Error(
+          `Conciliación rechazada: la cuota ${allocation.installmentId} ya no admite el monto`,
+        );
+      }
+    }
+
+    if (input.allocation.allocations.length) {
+      await tx.insert(schema.paymentAllocation).values(
+        input.allocation.allocations.map((a) => ({
+          tenantId: input.tenantId,
+          paymentId: input.paymentId,
+          installmentId: a.installmentId,
+          amountMinor: a.amountMinor,
+        })),
+      );
+    }
+
+    if (input.allocation.creditSettled && input.creditId) {
+      await tx
+        .update(schema.credit)
+        .set({ status: 'SETTLED' })
+        .where(eq(schema.credit.id, input.creditId));
+    }
+
+    await tx.insert(schema.paymentEvent).values(
+      input.events.map((event) => ({
+        tenantId: input.tenantId,
+        paymentId: input.paymentId,
+        creditId: input.creditId,
+        type: event.type,
+        payload: event.payload ?? null,
+      })),
+    );
+
+    // El pago recién confirmado entra a su caja (bancaria por llave PIX, o tránsito + alerta).
+    await routeVerifiedPaymentToBox(tx, {
+      tenantId: input.tenantId,
+      paymentId: input.paymentId,
+      receiverPixKey: input.receiverPixKey,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      createdBy: null,
     });
   }
 

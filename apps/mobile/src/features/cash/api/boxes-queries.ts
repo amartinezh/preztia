@@ -4,17 +4,30 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { BankAccountInput, CashBoxType } from "@preztiaos/contracts";
+import type {
+  BankAccountInput,
+  BankProviderType,
+  BankReportConfig,
+  CashBoxType,
+} from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
 
-/** Patch parcial de una cuenta (null borra pixKey/apiKey/accountNumber). */
+/** Patch parcial de una cuenta (null borra el valor; ausente no toca). */
 export interface BankAccountPatch {
   label?: string;
   bankName?: string;
   accountNumber?: string | null;
+  providerType?: BankProviderType;
   pixKey?: string | null;
+  receiverTaxId?: string | null;
+  receiverName?: string | null;
   apiKey?: string | null;
+  // Secretos del proveedor (ej. Mercado Pago): nunca se leen de vuelta.
+  publicKey?: string | null;
+  accessToken?: string | null;
+  webhookSecret?: string | null;
+  reportConfig?: BankReportConfig | null;
   unverifiedPolicy?: "HOLD" | "ALLOCATE";
   active?: boolean;
 }
@@ -262,5 +275,19 @@ export function useDeleteBankAccount() {
         }),
       ),
     onSuccess: invalidate,
+  });
+}
+
+/** Prueba las credenciales del proveedor (ej. Mercado Pago) sin exponer el secreto. */
+export function useVerifyBankCredentials() {
+  return useMutation({
+    mutationFn: async (accountId: string) =>
+      unwrap(
+        await api.verifyBankCredentials({
+          headers: tenantHeader(),
+          params: { id: accountId },
+          body: {},
+        }),
+      ),
   });
 }

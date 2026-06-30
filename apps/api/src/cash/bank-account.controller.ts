@@ -17,6 +17,7 @@ import { requireTenant } from '../auth/require-tenant';
 import { requireAdmin } from '../auth/require-admin';
 import { Idempotent } from '../observability/idempotent.decorator';
 import { BankAccountDrizzleRepository } from './bank-account.repository';
+import { BankProviderVerifierService } from './bank-provider-verifier.service';
 
 const uuid = z.string().uuid();
 
@@ -27,7 +28,10 @@ const uuid = z.string().uuid();
 @Controller()
 @UseGuards(JwtGuard)
 export class BankAccountController {
-  constructor(private readonly accounts: BankAccountDrizzleRepository) {}
+  constructor(
+    private readonly accounts: BankAccountDrizzleRepository,
+    private readonly verifier: BankProviderVerifierService,
+  ) {}
 
   @Get('bank-accounts')
   async list(
@@ -77,5 +81,18 @@ export class BankAccountController {
     const tenant = requireTenant(tenantId);
     requireAdmin(auth);
     return this.accounts.remove(tenant, uuid.parse(id));
+  }
+
+  // Prueba las credenciales del proveedor (ej. Mercado Pago) sin devolverlas jamás.
+  @Post('bank-accounts/:id/verify-credentials')
+  @HttpCode(200)
+  async verifyCredentials(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireAdmin(auth);
+    return this.verifier.verify(tenant, uuid.parse(id));
   }
 }

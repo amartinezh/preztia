@@ -2,6 +2,7 @@ import type {
   BankVerification,
   FraudAssessment,
   MediaClassification,
+  NormalizedCredit,
   PaymentAllocation,
   PaymentStatus,
   PixReceiptData,
@@ -141,4 +142,25 @@ export interface ActiveTenantBankAccount {
 /** Puerto: configuración bancaria del tenant. */
 export interface TenantBankAccountRepository {
   findActive(tenantId: string): Promise<ActiveTenantBankAccount | null>;
+}
+
+/** Ventana de conciliación para traer créditos de la fuente de liquidación. */
+export interface SettlementWindow {
+  readonly tenantId: string;
+  readonly countryCode: string;
+  readonly bankCode: string;
+  /** Inicio/fin de la ventana (ISO). */
+  readonly begin: string;
+  readonly end: string;
+}
+
+/**
+ * Puerto: fuente de CRÉDITOS confirmados (ground truth) de una cuenta recaudadora. Abstrae de
+ * dónde salen los ingresos reales (ej. settlement_report de Mercado Pago). La infraestructura
+ * resuelve el adaptador por (countryCode, bankCode); un proveedor sin soporte degrada a lista
+ * vacía (la conciliación queda sin confirmar, nunca rompe). El consumo idempotente por
+ * SOURCE_ID lo garantiza la persistencia (incoming_credit), no este puerto.
+ */
+export interface SettlementSource {
+  fetchCredits(window: SettlementWindow): Promise<readonly NormalizedCredit[]>;
 }

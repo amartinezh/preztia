@@ -24,6 +24,7 @@ import { PaymentsQueryRepository } from './payments-query.repository';
 import { CashPaymentDrizzleRepository } from './cash-payment.repository';
 import { ManualVerifyPaymentRepository } from './manual-verify-payment.repository';
 import { PaymentReceiptOriginalStorage } from './payment-receipt-original.storage';
+import { RunSettlementReconciliationService } from './run-settlement-reconciliation.service';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireReviewer } from '../auth/require-reviewer';
@@ -43,6 +44,7 @@ export class PaymentsController {
     private readonly cashPayments: CashPaymentDrizzleRepository,
     private readonly manualVerify: ManualVerifyPaymentRepository,
     private readonly receipts: PaymentReceiptOriginalStorage,
+    private readonly settlementReconcile: RunSettlementReconciliationService,
   ) {}
 
   @Get('credits/:creditId/payments')
@@ -105,6 +107,16 @@ export class PaymentsController {
   ) {
     const tenant = requireTenant(tenantId);
     return this.reconcile.execute({ tenantId: tenant });
+  }
+
+  // Conciliación de la Fase 2 vía settlement_report (Mercado Pago): match + confirmación.
+  @Post('payments/reconcile-settlement')
+  @HttpCode(200)
+  async reconcileSettlement(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    return this.settlementReconcile.execute({ tenantId: tenant });
   }
 
   @Get('payments')

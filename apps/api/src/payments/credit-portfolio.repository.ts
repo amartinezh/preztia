@@ -10,6 +10,10 @@ import { type PaymentAllocation } from '@preztiaos/domain';
 import { type Tx } from '../tenancy/unit-of-work';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
+import {
+  phase1Status,
+  recordFraudAssessmentTx,
+} from './fraud-assessment.recorder';
 
 /**
  * Adaptador del puerto CreditPortfolioRepository: traduce cartera/pagos ↔
@@ -118,6 +122,17 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
       }
 
       const paymentId = inserted.id;
+
+      // Traza antifraude de la Fase 1 (señales del pre-screen), en la misma transacción.
+      await recordFraudAssessmentTx(tx, {
+        tenantId: p.tenantId,
+        paymentId,
+        phase: 'PHASE1_SCREEN',
+        status: phase1Status(p.status, p.fraudReasons),
+        score: p.fraudScore,
+        reasons: p.fraudReasons ?? [],
+      });
+
       await this.applyAllocations(
         tx,
         p.tenantId,

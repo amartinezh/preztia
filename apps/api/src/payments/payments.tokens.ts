@@ -11,3 +11,4 @@ export const TENANT_BANK_ACCOUNT_REPOSITORY = Symbol(
 );
 export const RECONCILIATION_REPOSITORY = Symbol('ReconciliationRepository');
 export const MEDIA_ROUTER = Symbol('RouteInboundMediaHandler');
+export const SETTLEMENT_SOURCE = Symbol('SettlementSource');

@@ -24,9 +24,17 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
   await sql`DELETE FROM cash_transaction WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM bank_reconciliation WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM cash_count WHERE tenant_id = ${tenantId}`;
+  // payment_allocation referencia payment e installment: se borra antes que ambos.
+  await sql`DELETE FROM payment_allocation WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM payment_event WHERE tenant_id = ${tenantId}`;
+  // fraud_assessment e incoming_credit referencian payment: se borran antes que payment.
+  await sql`DELETE FROM fraud_assessment WHERE tenant_id = ${tenantId}`;
+  await sql`DELETE FROM incoming_credit WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM payment WHERE tenant_id = ${tenantId}`;
+  await sql`DELETE FROM installment WHERE tenant_id = ${tenantId}`;
+  await sql`DELETE FROM credit WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM cash_box WHERE tenant_id = ${tenantId}`;
+  await sql`DELETE FROM bank_credential WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM tenant_bank_account WHERE tenant_id = ${tenantId}`;
 }
 
