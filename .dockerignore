@@ -1,0 +1,32 @@
+# Contexto de build de la imagen de la API (apps/api/Dockerfile). Se envía solo el CÓDIGO
+# fuente del monorepo; las dependencias y artefactos se generan dentro de la imagen.
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+.turbo
+**/.turbo
+.expo
+**/.expo
+coverage
+**/coverage
+
+# Control de versiones y metadatos
+.git
+.github
+.vscode
+**/.DS_Store
+
+# Secretos y entorno local (nunca deben entrar a la imagen)
+.env
+.env.*
+!.env.example
+
+# Cliente móvil (Expo): no participa en la imagen de la API
+apps/mobile/assets
+apps/mobile/.expo
+
+# Artefactos de despliegue que sirve Caddy, no la API
+deploy/landing

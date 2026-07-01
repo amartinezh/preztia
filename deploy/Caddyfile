@@ -1,0 +1,32 @@
+# Reverse proxy + HTTPS automático (Let's Encrypt) de PreztiaOS en producción.
+# DOMAIN y ACME_EMAIL llegan como variables de entorno (env_file .env.prod en el servicio caddy).
+#
+#   {$DOMAIN} / www.{$DOMAIN}  → landing estática (file_server desde /srv/landing)
+#   api.{$DOMAIN}              → API NestJS (reverse_proxy a api:3000, red interna)
+#
+# Caddy obtiene y renueva los certificados TLS solo; no hay que tocar nada.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# ---- Landing pública (raíz + www) ----
+{$DOMAIN}, www.{$DOMAIN} {
+	encode zstd gzip
+	root * /srv/landing
+	file_server
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# ---- API ----
+api.{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:3000
+}

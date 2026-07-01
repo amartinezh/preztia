@@ -1,0 +1,95 @@
+# Orquestación de PRODUCCIÓN de PreztiaOS. SEPARADA de docker-compose.yml (que es solo infra
+# local para desarrollo y no se toca). Aquí se construye y ejecuta TODO el stack: API + datos +
+# reverse proxy con HTTPS automático. Solo Caddy publica puertos al host; Postgres/Redis/MinIO
+# quedan aislados en la red interna de compose.
+#
+# Uso (ver docs/DEPLOYMENT.md):
+#   cp env.prod.example .env.prod   # y rellenar secretos + DOMAIN/ACME_EMAIL
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml --profile migrate up migrate   # una vez
+#   docker compose -f docker-compose.prod.yml up -d
+
+name: preztiaos-prod
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    env_file: [.env.prod]
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      # Crea los roles `app` (NOBYPASSRLS) y `platform` (BYPASSRLS) en el primer arranque.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redisdata_prod:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data
+    env_file: [.env.prod]
+    volumes:
+      - miniodata_prod:/data
+    # La consola de administración NO se expone públicamente. La API crea el bucket KYC sola
+    # (ensureBucket, idempotente) en su primer uso.
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runner
+    image: preztiaos-api:latest
+    restart: unless-stopped
+    env_file: [.env.prod]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_started }
+    # Sin `ports`: solo Caddy alcanza la API por la red interna (api:3000).
+
+  # Migraciones de esquema (drizzle-kit). One-shot bajo perfil `migrate`: reutiliza la MISMA
+  # imagen que `api` (trae drizzle-kit). No arranca con `up -d` normal.
+  migrate:
+    image: preztiaos-api:latest
+    profiles: [migrate]
+    env_file: [.env.prod]
+    command: ['pnpm', '--filter', '@preztiaos/db', 'migrate']
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: [.env.prod] # DOMAIN y ACME_EMAIL para el Caddyfile
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/landing:/srv/landing:ro
+      - caddy_data:/data # certificados Let's Encrypt (persistentes)
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata_prod:
+  redisdata_prod:
+  miniodata_prod:
+  caddy_data:
+  caddy_config:

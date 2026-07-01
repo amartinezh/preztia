@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Preztia — Sistema operativo de préstamos y cobranza</title>
+    <meta
+      name="description"
+      content="Preztia es la plataforma multi-tenant para otorgar crédito y cobrar por ruta: originación y cobranza por WhatsApp con IA, pagos PIX conciliados, antifraude documental y auditoría del dinero."
+    />
+    <meta name="theme-color" content="#0b0f1a" />
+    <meta property="og:title" content="Preztia — Sistema operativo de préstamos y cobranza" />
+    <meta
+      property="og:description"
+      content="Originación y cobranza por WhatsApp con IA, PIX conciliado, antifraude documental y aislamiento multi-tenant por RLS."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://news.google.com" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!-- Barra de estado "vivo": señal honesta de frescura (sin métricas inventadas). -->
+    <div class="statusbar" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span>Plataforma operativa</span>
+      <span class="sep">·</span>
+      <span id="live-clock">--:--:--</span>
+      <span class="sep">·</span>
+      <span id="live-updated">Pulso del sector: cargando…</span>
+    </div>
+
+    <header class="nav">
+      <a class="brand" href="/">
+        <span class="brand-mark">◭</span> Preztia
+      </a>
+      <nav class="nav-links">
+        <a href="#producto">Producto</a>
+        <a href="#pulso">Pulso del sector</a>
+        <a href="#como">Cómo funciona</a>
+        <a class="btn btn-ghost" id="nav-login" href="#">Ingresar</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- HERO -->
+      <section class="hero">
+        <p class="eyebrow">Sistema operativo de crédito · multi-tenant</p>
+        <h1>Presta y cobra por ruta,<br /><span class="grad">sin perder el control del dinero.</span></h1>
+        <p class="lede">
+          Preztia orquesta todo el ciclo: un solicitante escribe por WhatsApp, una IA lo atiende y
+          abre la solicitud, corre el antifraude documental, otorga el crédito con su calendario y
+          concilia cada pago PIX. Cada movimiento queda auditado y cada empresa, aislada.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" id="hero-login" href="#">Entrar a la plataforma</a>
+          <a class="btn btn-ghost" href="#pulso">Ver el pulso del sector ↓</a>
+        </div>
+        <ul class="trust">
+          <li>🔒 Aislamiento por RLS</li>
+          <li>⚡ PIX conciliado</li>
+          <li>🛡️ Antifraude KYC</li>
+          <li>🧾 Auditoría append-only</li>
+        </ul>
+      </section>
+
+      <!-- DIFERENCIADORES -->
+      <section id="producto" class="section">
+        <h2 class="section-title">Una plataforma, todo el ciclo</h2>
+        <p class="section-sub">Capacidades reales, ya en producción.</p>
+        <div class="grid">
+          <article class="card">
+            <div class="card-ico">🏦</div>
+            <h3>Multi-tenant con RLS</h3>
+            <p>Cada empresa opera aislada por Row-Level Security de PostgreSQL. Sin fugas entre carteras.</p>
+          </article>
+          <article class="card">
+            <div class="card-ico">💬</div>
+            <h3>WhatsApp con IA</h3>
+            <p>Originación y cobranza asistidas: el asistente atiende, abre solicitudes y recuerda pagos.</p>
+          </article>
+          <article class="card">
+            <div class="card-ico">🛡️</div>
+            <h3>Antifraude documental</h3>
+            <p>Validación KYC con visión por IA y fuentes oficiales brasileñas. Cifrado en reposo.</p>
+          </article>
+          <article class="card">
+            <div class="card-ico">⚡</div>
+            <h3>PIX conciliado</h3>
+            <p>Recepción de comprobantes, verificación y abono automático con cuadre de caja.</p>
+          </article>
+          <article class="card">
+            <div class="card-ico">🗺️</div>
+            <h3>Rutas de cobro</h3>
+            <p>Clientes críticos priorizados y ruta diaria optimizada sobre el mapa.</p>
+          </article>
+          <article class="card">
+            <div class="card-ico">🧾</div>
+            <h3>Dinero auditado</h3>
+            <p>Todo abono y cambio de estado en bitácora append-only. Idempotencia sin doble cobro.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- PULSO DEL SECTOR -->
+      <section id="pulso" class="section">
+        <h2 class="section-title">Pulso del sector</h2>
+        <p class="section-sub">
+          Titulares de economía, crédito y pagos, actualizados a diario · atribuidos a su fuente.
+        </p>
+        <div class="pulse">
+          <div class="pulse-news">
+            <div class="pulse-head">
+              <h3>Titulares de hoy</h3>
+              <span class="pill" id="news-updated">—</span>
+            </div>
+            <div id="news-list" class="news-list">
+              <div class="news-skeleton"></div>
+              <div class="news-skeleton"></div>
+              <div class="news-skeleton"></div>
+            </div>
+          </div>
+          <aside class="pulse-changelog">
+            <div class="pulse-head">
+              <h3>Novedades de la plataforma</h3>
+              <span class="pill pill-alt">Preztia</span>
+            </div>
+            <ol id="changelog-list" class="timeline"></ol>
+          </aside>
+        </div>
+      </section>
+
+      <!-- CÓMO FUNCIONA -->
+      <section id="como" class="section">
+        <h2 class="section-title">Del WhatsApp al abono conciliado</h2>
+        <ol class="steps">
+          <li><span>1</span><div><b>Solicita</b><p>El cliente escribe por WhatsApp; la IA abre la solicitud.</p></div></li>
+          <li><span>2</span><div><b>Verifica</b><p>KYC + antifraude documental con fuentes oficiales.</p></div></li>
+          <li><span>3</span><div><b>Otorga</b><p>Crédito con calendario de cuotas y su cartera.</p></div></li>
+          <li><span>4</span><div><b>Cobra</b><p>Recordatorios por WhatsApp y ruta de cobro optimizada.</p></div></li>
+          <li><span>5</span><div><b>Concilia</b><p>Pago PIX verificado, abonado y cuadrado en caja.</p></div></li>
+        </ol>
+        <div class="cta-band">
+          <div>
+            <h3>¿Listo para operar tu cartera con orden?</h3>
+            <p>Entra a la plataforma y empieza a otorgar y cobrar con trazabilidad total.</p>
+          </div>
+          <a class="btn btn-primary" id="band-login" href="#">Ingresar</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="brand"><span class="brand-mark">◭</span> Preztia</div>
+      <p>Plataforma multi-tenant de préstamos y cobranza. Dinero en unidades menores, auditado y aislado.</p>
+      <p class="muted">© <span id="year"></span> Preztia · Todos los derechos reservados.</p>
+    </footer>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
