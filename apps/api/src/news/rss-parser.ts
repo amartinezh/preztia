@@ -89,8 +89,13 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
 function decodeEntities(text: string): string {
   return text
     .replace(/&#(\d+);/g, (_, dec: string) => fromCodePoint(Number(dec)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => fromCodePoint(parseInt(hex, 16)))
-    .replace(/&(amp|lt|gt|quot|apos|nbsp);/g, (m, name: string) => NAMED_ENTITIES[name] ?? m);
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) =>
+      fromCodePoint(parseInt(hex, 16)),
+    )
+    .replace(
+      /&(amp|lt|gt|quot|apos|nbsp);/g,
+      (m, name: string) => NAMED_ENTITIES[name] ?? m,
+    );
 }
 
 function fromCodePoint(code: number): string {

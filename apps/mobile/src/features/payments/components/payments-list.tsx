@@ -48,6 +48,9 @@ export function PaymentsList({ creditId }: { creditId: string }) {
                     <Text variant="label" tone="muted">—</Text>
                   )}
                   <Badge tone={badge.tone} label={badge.label} />
+                  {p.awaitingManualReview ? (
+                    <Badge tone="warning" label={t("payment.pendingReview.badge")} />
+                  ) : null}
                 </Stack>
               </Row>
             </Card>

@@ -32,6 +32,7 @@ export * from "./credit/payment/e2e-id";
 export * from "./credit/payment/ispb-registry";
 export * from "./credit/payment/receiver-match";
 export * from "./credit/payment/settlement-match";
+export * from "./credit/payment/payment-intent";
 export * from "./conversations/inbound-message";
 export * from "./conversations/assistant";
 export * from "./antifraud/alert";

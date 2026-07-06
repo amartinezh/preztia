@@ -29,12 +29,16 @@ export interface BankAccountPatch {
   receiverName?: string | null;
   apiKey?: string | null;
   reportConfig?: BankReportConfig | null;
-  // Secretos del proveedor (ej. Mercado Pago): viven cifrados en `bank_credential`.
+  // Secretos del proveedor (ej. Mercado Pago, PicPay): viven cifrados en `bank_credential`.
   // string = setear; null = borrar; ausente = no tocar.
   publicKey?: string | null;
   accessToken?: string | null;
   webhookSecret?: string | null;
+  clientId?: string | null;
+  clientSecret?: string | null;
   unverifiedPolicy?: 'HOLD' | 'ALLOCATE';
+  verifyPaymentsEnabled?: boolean;
+  balanceCheckEnabled?: boolean;
   active?: boolean;
 }
 
@@ -84,6 +88,13 @@ export class BankAccountDrizzleRepository {
             ...(input.unverifiedPolicy
               ? { unverifiedPolicy: input.unverifiedPolicy }
               : {}),
+            // Toggles de validación: si no vienen, la BD aplica el default (habilitados).
+            ...(input.verifyPaymentsEnabled !== undefined
+              ? { verifyPaymentsEnabled: input.verifyPaymentsEnabled }
+              : {}),
+            ...(input.balanceCheckEnabled !== undefined
+              ? { balanceCheckEnabled: input.balanceCheckEnabled }
+              : {}),
           })
           .returning();
         // Secretos del proveedor en la misma transacción (agregado atómico).
@@ -91,6 +102,8 @@ export class BankAccountDrizzleRepository {
           [CREDENTIAL_NAME.publicKey]: input.publicKey,
           [CREDENTIAL_NAME.accessToken]: input.accessToken,
           [CREDENTIAL_NAME.webhookSecret]: input.webhookSecret,
+          [CREDENTIAL_NAME.clientId]: input.clientId,
+          [CREDENTIAL_NAME.clientSecret]: input.clientSecret,
         });
         const names = await this.credentials.listNamesTx(tx, row.id);
         return toView(row, names);
@@ -108,8 +121,14 @@ export class BankAccountDrizzleRepository {
     return withTenantTxFor(tenantId, async (tx) => {
       try {
         // Los secretos NO son columnas de la cuenta: se separan del set de la fila.
-        const { publicKey, accessToken, webhookSecret, ...accountPatch } =
-          patch;
+        const {
+          publicKey,
+          accessToken,
+          webhookSecret,
+          clientId,
+          clientSecret,
+          ...accountPatch
+        } = patch;
         const set = {
           ...accountPatch,
           // Cifra la credencial si el parche la toca (`apiKey: null` la borra).
@@ -128,6 +147,8 @@ export class BankAccountDrizzleRepository {
           [CREDENTIAL_NAME.publicKey]: publicKey,
           [CREDENTIAL_NAME.accessToken]: accessToken,
           [CREDENTIAL_NAME.webhookSecret]: webhookSecret,
+          [CREDENTIAL_NAME.clientId]: clientId,
+          [CREDENTIAL_NAME.clientSecret]: clientSecret,
         });
         const names = await this.credentials.listNamesTx(tx, id);
         return toView(row, names);
@@ -180,8 +201,12 @@ function toView(row: Row, credentialNames: readonly string[]): BankAccount {
     hasPublicKey: credentialNames.includes(CREDENTIAL_NAME.publicKey),
     hasAccessToken: credentialNames.includes(CREDENTIAL_NAME.accessToken),
     hasWebhookSecret: credentialNames.includes(CREDENTIAL_NAME.webhookSecret),
+    hasClientId: credentialNames.includes(CREDENTIAL_NAME.clientId),
+    hasClientSecret: credentialNames.includes(CREDENTIAL_NAME.clientSecret),
     reportConfig: row.reportConfig ?? null,
     unverifiedPolicy: row.unverifiedPolicy,
+    verifyPaymentsEnabled: row.verifyPaymentsEnabled,
+    balanceCheckEnabled: row.balanceCheckEnabled,
     active: row.active,
     createdAt: row.createdAt.toISOString(),
   };

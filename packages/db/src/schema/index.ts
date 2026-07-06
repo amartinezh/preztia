@@ -24,6 +24,8 @@ export * from "./borrower-contact";
 export * from "./tenant-bank-account";
 export * from "./bank-credential";
 export * from "./incoming-credit";
+export * from "./provider-webhook-event";
+export * from "./payment-charge";
 export * from "./fraud-assessment";
 export * from "./cash-box";
 export * from "./cash-transaction";

@@ -33,6 +33,9 @@ export const incomingCredit = pgTable(
     paymentMethodType: text("payment_method_type").notNull(),
     // Tipo de transacción de la fuente (excluye REFUND/CHARGEBACK en el match).
     transactionType: text("transaction_type").notNull(),
+    // EndToEndId del PIX cuando la fuente lo trae (ej. webhook de PicPay). Permite el match
+    // DETERMINISTA comprobante ↔ crédito por E2E; null cuando la fuente no lo expone (MP).
+    endToEndId: text("end_to_end_id"),
     settlementDate: timestamp("settlement_date", { withTimezone: true }).notNull(),
     // Pago que consumió este crédito; NULL = aún disponible. Un crédito → un pago.
     consumedByPaymentId: uuid("consumed_by_payment_id").references(() => payment.id),
@@ -45,5 +48,7 @@ export const incomingCredit = pgTable(
     bySourceIdx: uniqueIndex("incoming_credit_tenant_source_idx").on(t.tenantId, t.sourceId),
     // Listado de créditos disponibles por cuenta (consumed_by_payment_id IS NULL).
     byAccountIdx: index("incoming_credit_account_idx").on(t.bankAccountId, t.consumedByPaymentId),
+    // Verificación per-PIX (PicPay): localizar un crédito por su endToEndId.
+    byE2EIdx: index("incoming_credit_tenant_e2e_idx").on(t.tenantId, t.endToEndId),
   }),
 );

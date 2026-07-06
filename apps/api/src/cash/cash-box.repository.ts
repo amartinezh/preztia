@@ -119,7 +119,8 @@ export class CashBoxDrizzleRepository {
           throw new NotFoundException('Cuenta bancaria no encontrada');
       }
       // Una caja de ruta exige un cobrador válido (el CHECK ya garantiza que sea CASH).
-      if (input.assignedTo) await assertAssignableCollector(tx, input.assignedTo);
+      if (input.assignedTo)
+        await assertAssignableCollector(tx, input.assignedTo);
       try {
         const [row] = await tx
           .insert(schema.cashBox)
@@ -129,7 +130,8 @@ export class CashBoxDrizzleRepository {
             name: input.name,
             currency: tenantCurrency,
             bankAccountId: input.type === 'BANK' ? input.bankAccountId! : null,
-            assignedTo: input.type === 'CASH' ? (input.assignedTo ?? null) : null,
+            assignedTo:
+              input.type === 'CASH' ? (input.assignedTo ?? null) : null,
           })
           .returning();
         return toBoxView(row);

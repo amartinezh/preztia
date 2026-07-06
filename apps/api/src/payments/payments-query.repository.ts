@@ -23,7 +23,7 @@ import {
   portfolioBalanceMinor,
   type PortfolioInstallment,
 } from '@preztiaos/domain';
-import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 
 // Estados que representan un intento NO efectivo (fallido o pendiente) para la auditoría.
 const FAILED_STATUSES: PaymentStatusContract[] = [
@@ -58,8 +58,12 @@ export class PaymentsQueryRepository {
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize);
 
+      const review = await awaitingReviewIds(
+        tx,
+        rows.map((r) => r.id),
+      );
       return {
-        items: rows.map(toSummary),
+        items: rows.map((r) => toSummary(r, review)),
         total: Number(totalRow?.value ?? 0),
       };
     });
@@ -95,8 +99,12 @@ export class PaymentsQueryRepository {
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize);
 
+      const review = await awaitingReviewIds(
+        tx,
+        rows.map((r) => r.id),
+      );
       return {
-        items: rows.map(toSummary),
+        items: rows.map((r) => toSummary(r, review)),
         total: Number(totalRow?.value ?? 0),
       };
     });
@@ -124,6 +132,19 @@ export class PaymentsQueryRepository {
         .from(schema.paymentEvent)
         .where(eq(schema.paymentEvent.paymentId, input.paymentId))
         .orderBy(asc(schema.paymentEvent.createdAt));
+
+      // Bitácora antifraude estructurada (Fase 1 y 2) para el semáforo de validaciones.
+      const assessments = await tx
+        .select({
+          phase: schema.fraudAssessment.phase,
+          status: schema.fraudAssessment.status,
+          score: schema.fraudAssessment.score,
+          reasons: schema.fraudAssessment.reasons,
+          createdAt: schema.fraudAssessment.createdAt,
+        })
+        .from(schema.fraudAssessment)
+        .where(eq(schema.fraudAssessment.paymentId, input.paymentId))
+        .orderBy(asc(schema.fraudAssessment.createdAt));
 
       // Motivo destacado: los `reasons` del evento de decisión del veredicto (antifraude/banco).
       const flagReasons = extractFlagReasons(events.map((e) => e.payload));
@@ -153,6 +174,13 @@ export class PaymentsQueryRepository {
         mimeType: row.mimeType,
         createdAt: row.createdAt.toISOString(),
         flagReasons,
+        assessments: assessments.map((a) => ({
+          phase: a.phase,
+          status: a.status,
+          score: a.score,
+          reasons: a.reasons ?? [],
+          createdAt: a.createdAt.toISOString(),
+        })),
         events: events.map((e) => ({
           type: e.type,
           payload: e.payload ?? null,
@@ -269,17 +297,24 @@ function buildAttemptFilters(input: {
 
   // Rango de la fecha de pago: [fromDate 00:00, toDate 23:59:59.999] inclusivo.
   if (input.fromDate) {
-    filters.push(gte(schema.payment.paidAt, new Date(`${input.fromDate}T00:00:00.000Z`)));
+    filters.push(
+      gte(schema.payment.paidAt, new Date(`${input.fromDate}T00:00:00.000Z`)),
+    );
   }
   if (input.toDate) {
-    filters.push(lte(schema.payment.paidAt, new Date(`${input.toDate}T23:59:59.999Z`)));
+    filters.push(
+      lte(schema.payment.paidAt, new Date(`${input.toDate}T23:59:59.999Z`)),
+    );
   }
 
   return filters.length ? and(...filters) : undefined;
 }
 
 /** Mapea una fila de pago al resumen del contrato (CPF/CNPJ enmascarado: PII fuera del API). */
-function toSummary(row: typeof schema.payment.$inferSelect): PaymentSummary {
+function toSummary(
+  row: typeof schema.payment.$inferSelect,
+  awaitingReviewIds: ReadonlySet<string>,
+): PaymentSummary {
   return {
     id: row.id,
     status: row.status,
@@ -291,8 +326,33 @@ function toSummary(row: typeof schema.payment.$inferSelect): PaymentSummary {
     payerBankName: row.payerBankName,
     endToEndId: row.endToEndId,
     bankStatus: row.bankStatus,
+    // Solo los UNVERIFIED con un crédito real reservado (PENDING_REVIEW) esperan aprobación.
+    awaitingManualReview:
+      row.status === 'UNVERIFIED' && awaitingReviewIds.has(row.id),
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/**
+ * De un conjunto de pagos, cuáles tienen una evaluación PHASE2 `PENDING_REVIEW` (crédito real
+ * conciliado a la espera de aprobación humana). Una sola consulta por página (sin N+1).
+ */
+async function awaitingReviewIds(
+  tx: Tx,
+  paymentIds: readonly string[],
+): Promise<Set<string>> {
+  if (paymentIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ paymentId: schema.fraudAssessment.paymentId })
+    .from(schema.fraudAssessment)
+    .where(
+      and(
+        inArray(schema.fraudAssessment.paymentId, [...paymentIds]),
+        eq(schema.fraudAssessment.phase, 'PHASE2_SETTLEMENT'),
+        eq(schema.fraudAssessment.status, 'PENDING_REVIEW'),
+      ),
+    );
+  return new Set(rows.map((r) => r.paymentId));
 }
 
 /** Enmascara el CPF/CNPJ dejando solo un fragmento central (PII fuera del API). */

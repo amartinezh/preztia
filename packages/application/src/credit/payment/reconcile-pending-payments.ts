@@ -10,6 +10,7 @@ import type { OutboundTextSender } from "../../conversations/text/ports";
 import { formatAmount } from "./format-amount";
 import type {
   ActiveCreditPortfolio,
+  ActiveTenantBankAccount,
   BankPaymentVerifier,
   BankVerificationResult,
   PaymentAuditEvent,
@@ -81,13 +82,13 @@ export class ReconcilePendingPaymentsHandler {
   ) {}
 
   async execute(cmd: { tenantId: string }): Promise<ReconciliationSummary> {
-    const account = await this.bankAccounts.findActive(cmd.tenantId);
+    const accounts = await this.bankAccounts.listForVerification(cmd.tenantId);
     let processed = 0;
     let verified = 0;
     let stillPending = 0;
     let flagged = 0;
 
-    if (!account) return { processed, verified, stillPending, flagged };
+    if (accounts.length === 0) return { processed, verified, stillPending, flagged };
 
     let cursor: string | undefined;
     do {
@@ -98,7 +99,7 @@ export class ReconcilePendingPaymentsHandler {
       });
       for (const payment of page.items) {
         processed++;
-        const outcome = await this.reconcileOne(cmd.tenantId, account.countryCode, account.bankCode, payment);
+        const outcome = await this.reconcileOne(cmd.tenantId, accounts, payment);
         if (outcome === "verified") verified++;
         else if (outcome === "flagged") flagged++;
         else stillPending++;
@@ -111,11 +112,10 @@ export class ReconcilePendingPaymentsHandler {
 
   private async reconcileOne(
     tenantId: string,
-    countryCode: string,
-    bankCode: string,
+    accounts: readonly ActiveTenantBankAccount[],
     payment: PendingPayment,
   ): Promise<"verified" | "pending" | "flagged"> {
-    const bankResult = await this.bank.verify({ tenantId, countryCode, bankCode, pix: payment.pix });
+    const bankResult = await this.verifyBest(tenantId, accounts, payment.pix);
     const decision = decideReconciliation({
       bank: bankResult.verification,
       attempts: payment.reconciliationAttempts,
@@ -180,4 +180,32 @@ export class ReconcilePendingPaymentsHandler {
     }
     return "verified";
   }
+
+  /**
+   * Verifica el PIX contra cada cuenta habilitada, en orden, hasta que alguna CONFIRME; si
+   * ninguna confirma se conserva el resultado más informativo (not_found > unavailable).
+   */
+  private async verifyBest(
+    tenantId: string,
+    accounts: readonly ActiveTenantBankAccount[],
+    pix: PixReceiptData,
+  ): Promise<BankVerificationResult> {
+    let best: BankVerificationResult | null = null;
+    for (const account of accounts) {
+      const result = await this.bank.verify({
+        tenantId,
+        countryCode: account.countryCode,
+        bankCode: account.bankCode,
+        pix,
+      });
+      if (result.verification.status === "confirmed") return result;
+      if (!best || rankVerification(result) > rankVerification(best)) best = result;
+    }
+    return best!;
+  }
+}
+
+/** Informatividad de un resultado no confirmado: not_found (el banco respondió) > unavailable. */
+function rankVerification(result: BankVerificationResult): number {
+  return result.verification.status === "not_found" ? 1 : 0;
 }

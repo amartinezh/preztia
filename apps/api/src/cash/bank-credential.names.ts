@@ -8,4 +8,8 @@ export const CREDENTIAL_NAME = {
   publicKey: 'public_key',
   accessToken: 'access_token',
   webhookSecret: 'webhook_secret',
+  // PicPay: credenciales OAuth2 (client_credentials). El token del webhook de PicPay (header
+  // Authorization que PicPay genera en el Painel Lojista) se guarda como `webhook_secret`.
+  clientId: 'client_id',
+  clientSecret: 'client_secret',
 } as const;

@@ -10,6 +10,7 @@ import { BankAccountDrizzleRepository } from './bank-account.repository';
 import { BankCredentialDrizzleRepository } from './bank-credential.repository';
 import { BankProviderVerifierService } from './bank-provider-verifier.service';
 import { MercadoPagoAccountClient } from './banking/mercadopago/mp-account.client';
+import { PicPayAuthClient } from './banking/picpay/picpay-auth.client';
 import { CashCountDrizzleRepository } from './cash-count.repository';
 import { BankReconciliationDrizzleRepository } from './bank-reconciliation.repository';
 import { BankBalanceProviderRegistry } from './banking/bank-balance.registry';
@@ -33,6 +34,7 @@ import { BANK_BALANCE_PROVIDER } from './cash.tokens';
     BankCredentialDrizzleRepository,
     BankProviderVerifierService,
     MercadoPagoAccountClient,
+    PicPayAuthClient,
     CashCountDrizzleRepository,
     BankReconciliationDrizzleRepository,
 

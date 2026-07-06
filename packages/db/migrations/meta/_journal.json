@@ -302,6 +302,20 @@
       "when": 1782776162944,
       "tag": "0042_aberrant_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1783292213999,
+      "tag": "0043_picpay_webhooks_and_validation_toggles",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1783312099947,
+      "tag": "0044_payment_charge",
+      "breakpoints": true
     }
   ]
 }

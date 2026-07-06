@@ -24,6 +24,9 @@ export const paymentSummary = z.object({
   payerBankName: z.string().nullable(),
   endToEndId: z.string().nullable(),
   bankStatus: z.enum(["CONFIRMED", "NOT_FOUND", "UNAVAILABLE"]).nullable(),
+  // true si un crédito REAL fue conciliado y el pago espera aprobación humana (conciliación
+  // manual: toggle autoConfirmSettlement apagado). Distingue la cola "listo para aprobar".
+  awaitingManualReview: z.boolean(),
   createdAt: z.string(),
 });
 export type PaymentSummary = z.infer<typeof paymentSummary>;
@@ -77,6 +80,17 @@ export const paymentEventView = z.object({
 });
 export type PaymentEventView = z.infer<typeof paymentEventView>;
 
+// Una evaluación antifraude registrada (bitácora `fraud_assessment`): fase, veredicto y motivos.
+// Alimenta el semáforo de validaciones del detalle (¿correcto o fraudulento, y por qué?).
+export const fraudAssessmentView = z.object({
+  phase: z.enum(["PHASE1_SCREEN", "PHASE2_SETTLEMENT"]),
+  status: z.string(),
+  score: z.number().int().nullable(),
+  reasons: z.array(z.string()),
+  createdAt: z.string(),
+});
+export type FraudAssessmentView = z.infer<typeof fraudAssessmentView>;
+
 // Detalle completo de un intento de pago para auditoría (coordinador/admin). Incluye PII completa
 // (el revisor está autorizado), la extracción íntegra de la IA, la respuesta del banco y el proceso.
 export const paymentDetail = z.object({
@@ -107,6 +121,8 @@ export const paymentDetail = z.object({
   createdAt: z.string(),
   // Motivo(s) por los que el intento fue marcado/no verificado (para el banner destacado).
   flagReasons: z.array(z.string()).nullable(),
+  // Bitácora antifraude estructurada (Fase 1 y Fase 2) para el semáforo de validaciones.
+  assessments: z.array(fraudAssessmentView),
   // Proceso completo (antifraude → verificación bancaria → decisión → validación manual).
   events: z.array(paymentEventView),
 });

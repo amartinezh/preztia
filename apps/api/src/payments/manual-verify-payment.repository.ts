@@ -9,6 +9,7 @@ import {
   type PortfolioInstallment,
 } from '@preztiaos/domain';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
+import { recordFraudAssessmentTx } from './fraud-assessment.recorder';
 
 export interface ManualVerifyResult {
   id: string;
@@ -55,7 +56,21 @@ export class ManualVerifyPaymentRepository {
           'El comprobante no está asociado a un crédito',
         );
       }
-      const amountMinor = input.amountMinorOverride ?? pay.amountMinor;
+
+      // ¿Hay un crédito REAL reservado para este pago? (conciliación manual: el toggle
+      // autoConfirmSettlement está apagado y el match quedó a la espera de esta aprobación). Si lo
+      // hay, el monto por defecto es el del crédito real; el operador aún puede sobreescribirlo.
+      const [reserved] = await tx
+        .select({
+          amountMinor: schema.incomingCredit.amountMinor,
+          sourceId: schema.incomingCredit.sourceId,
+        })
+        .from(schema.incomingCredit)
+        .where(eq(schema.incomingCredit.consumedByPaymentId, pay.id))
+        .limit(1);
+
+      const amountMinor =
+        input.amountMinorOverride ?? reserved?.amountMinor ?? pay.amountMinor;
       if (amountMinor == null || amountMinor <= 0) {
         throw new NotFoundException(
           'El comprobante no tiene un monto válido para abonar',
@@ -119,7 +134,24 @@ export class ManualVerifyPaymentRepository {
           previousStatus: pay.status,
           allocations: result.allocations.length,
           settled: result.creditSettled,
+          // Si un crédito real respaldaba el pago (conciliación manual), se traza su origen.
+          ...(reserved ? { settlementSourceId: reserved.sourceId } : {}),
         },
+      });
+
+      // Traza antifraude: aprobación humana. Si había crédito real reservado, es una confirmación
+      // por ground truth (Fase 2); si no, es un override manual del operador.
+      await recordFraudAssessmentTx(tx, {
+        tenantId: input.tenantId,
+        paymentId: pay.id,
+        phase: 'PHASE2_SETTLEMENT',
+        status: 'CONFIRMED',
+        score: null,
+        reasons: reserved
+          ? [
+              `Aprobación humana con crédito real (SOURCE_ID ${reserved.sourceId})`,
+            ]
+          : [`Aprobación humana manual: ${input.reason}`],
       });
 
       return {

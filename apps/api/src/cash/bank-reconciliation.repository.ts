@@ -78,17 +78,25 @@ export class BankReconciliationDrizzleRepository {
           countryCode: schema.tenantBankAccount.countryCode,
           bankCode: schema.tenantBankAccount.bankCode,
           apiKey: schema.tenantBankAccount.apiKey,
+          balanceCheckEnabled: schema.tenantBankAccount.balanceCheckEnabled,
         })
         .from(schema.tenantBankAccount)
         .where(eq(schema.tenantBankAccount.id, box.bankAccountId))
         .limit(1);
       if (!account)
         throw new NotFoundException('Cuenta bancaria no encontrada');
+      // Toggle por cuenta: el admin puede apagar la validación de saldo de esta entidad.
+      if (!account.balanceCheckEnabled) {
+        throw new BadRequestException(
+          'La validación de saldo está desactivada para esta cuenta',
+        );
+      }
 
       const systemMinor = await balanceOfBox(tx, cashBoxId);
       // La credencial está cifrada en reposo: se descifra justo para consultar el banco.
       return {
-        ...account,
+        countryCode: account.countryCode,
+        bankCode: account.bankCode,
         apiKey: decryptOptionalSecret(account.apiKey),
         systemMinor,
       };

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import { type NormalizedCredit } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
@@ -13,7 +13,7 @@ import { withTenantTxFor } from '../tenancy/unit-of-work';
  * - `markConsumed`: marca un crédito como consumido SOLO si seguía libre (consumo atómico → un
  *   crédito valida un único pago, I1). Todo bajo RLS por tenant.
  */
-/** Cuenta recaudadora MERCADOPAGO activa del tenant (para traer e ingerir su reporte). */
+/** Cuenta recaudadora con fuente de liquidación (MP: reporte; PicPay: webhooks). */
 export interface SettlementAccount {
   readonly bankAccountId: string;
   readonly countryCode: string;
@@ -21,14 +21,18 @@ export interface SettlementAccount {
   readonly windowDays: number | null;
 }
 
+// Proveedores cuyo ground truth vive en `incoming_credit` (reporte batch o webhook PAID).
+const SETTLEMENT_PROVIDERS = ['MERCADOPAGO', 'PICPAY'] as const;
+
 @Injectable()
 export class IncomingCreditDrizzleRepository {
-  /** Resuelve la cuenta MERCADOPAGO activa del tenant; null si no hay ninguna. */
-  async findSettlementAccount(
-    tenantId: string,
-  ): Promise<SettlementAccount | null> {
+  /**
+   * Cuentas activas del tenant con fuente de liquidación y la VALIDACIÓN DE PAGOS habilitada
+   * (toggle por cuenta): son las que participan en la conciliación de la Fase 2.
+   */
+  async listSettlementAccounts(tenantId: string): Promise<SettlementAccount[]> {
     return withTenantTxFor(tenantId, async (tx) => {
-      const [row] = await tx
+      const rows = await tx
         .select({
           bankAccountId: schema.tenantBankAccount.id,
           countryCode: schema.tenantBankAccount.countryCode,
@@ -38,18 +42,19 @@ export class IncomingCreditDrizzleRepository {
         .from(schema.tenantBankAccount)
         .where(
           and(
-            eq(schema.tenantBankAccount.providerType, 'MERCADOPAGO'),
+            inArray(schema.tenantBankAccount.providerType, [
+              ...SETTLEMENT_PROVIDERS,
+            ]),
             eq(schema.tenantBankAccount.active, true),
+            eq(schema.tenantBankAccount.verifyPaymentsEnabled, true),
           ),
-        )
-        .limit(1);
-      if (!row) return null;
-      return {
+        );
+      return rows.map((row) => ({
         bankAccountId: row.bankAccountId,
         countryCode: row.countryCode,
         bankCode: row.bankCode,
         windowDays: row.reportConfig?.windowDays ?? null,
-      };
+      }));
     });
   }
 
@@ -74,6 +79,7 @@ export class IncomingCreditDrizzleRepository {
             paymentMethodType: credit.paymentMethodType,
             transactionType: credit.transactionType,
             settlementDate: new Date(credit.settlementDate),
+            endToEndId: credit.endToEndId ?? null,
           })),
         )
         .onConflictDoNothing({
@@ -102,6 +108,7 @@ export class IncomingCreditDrizzleRepository {
           paymentMethodType: schema.incomingCredit.paymentMethodType,
           transactionType: schema.incomingCredit.transactionType,
           settlementDate: schema.incomingCredit.settlementDate,
+          endToEndId: schema.incomingCredit.endToEndId,
         })
         .from(schema.incomingCredit)
         .where(
@@ -118,7 +125,33 @@ export class IncomingCreditDrizzleRepository {
         paymentMethodType: row.paymentMethodType,
         transactionType: row.transactionType,
         settlementDate: row.settlementDate.toISOString(),
+        endToEndId: row.endToEndId,
       }));
+    });
+  }
+
+  /**
+   * De un conjunto de pagos, cuáles YA tienen un crédito ligado (consumed_by_payment_id). En
+   * pagos UNVERIFIED esto significa "crédito reservado, pendiente de aprobación": permite al
+   * ciclo de conciliación NO volver a reservarles otro crédito (una reserva por pago).
+   */
+  async paymentsWithReservedCredit(input: {
+    tenantId: string;
+    paymentIds: readonly string[];
+  }): Promise<Set<string>> {
+    if (input.paymentIds.length === 0) return new Set();
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const rows = await tx
+        .select({ paymentId: schema.incomingCredit.consumedByPaymentId })
+        .from(schema.incomingCredit)
+        .where(
+          inArray(schema.incomingCredit.consumedByPaymentId, [
+            ...input.paymentIds,
+          ]),
+        );
+      return new Set(
+        rows.map((r) => r.paymentId).filter((id): id is string => id !== null),
+      );
     });
   }
 

@@ -22,6 +22,10 @@ import {
   type MediaClassifier,
   type MediaDownloader,
   type OutboundTextSender,
+  OfferOrCreateChargeHandler,
+  type ChargeableCreditReader,
+  type ChargeGateway,
+  type PaymentChargeSessionStore,
   type PendingDocumentReminder,
   ProcessInboundMessageHandler,
   type AmountCaptureStore,
@@ -48,6 +52,10 @@ import {
 } from '@preztiaos/application';
 import { WhatsappWebhookController } from './whatsapp-webhook.controller';
 import { WhatsappTextConsumer } from './adapters/whatsapp-text.consumer';
+import { PaymentChargeDrizzleRepository } from '../payments/charge/payment-charge.repository';
+import { ChargeableCreditDrizzleReader } from '../payments/charge/chargeable-credit.reader';
+import { PicPayChargeClient } from '../payments/banking/picpay/picpay-charge.client';
+import { PicPayChargeContextReader } from '../payments/banking/picpay/picpay-charge-context.reader';
 import { PlanReplyRepository } from '../credit-application/review/plan-reply.repository';
 import { AmountCaptureRepository } from '../credit-application/amount-capture.repository';
 import { PlanOfferWhatsappNotifier } from '../credit-application/review/plan-offer.notifier';
@@ -142,6 +150,37 @@ import {
         sender: OutboundTextSender,
         dedup: InboundMessageDeduplicator,
       ) => new RecordAmountReplyHandler(store, catalog, sender, dedup),
+    },
+
+    // Cobro conversacional: el cliente EXPRESA que quiere pagar (en cualquier momento) o responde
+    // el menú de montos → se genera la cobrança PIX (PicPay) al vuelo y se envía el copia-e-cola.
+    // PaymentChargeDrizzleRepository lo provee PaymentsModule (import) porque el webhook también lo usa.
+    ChargeableCreditDrizzleReader,
+    PicPayChargeContextReader,
+    PicPayChargeClient,
+    {
+      provide: OfferOrCreateChargeHandler,
+      inject: [
+        PaymentChargeDrizzleRepository,
+        ChargeableCreditDrizzleReader,
+        PicPayChargeClient,
+        OUTBOUND_TEXT_SENDER,
+        INBOUND_MESSAGE_DEDUPLICATOR,
+      ],
+      useFactory: (
+        sessions: PaymentChargeSessionStore,
+        credits: ChargeableCreditReader,
+        gateway: ChargeGateway,
+        sender: OutboundTextSender,
+        dedup: InboundMessageDeduplicator,
+      ) =>
+        new OfferOrCreateChargeHandler(
+          sessions,
+          credits,
+          gateway,
+          sender,
+          dedup,
+        ),
     },
 
     // Negociación del plan por WhatsApp (Fase 10): respuesta del cliente a la oferta.

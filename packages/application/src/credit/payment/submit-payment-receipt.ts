@@ -14,6 +14,7 @@ import type { DownloadedMedia } from "../application/ports";
 import { formatAmount } from "./format-amount";
 import type {
   ActiveCreditPortfolio,
+  ActiveTenantBankAccount,
   BankPaymentVerifier,
   BankVerificationResult,
   CreditPortfolioRepository,
@@ -84,7 +85,8 @@ export class SubmitPaymentReceiptHandler {
       return;
     }
 
-    // 3) Antifraude estructural + verificación bancaria en línea.
+    // 3) Antifraude estructural + verificación bancaria en línea contra las cuentas con la
+    //    validación de pagos HABILITADA (el repositorio define la prioridad; PicPay primero).
     const structural = await this.antifraud.assess({
       tenantId: cmd.tenantId,
       sha256: cmd.media.sha256,
@@ -92,15 +94,8 @@ export class SubmitPaymentReceiptHandler {
       receivedAt: new Date().toISOString(),
       payerPhone: cmd.payerPhone,
     });
-    const account = await this.bankAccounts.findActive(cmd.tenantId);
-    const bankResult: BankVerificationResult = account
-      ? await this.bank.verify({
-          tenantId: cmd.tenantId,
-          countryCode: account.countryCode,
-          bankCode: account.bankCode,
-          pix,
-        })
-      : { verification: { status: "unavailable", reason: "sin_cuenta_bancaria_configurada" } };
+    const accounts = await this.bankAccounts.listForVerification(cmd.tenantId);
+    const { bankResult, account } = await this.verifyWithAccounts(cmd.tenantId, pix, accounts);
 
     // 4) Decisión pura del dominio.
     const decision = decidePaymentReview({ structural, pix, bank: bankResult.verification });
@@ -134,6 +129,41 @@ export class SubmitPaymentReceiptHandler {
     );
   }
 
+  /**
+   * Verifica el PIX contra cada cuenta habilitada, en orden, hasta que alguna CONFIRME. Si
+   * ninguna confirma se conserva el resultado más informativo (not_found > unavailable) junto
+   * con la cuenta que lo produjo (su política HOLD/ALLOCATE decide el destino del pago).
+   */
+  private async verifyWithAccounts(
+    tenantId: string,
+    pix: PixReceiptData,
+    accounts: readonly ActiveTenantBankAccount[],
+  ): Promise<{ bankResult: BankVerificationResult; account: ActiveTenantBankAccount | null }> {
+    if (accounts.length === 0) {
+      return {
+        bankResult: {
+          verification: { status: "unavailable", reason: "sin_cuenta_bancaria_configurada" },
+        },
+        account: null,
+      };
+    }
+
+    let best: { bankResult: BankVerificationResult; account: ActiveTenantBankAccount } | null = null;
+    for (const account of accounts) {
+      const bankResult = await this.bank.verify({
+        tenantId,
+        countryCode: account.countryCode,
+        bankCode: account.bankCode,
+        pix,
+      });
+      if (bankResult.verification.status === "confirmed") return { bankResult, account };
+      if (!best || verificationRank(bankResult) > verificationRank(best.bankResult)) {
+        best = { bankResult, account };
+      }
+    }
+    return best!;
+  }
+
   /** Registra un comprobante sin crédito activo (estado RECEIVED, sin abonos). */
   private async saveOrphan(cmd: SubmitPaymentReceiptCommand, pix: PixReceiptData | null): Promise<void> {
     const stored = await this.storage.store({ tenantId: cmd.tenantId, creditId: null, media: cmd.media });
@@ -145,6 +175,11 @@ export class SubmitPaymentReceiptHandler {
       events: [{ type: "payment_received_orphan", payload: { payerPhone: cmd.payerPhone } }],
     });
   }
+}
+
+/** Informatividad de un resultado no confirmado: not_found (el banco respondió) > unavailable. */
+function verificationRank(result: BankVerificationResult): number {
+  return result.verification.status === "not_found" ? 1 : 0;
 }
 
 /** Monto a abonar según la decisión (el del banco si está verificado). */

@@ -182,10 +182,7 @@ export class CashQueryRepository {
           createdAt: schema.cashCount.createdAt,
         })
         .from(schema.cashCount)
-        .orderBy(
-          schema.cashCount.cashBoxId,
-          desc(schema.cashCount.createdAt),
-        );
+        .orderBy(schema.cashCount.cashBoxId, desc(schema.cashCount.createdAt));
       const lastCountByBox = new Map(
         countRows.map((r) => [r.cashBoxId, r.createdAt]),
       );

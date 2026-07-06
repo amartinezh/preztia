@@ -19,6 +19,9 @@ export const operationalSettings = z.object({
   clientChoosesPlan: z.boolean(),
   planOfferTtlHours: z.number().int().min(1).max(720),
   allowAdminOverride: z.boolean(),
+  // Conciliación automática de settlement: ON = abono inmediato cuando un crédito real coincide;
+  // OFF (default) = el pago espera aprobación humana (conciliación manual).
+  autoConfirmSettlement: z.boolean(),
 });
 export type OperationalSettings = z.infer<typeof operationalSettings>;
 

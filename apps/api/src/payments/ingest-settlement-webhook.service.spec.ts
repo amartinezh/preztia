@@ -113,7 +113,7 @@ describe('IngestSettlementWebhookService', () => {
 
     const fetchMock = source.fetchCredits;
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const window = fetchMock.mock.calls[0][0] as SettlementWindow;
+    const [window] = fetchMock.mock.calls[0] as [SettlementWindow];
     expect(window.countryCode).toBe('BR');
     expect(window.bankCode).toBe('MERCADOPAGO');
     expect(new Date(window.begin).getTime()).toBeLessThan(

@@ -42,6 +42,26 @@ const es = {
   "payment.receipt.title": "Comprobante de pago",
   "payment.receipt.zoom": "Ampliar",
   "payment.receipt.fit": "Ajustar",
+  // Semáforo de validaciones (¿el pago es correcto o fraudulento, y por qué?)
+  "payment.validations.title": "Validaciones del pago",
+  "payment.validations.structural": "Antifraude del comprobante",
+  "payment.validations.bank": "Verificación bancaria en línea",
+  "payment.validations.settlement": "Crédito real conciliado",
+  "payment.validations.manual": "Validación manual",
+  "payment.validations.approved": "Aprobado",
+  "payment.validations.suspicious": "Sospechoso",
+  "payment.validations.rejected": "Rechazado",
+  "payment.validations.confirmed": "Confirmado",
+  "payment.validations.notFound": "No encontrado",
+  "payment.validations.unavailable": "No disponible",
+  "payment.validations.pending": "Pendiente",
+  "payment.validations.awaitingApproval": "Pendiente de aprobación",
+  "payment.validations.score": "Riesgo",
+  // Banner de conciliación manual (crédito real conciliado, esperando al humano)
+  "payment.pendingReview.title": "Pago real conciliado — pendiente de aprobación",
+  "payment.pendingReview.body":
+    "Un crédito real coincide con este comprobante. Verifícalo por tus medios y aprueba abajo para abonarlo a la cartera.",
+  "payment.pendingReview.badge": "Aprobar",
   "payment.verify.title": "Validar pago manualmente",
   "payment.verify.hint": "Harás efectivo el abono. El motivo queda en la auditoría.",
   "payment.verify.reason": "Motivo de la validación",
@@ -328,6 +348,7 @@ const es = {
   "cash.accounts.provider.MANUAL": "Manual (sin API)",
   "cash.accounts.provider.INTER": "Banco Inter",
   "cash.accounts.provider.MERCADOPAGO": "Mercado Pago",
+  "cash.accounts.provider.PICPAY": "PicPay",
   "cash.accounts.credentials": "Credenciales del proveedor",
   "cash.accounts.publicKey": "Public Key",
   "cash.accounts.accessToken": "Access Token",
@@ -346,6 +367,18 @@ const es = {
   "cash.accounts.testFail": "Credenciales inválidas",
   "cash.accounts.hasPublicKey": "Public Key",
   "cash.accounts.hasAccessToken": "Access Token",
+  // PicPay (API Pix): credenciales OAuth2 + token del webhook del Painel Lojista
+  "cash.accounts.clientId": "Client ID",
+  "cash.accounts.clientSecret": "Client Secret",
+  "cash.accounts.picpayWebhookToken": "Token del webhook (Authorization)",
+  "cash.accounts.picpayWebhookHint":
+    "Registra la URL https://<tu-api>/webhooks/picpay/<ID del tenant> en el Painel Lojista de PicPay (Ajustes → Meu checkout) y guarda aquí el token que PicPay genera (se muestra una sola vez).",
+  "cash.accounts.hasClientCredentials": "Credenciales OAuth",
+  "cash.accounts.hasWebhookSecret": "Webhook",
+  // Toggles por entidad: medio de pago activo y validaciones de pagos/saldo
+  "cash.accounts.activeToggle": "Medio de pago activo",
+  "cash.accounts.verifyPaymentsToggle": "Validación de pagos",
+  "cash.accounts.balanceCheckToggle": "Validación de saldo",
   "cash.config.boxes": "Cajas",
   "cash.boxes.add": "Nueva caja",
   "cash.boxes.edit": "Editar caja",
@@ -403,6 +436,9 @@ const es = {
   "config.defaultLimit": "Cupo por defecto",
   "config.clientChoosesPlan": "El cliente elige su plan por WhatsApp",
   "config.allowAdminOverride": "Permitir crear crédito sin aceptación del cliente",
+  "config.autoConfirmSettlement": "Conciliación automática de pagos",
+  "config.autoConfirmSettlementHint":
+    "Apagado: cuando un pago real coincide con un comprobante, queda pendiente de tu aprobación (conciliación manual). Encendido: se abona automáticamente al confirmarse el crédito real.",
   "config.planOfferTtl": "Vencimiento de la oferta (horas)",
   // Planes de pago (ADMIN)
   "plans.tab": "Planes de pago",

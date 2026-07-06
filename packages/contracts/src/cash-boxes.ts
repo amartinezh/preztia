@@ -26,7 +26,7 @@ export const cashTxKind = z.enum([
 
 // Proveedor/integración de la cuenta: decide el adaptador y las capacidades (qué credenciales
 // pide, si tiene reporte de liquidación, saldo en tiempo real, etc.).
-export const bankProviderType = z.enum(["MANUAL", "INTER", "MERCADOPAGO"]);
+export const bankProviderType = z.enum(["MANUAL", "INTER", "MERCADOPAGO", "PICPAY"]);
 export type BankProviderType = z.infer<typeof bankProviderType>;
 
 // Configuración NO secreta del reporte de liquidación del proveedor (ej. Mercado Pago).
@@ -58,8 +58,15 @@ export const bankAccount = z.object({
   hasPublicKey: z.boolean(),
   hasAccessToken: z.boolean(),
   hasWebhookSecret: z.boolean(),
+  // PicPay: client_id + client_secret (OAuth2) — mismos semánticos write-only.
+  hasClientId: z.boolean(),
+  hasClientSecret: z.boolean(),
   reportConfig: bankReportConfig.nullable(),
   unverifiedPolicy: z.enum(["HOLD", "ALLOCATE"]),
+  // Toggles de validación por cuenta: participar en la validación de pagos entrantes y
+  // permitir la validación de saldo contra el banco.
+  verifyPaymentsEnabled: z.boolean(),
+  balanceCheckEnabled: z.boolean(),
   active: z.boolean(),
   createdAt: z.string(),
 });
@@ -78,12 +85,16 @@ export const bankAccountInput = z.object({
   receiverTaxId: z.string().trim().min(1).max(40).optional(),
   receiverName: z.string().trim().min(1).max(140).optional(),
   apiKey: z.string().trim().min(1).max(400).optional(),
-  // Secretos del proveedor (ej. Mercado Pago); se guardan cifrados, nunca se devuelven.
+  // Secretos del proveedor (ej. Mercado Pago, PicPay); se guardan cifrados, nunca se devuelven.
   publicKey: z.string().trim().min(1).max(400).optional(),
   accessToken: z.string().trim().min(1).max(400).optional(),
   webhookSecret: z.string().trim().min(1).max(400).optional(),
+  clientId: z.string().trim().min(1).max(400).optional(),
+  clientSecret: z.string().trim().min(1).max(400).optional(),
   reportConfig: bankReportConfig.optional(),
   unverifiedPolicy: z.enum(["HOLD", "ALLOCATE"]).optional(),
+  verifyPaymentsEnabled: z.boolean().optional(),
+  balanceCheckEnabled: z.boolean().optional(),
 });
 export type BankAccountInput = z.infer<typeof bankAccountInput>;
 
@@ -101,8 +112,12 @@ export const bankAccountPatch = z.object({
   publicKey: z.string().trim().min(1).max(400).nullable().optional(),
   accessToken: z.string().trim().min(1).max(400).nullable().optional(),
   webhookSecret: z.string().trim().min(1).max(400).nullable().optional(),
+  clientId: z.string().trim().min(1).max(400).nullable().optional(),
+  clientSecret: z.string().trim().min(1).max(400).nullable().optional(),
   reportConfig: bankReportConfig.nullable().optional(),
   unverifiedPolicy: z.enum(["HOLD", "ALLOCATE"]).optional(),
+  verifyPaymentsEnabled: z.boolean().optional(),
+  balanceCheckEnabled: z.boolean().optional(),
   active: z.boolean().optional(),
 });
 

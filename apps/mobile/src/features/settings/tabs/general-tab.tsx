@@ -107,6 +107,8 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
         <Switch value={form.applyColorByOverdue} onValueChange={(v) => set("applyColorByOverdue", v)} label={t("config.colorByOverdue")} disabled={!canEdit} />
         <Switch value={form.clientChoosesPlan} onValueChange={(v) => set("clientChoosesPlan", v)} label={t("config.clientChoosesPlan")} disabled={!canEdit} />
         <Switch value={form.allowAdminOverride} onValueChange={(v) => set("allowAdminOverride", v)} label={t("config.allowAdminOverride")} disabled={!canEdit} />
+        <Switch value={form.autoConfirmSettlement} onValueChange={(v) => set("autoConfirmSettlement", v)} label={t("config.autoConfirmSettlement")} disabled={!canEdit} />
+        <Text variant="caption" tone="muted">{t("config.autoConfirmSettlementHint")}</Text>
 
         <Field label={t("config.planOfferTtl")}>
           <Input

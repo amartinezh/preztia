@@ -63,11 +63,17 @@ export class NewsService implements OnModuleInit {
 
   /** Recarga los titulares de todas las fuentes. Conserva el snapshot previo si nada llega. */
   async refresh(): Promise<void> {
-    const results = await Promise.allSettled(this.feeds.map((feed) => this.loadFeed(feed)));
-    const items = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    const results = await Promise.allSettled(
+      this.feeds.map((feed) => this.loadFeed(feed)),
+    );
+    const items = results.flatMap((r) =>
+      r.status === 'fulfilled' ? r.value : [],
+    );
 
     if (items.length === 0) {
-      this.logger.warn('Ningún feed devolvió titulares; se conserva el snapshot anterior');
+      this.logger.warn(
+        'Ningún feed devolvió titulares; se conserva el snapshot anterior',
+      );
       return;
     }
 
@@ -88,7 +94,8 @@ export class NewsService implements OnModuleInit {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: {
           'user-agent': 'PreztiaOS-NewsBot/1.0',
-          accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+          accept:
+            'application/rss+xml, application/atom+xml, application/xml, text/xml',
         },
       });
       if (!res.ok) {

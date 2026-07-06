@@ -99,6 +99,54 @@ describe("matchCreditsToClaims", () => {
     expect(res.unmatchedClaimIds).toEqual(["c1"]);
   });
 
+  it("empareja por E2E idéntico aunque el monto extraído difiera (I7)", () => {
+    // La IA leyó mal el monto (9900), pero el E2E identifica la transacción: el match procede
+    // y el monto abonable es el del CRÉDITO real (10000).
+    const e2e = "E12345678202606101200abcDEF01234";
+    const claims: ReceiptClaimRef[] = [{ id: "c1", amountMinor: 9900, endToEndId: e2e }];
+    const res = matchCreditsToClaims(claims, [
+      credit({ sourceId: "s1", amountMinor: 10000, endToEndId: e2e }),
+    ]);
+    expect(res.matches).toEqual([{ claimId: "c1", sourceId: "s1", amountMinor: 10000 }]);
+  });
+
+  it("el match por E2E tiene prioridad sobre el match por monto (I7)", () => {
+    // c-e2e llega DESPUÉS en orden de id, pero su E2E apunta al crédito s1: el claim sin E2E
+    // no puede robárselo por monto; queda con el otro crédito del mismo monto.
+    const e2e = "E12345678202606101200abcDEF01234";
+    const claims: ReceiptClaimRef[] = [
+      { id: "a-sin-e2e", amountMinor: 10000 },
+      { id: "b-con-e2e", amountMinor: 10000, endToEndId: e2e },
+    ];
+    const res = matchCreditsToClaims(claims, [
+      credit({ sourceId: "s1", amountMinor: 10000, endToEndId: e2e }),
+      credit({ sourceId: "s2", amountMinor: 10000, settlementDate: "2026-06-11T00:00:00Z" }),
+    ]);
+    expect(res.matches).toContainEqual({ claimId: "b-con-e2e", sourceId: "s1", amountMinor: 10000 });
+    expect(res.matches).toContainEqual({ claimId: "a-sin-e2e", sourceId: "s2", amountMinor: 10000 });
+  });
+
+  it("un E2E sin crédito correspondiente cae a la pasada por monto", () => {
+    const claims: ReceiptClaimRef[] = [
+      { id: "c1", amountMinor: 10000, endToEndId: "E00000000202606101200desconocido" },
+    ];
+    const res = matchCreditsToClaims(claims, [credit({ sourceId: "s1", amountMinor: 10000 })]);
+    expect(res.matches).toEqual([{ claimId: "c1", sourceId: "s1", amountMinor: 10000 }]);
+  });
+
+  it("dos claims con el mismo E2E: solo uno consume el crédito (I1)", () => {
+    const e2e = "E12345678202606101200abcDEF01234";
+    const claims: ReceiptClaimRef[] = [
+      { id: "c1", amountMinor: 10000, endToEndId: e2e },
+      { id: "c2", amountMinor: 10000, endToEndId: e2e },
+    ];
+    const res = matchCreditsToClaims(claims, [
+      credit({ sourceId: "s1", amountMinor: 10000, endToEndId: e2e }),
+    ]);
+    expect(res.matches).toHaveLength(1);
+    expect(res.unmatchedClaimIds).toHaveLength(1);
+  });
+
   it("es determinista: misma entrada → misma salida", () => {
     const claims: ReceiptClaimRef[] = [
       { id: "c2", amountMinor: 10000 },

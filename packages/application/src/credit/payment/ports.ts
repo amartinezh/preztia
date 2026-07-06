@@ -141,7 +141,12 @@ export interface ActiveTenantBankAccount {
 
 /** Puerto: configuración bancaria del tenant. */
 export interface TenantBankAccountRepository {
-  findActive(tenantId: string): Promise<ActiveTenantBankAccount | null>;
+  /**
+   * Cuentas activas con la VALIDACIÓN DE PAGOS habilitada (toggle por cuenta), en orden de
+   * prioridad de verificación (la infraestructura define el orden; ej. PicPay primero). El
+   * comprobante se verifica contra cada una hasta que alguna confirme.
+   */
+  listForVerification(tenantId: string): Promise<readonly ActiveTenantBankAccount[]>;
 }
 
 /** Ventana de conciliación para traer créditos de la fuente de liquidación. */

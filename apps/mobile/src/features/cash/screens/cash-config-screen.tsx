@@ -20,6 +20,7 @@ import {
   Select,
   Spinner,
   Stack,
+  Switch,
   Text,
   type SelectOption,
 } from "@preztiaos/ui";
@@ -117,31 +118,7 @@ function BankAccountsSection() {
       {list.isPending ? <Spinner label={t("common.loading")} /> : null}
       {list.data?.items.length ? (
         list.data.items.map((a) => (
-          <Card key={a.id}>
-            <Row className="justify-between items-center">
-              <Stack gap="xs" className="flex-1 pr-3">
-                <Text variant="label">{a.label}</Text>
-                <Text variant="caption" tone="muted">
-                  {a.bankName} · {t(`cash.accounts.provider.${a.providerType}`)}
-                </Text>
-                <Row className="gap-1 flex-wrap">
-                  {a.hasApiKey ? (
-                    <Badge label={t("cash.accounts.hasApiKey")} tone="info" />
-                  ) : null}
-                  {a.hasPublicKey ? (
-                    <Badge label={t("cash.accounts.hasPublicKey")} tone="info" />
-                  ) : null}
-                  {a.hasAccessToken ? (
-                    <Badge label={t("cash.accounts.hasAccessToken")} tone="success" />
-                  ) : null}
-                </Row>
-              </Stack>
-              <Row className="gap-2">
-                <IconButton glyph="✎" label={t("common.edit")} onPress={() => setEditor({ account: a })} />
-                <IconButton glyph="🗑" label={t("common.delete")} tone="danger" onPress={() => del.mutate(a.id)} />
-              </Row>
-            </Row>
-          </Card>
+          <BankAccountCard key={a.id} account={a} onEdit={() => setEditor({ account: a })} onDelete={() => del.mutate(a.id)} />
         ))
       ) : list.data ? (
         <Text tone="muted">{t("cash.accounts.empty")}</Text>
@@ -151,6 +128,81 @@ function BankAccountsSection() {
         <BankAccountModal account={editor.account} onClose={() => setEditor(null)} />
       ) : null}
     </Stack>
+  );
+}
+
+/**
+ * Tarjeta de una entidad de pago con sus TOGGLES de operación en línea: medio de pago activo,
+ * validación de pagos (¿participa al verificar comprobantes?) y validación de saldo. Cada
+ * interruptor persiste de inmediato (PATCH parcial) — es el panel donde se elige con cuál(es)
+ * entidades (PicPay, Mercado Pago, Banco Inter) se valida un pago.
+ */
+function BankAccountCard({
+  account: a,
+  onEdit,
+  onDelete,
+}: {
+  account: BankAccount;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { t } = useT();
+  const update = useUpdateBankAccount();
+  const toggle = (patch: { active?: boolean; verifyPaymentsEnabled?: boolean; balanceCheckEnabled?: boolean }) =>
+    update.mutate({ id: a.id, patch });
+
+  return (
+    <Card>
+      <Stack gap="sm">
+        <Row className="justify-between items-center">
+          <Stack gap="xs" className="flex-1 pr-3">
+            <Text variant="label">{a.label}</Text>
+            <Text variant="caption" tone="muted">
+              {a.bankName} · {t(`cash.accounts.provider.${a.providerType}`)}
+            </Text>
+            <Row className="gap-1 flex-wrap">
+              {a.hasApiKey ? (
+                <Badge label={t("cash.accounts.hasApiKey")} tone="info" />
+              ) : null}
+              {a.hasPublicKey ? (
+                <Badge label={t("cash.accounts.hasPublicKey")} tone="info" />
+              ) : null}
+              {a.hasAccessToken ? (
+                <Badge label={t("cash.accounts.hasAccessToken")} tone="success" />
+              ) : null}
+              {a.hasClientId && a.hasClientSecret ? (
+                <Badge label={t("cash.accounts.hasClientCredentials")} tone="success" />
+              ) : null}
+              {a.hasWebhookSecret ? (
+                <Badge label={t("cash.accounts.hasWebhookSecret")} tone="info" />
+              ) : null}
+            </Row>
+          </Stack>
+          <Row className="gap-2">
+            <IconButton glyph="✎" label={t("common.edit")} onPress={onEdit} />
+            <IconButton glyph="🗑" label={t("common.delete")} tone="danger" onPress={onDelete} />
+          </Row>
+        </Row>
+        <Switch
+          label={t("cash.accounts.activeToggle")}
+          value={a.active}
+          disabled={update.isPending}
+          onValueChange={(v) => toggle({ active: v })}
+        />
+        <Switch
+          label={t("cash.accounts.verifyPaymentsToggle")}
+          value={a.verifyPaymentsEnabled}
+          disabled={update.isPending || !a.active}
+          onValueChange={(v) => toggle({ verifyPaymentsEnabled: v })}
+        />
+        <Switch
+          label={t("cash.accounts.balanceCheckToggle")}
+          value={a.balanceCheckEnabled}
+          disabled={update.isPending || !a.active}
+          onValueChange={(v) => toggle({ balanceCheckEnabled: v })}
+        />
+      </Stack>
+    </Card>
   );
 }
 
@@ -180,6 +232,8 @@ function BankAccountModal({
     publicKey: "",
     accessToken: "",
     webhookSecret: "",
+    clientId: "",
+    clientSecret: "",
     timezone: account?.reportConfig?.timezone ?? "",
     windowDays:
       account?.reportConfig?.windowDays != null
@@ -201,11 +255,13 @@ function BankAccountModal({
     setForm((f) => ({ ...f, [k]: v }));
 
   const isMercadoPago = providerType === "MERCADOPAGO";
+  const isPicPay = providerType === "PICPAY";
 
   const providerOptions: SelectOption<BankProviderType>[] = [
     { value: "MANUAL", label: t("cash.accounts.provider.MANUAL") },
     { value: "INTER", label: t("cash.accounts.provider.INTER") },
     { value: "MERCADOPAGO", label: t("cash.accounts.provider.MERCADOPAGO") },
+    { value: "PICPAY", label: t("cash.accounts.provider.PICPAY") },
   ];
   const translationOptions: SelectOption<string>[] = [
     { value: "", label: t("cash.accounts.reportTranslationDefault") },
@@ -253,6 +309,10 @@ function BankAccountModal({
             ...(form.webhookSecret.trim()
               ? { webhookSecret: form.webhookSecret.trim() }
               : {}),
+            ...(form.clientId.trim() ? { clientId: form.clientId.trim() } : {}),
+            ...(form.clientSecret.trim()
+              ? { clientSecret: form.clientSecret.trim() }
+              : {}),
           },
         },
         { onSuccess: onClose, onError },
@@ -282,6 +342,10 @@ function BankAccountModal({
         : {}),
       ...(form.webhookSecret.trim()
         ? { webhookSecret: form.webhookSecret.trim() }
+        : {}),
+      ...(form.clientId.trim() ? { clientId: form.clientId.trim() } : {}),
+      ...(form.clientSecret.trim()
+        ? { clientSecret: form.clientSecret.trim() }
         : {}),
       ...(reportConfig ? { reportConfig } : {}),
     };
@@ -350,7 +414,7 @@ function BankAccountModal({
           <Input value={form.pixKey} onChangeText={set("pixKey")} />
         </Field>
 
-        {isMercadoPago ? (
+        {isMercadoPago || isPicPay ? (
           <>
             <Text variant="label">{t("cash.accounts.receiver")}</Text>
             <Field label={t("cash.accounts.receiverTaxId")}>
@@ -359,7 +423,11 @@ function BankAccountModal({
             <Field label={t("cash.accounts.receiverName")}>
               <Input value={form.receiverName} onChangeText={set("receiverName")} />
             </Field>
+          </>
+        ) : null}
 
+        {isMercadoPago ? (
+          <>
             <Text variant="label">{t("cash.accounts.credentials")}</Text>
             <Field label={t("cash.accounts.publicKey")}>
               <Input
@@ -408,25 +476,44 @@ function BankAccountModal({
                 keyboardType="number-pad"
               />
             </Field>
-
-            {isEdit ? (
-              <>
-                <Button
-                  label={t("cash.accounts.testCredentials")}
-                  variant="secondary"
-                  loading={verify.isPending}
-                  onPress={runTest}
-                />
-                {testMsg ? (
-                  <Banner
-                    tone={testMsg.ok ? "success" : "danger"}
-                    title={testMsg.text}
-                  />
-                ) : null}
-              </>
-            ) : null}
           </>
-        ) : (
+        ) : null}
+
+        {isPicPay ? (
+          <>
+            <Text variant="label">{t("cash.accounts.credentials")}</Text>
+            <Field label={t("cash.accounts.clientId")}>
+              <Input
+                value={form.clientId}
+                onChangeText={set("clientId")}
+                secureTextEntry
+                placeholder={account?.hasClientId ? t("cash.accounts.secretKeep") : undefined}
+              />
+            </Field>
+            <Field label={t("cash.accounts.clientSecret")}>
+              <Input
+                value={form.clientSecret}
+                onChangeText={set("clientSecret")}
+                secureTextEntry
+                placeholder={account?.hasClientSecret ? t("cash.accounts.secretKeep") : undefined}
+              />
+            </Field>
+            <Field label={t("cash.accounts.picpayWebhookToken")}>
+              <Input
+                value={form.webhookSecret}
+                onChangeText={set("webhookSecret")}
+                secureTextEntry
+                placeholder={account?.hasWebhookSecret ? t("cash.accounts.secretKeep") : undefined}
+              />
+            </Field>
+            {/* La URL de notificación se registra en el Painel Lojista de PicPay. */}
+            <Text variant="caption" tone="muted">
+              {t("cash.accounts.picpayWebhookHint")}
+            </Text>
+          </>
+        ) : null}
+
+        {!isMercadoPago && !isPicPay ? (
           <Field label={t("cash.accounts.apiKey")}>
             <Input
               value={form.apiKey}
@@ -435,7 +522,24 @@ function BankAccountModal({
               placeholder={isEdit ? t("cash.accounts.apiKeyKeep") : undefined}
             />
           </Field>
-        )}
+        ) : null}
+
+        {(isMercadoPago || isPicPay) && isEdit ? (
+          <>
+            <Button
+              label={t("cash.accounts.testCredentials")}
+              variant="secondary"
+              loading={verify.isPending}
+              onPress={runTest}
+            />
+            {testMsg ? (
+              <Banner
+                tone={testMsg.ok ? "success" : "danger"}
+                title={testMsg.text}
+              />
+            ) : null}
+          </>
+        ) : null}
 
         <Button
           label={isEdit ? t("common.save") : t("cash.accounts.create")}

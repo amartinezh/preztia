@@ -6,7 +6,11 @@
  * Cada entrada refleja una capacidad REAL ya construida en el producto (no promesas).
  */
 
-export type ChangelogTag = 'lanzamiento' | 'seguridad' | 'integración' | 'mejora';
+export type ChangelogTag =
+  | 'lanzamiento'
+  | 'seguridad'
+  | 'integración'
+  | 'mejora';
 
 export interface ChangelogEntry {
   /** Fecha de negocio (YYYY-MM-DD). */

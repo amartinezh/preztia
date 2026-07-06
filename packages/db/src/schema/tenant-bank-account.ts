@@ -13,8 +13,9 @@ export const unverifiedPaymentPolicy = pgEnum("unverified_payment_policy", ["HOL
 //  - MANUAL:      sin integración por API; conciliación manual.
 //  - INTER:       API del Banco Inter (saldo + verificación por PIX).
 //  - MERCADOPAGO: API de Mercado Pago (settlement_report; sin saldo en tiempo real).
+//  - PICPAY:      API Pix de PicPay (webhook de cobranças con endToEndId; sin saldo por API).
 // Extensible: un proveedor nuevo agrega un valor al enum (migración).
-export const bankProviderType = pgEnum("bank_provider_type", ["MANUAL", "INTER", "MERCADOPAGO"]);
+export const bankProviderType = pgEnum("bank_provider_type", ["MANUAL", "INTER", "MERCADOPAGO", "PICPAY"]);
 
 // Configuración NO secreta del reporte de liquidación del proveedor (ej. Mercado Pago
 // settlement_report). Los secretos viven cifrados en `bank_credential`; esto solo parametriza
@@ -64,6 +65,14 @@ export const tenantBankAccount = pgTable(
     // Parámetros NO secretos del reporte de liquidación (ver BankReportConfig).
     reportConfig: jsonb("report_config").$type<BankReportConfig>(),
     unverifiedPolicy: unverifiedPaymentPolicy("unverified_policy").notNull().default("HOLD"),
+    // Toggles de validación por cuenta (panel de configuración):
+    //  - verifyPaymentsEnabled: ¿esta cuenta participa en la VALIDACIÓN de pagos entrantes
+    //    (verificación per-PIX y conciliación por settlement)? Permite elegir con cuál(es)
+    //    entidades se valida un pago sin desactivar la cuenta.
+    //  - balanceCheckEnabled: ¿se permite la VALIDACIÓN de saldo (sincronización contra el
+    //    saldo real del banco) para esta cuenta?
+    verifyPaymentsEnabled: boolean("verify_payments_enabled").notNull().default(true),
+    balanceCheckEnabled: boolean("balance_check_enabled").notNull().default(true),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

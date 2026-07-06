@@ -26,6 +26,15 @@ export interface OperationalSettings {
    * WhatsApp (override). Si está inactivo, la creación exige la aceptación del cliente.
    */
   readonly allowAdminOverride: boolean;
+  /**
+   * Conciliación AUTOMÁTICA de pagos por settlement (webhook PicPay / reporte MP). Si está activo,
+   * cuando un crédito REAL coincide con un comprobante, el sistema abona la cartera de inmediato
+   * (100% seguro = crédito real). Si está inactivo (DEFAULT), el match NO se hace efectivo solo:
+   * el crédito queda RESERVADO y el pago pasa a "pendiente de aprobación" para que un humano lo
+   * valide y lo haga efectivo con un botón (conciliación manual). Los pagos marcados como fraude
+   * también entran a esa cola de revisión humana, independientemente de este toggle.
+   */
+  readonly autoConfirmSettlement: boolean;
 }
 
 /** Vencimiento por defecto de la oferta de plan: un día (parametrizable por tenant). */
@@ -42,6 +51,8 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   clientChoosesPlan: false,
   planOfferTtlHours: DEFAULT_PLAN_OFFER_TTL_HOURS,
   allowAdminOverride: true,
+  // Por defecto APAGADO: los pagos conciliados por settlement esperan aprobación humana.
+  autoConfirmSettlement: false,
 };
 
 /** Aplica un parche parcial sobre los ajustes actuales (inmutable; solo campos presentes). */

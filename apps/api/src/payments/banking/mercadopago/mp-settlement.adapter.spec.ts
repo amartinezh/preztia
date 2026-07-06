@@ -3,10 +3,7 @@ import type {
   MercadoPagoContext,
   MercadoPagoContextReader,
 } from './mp-account-context.reader';
-import type {
-  FetchSettlementInput,
-  SettlementReportFetcher,
-} from './mp-report.client';
+import type { SettlementReportFetcher } from './mp-report.client';
 import type { SettlementWindow } from '@preztiaos/application';
 
 const WINDOW: SettlementWindow = {
@@ -29,9 +26,7 @@ function reader(ctx: MercadoPagoContext | null): MercadoPagoContextReader {
   return { read: () => Promise.resolve(ctx) };
 }
 function fetcher(csv: string | null): SettlementReportFetcher {
-  return {
-    fetchSettlementCsv: (_: FetchSettlementInput) => Promise.resolve(csv),
-  };
+  return { fetchSettlementCsv: () => Promise.resolve(csv) };
 }
 
 describe('MercadoPagoSettlementAdapter', () => {

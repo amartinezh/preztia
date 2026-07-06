@@ -39,7 +39,14 @@ import { MercadoPagoWebhookContextDrizzleReader } from './banking/mercadopago/mp
 import { IncomingCreditDrizzleRepository } from './incoming-credit.repository';
 import { IngestSettlementWebhookService } from './ingest-settlement-webhook.service';
 import { MercadoPagoWebhookController } from './mercadopago-webhook.controller';
+import { PicPayWebhookContextDrizzleReader } from './banking/picpay/picpay-webhook-context.reader';
+import { ProviderWebhookEventDrizzleRepository } from './provider-webhook-event.repository';
+import { PaymentChargeDrizzleRepository } from './charge/payment-charge.repository';
+import { IngestPicPayWebhookService } from './ingest-picpay-webhook.service';
+import { PicPayWebhookController } from './picpay-webhook.controller';
+import { SubmitReceiptThenSettleHandler } from './adapters/submit-receipt-then-settle';
 import { RunSettlementReconciliationService } from './run-settlement-reconciliation.service';
+import { SettlementReviewSettingsReader } from './settlement-review-settings.reader';
 import { PaymentsQueryRepository } from './payments-query.repository';
 import { CashPaymentDrizzleRepository } from './cash-payment.repository';
 import { PaymentsController } from './payments.controller';
@@ -71,7 +78,11 @@ function reconciliationMaxAttempts(): number {
  */
 @Module({
   imports: [AuthModule],
-  controllers: [PaymentsController, MercadoPagoWebhookController],
+  controllers: [
+    PaymentsController,
+    MercadoPagoWebhookController,
+    PicPayWebhookController,
+  ],
   providers: [
     CashPaymentDrizzleRepository,
     // Puertos del slice → adaptadores.
@@ -145,7 +156,19 @@ function reconciliationMaxAttempts(): number {
     MercadoPagoWebhookContextDrizzleReader,
     IngestSettlementWebhookService,
 
-    // Ciclo de conciliación Fase 2 (settlement): ingiere → empareja → confirma. Endpoint
+    // Webhook de PicPay: autentica por token, registra TODA notificación en la bitácora
+    // (`provider_webhook_event`), ingiere los PAID como créditos y concilia en vivo.
+    PicPayWebhookContextDrizzleReader,
+    ProviderWebhookEventDrizzleRepository,
+    // Cobro conversacional (sesión/cobrança). Se exporta para que ConversationsModule (el diálogo
+    // de texto) lo reuse; el webhook lo usa para reflejar el estado de la cobrança.
+    PaymentChargeDrizzleRepository,
+    IngestPicPayWebhookService,
+
+    // Toggle autoConfirmSettlement del tenant (abono automático vs. aprobación humana).
+    SettlementReviewSettingsReader,
+
+    // Ciclo de conciliación Fase 2 (settlement): ingiere → empareja → confirma o reserva. Endpoint
     // /payments/reconcile-settlement; listo para un cron por tenant.
     {
       provide: RunSettlementReconciliationService,
@@ -155,6 +178,7 @@ function reconciliationMaxAttempts(): number {
         PaymentReconciliationDrizzleRepository,
         WhatsappTextSender,
         ConversationMessageLog,
+        SettlementReviewSettingsReader,
       ],
       useFactory: (
         source: SettlementSource,
@@ -162,18 +186,22 @@ function reconciliationMaxAttempts(): number {
         reconciliation: PaymentReconciliationDrizzleRepository,
         sender: WhatsappTextSender,
         log: ConversationMessageLog,
+        settings: SettlementReviewSettingsReader,
       ) =>
         new RunSettlementReconciliationService(
           source,
           credits,
           reconciliation,
           new LoggingTextSender(sender, log),
+          settings,
         ),
     },
 
     // Envío de WhatsApp con registro en el transcript (instancia propia del slice).
     ConversationMessageLog,
     WhatsappTextSender,
+    // El caso de uso se decora con la conciliación de settlement post-comprobante: si el
+    // crédito real ya llegó (webhook de PicPay), el comprobante se confirma al instante.
     {
       provide: SubmitPaymentReceiptHandler,
       inject: [
@@ -184,6 +212,7 @@ function reconciliationMaxAttempts(): number {
         PAYMENT_RECEIPT_STORAGE,
         WhatsappTextSender,
         ConversationMessageLog,
+        RunSettlementReconciliationService,
       ],
       useFactory: (
         portfolios: CreditPortfolioRepository,
@@ -193,14 +222,18 @@ function reconciliationMaxAttempts(): number {
         storage: PaymentReceiptStorage,
         sender: WhatsappTextSender,
         log: ConversationMessageLog,
+        settle: RunSettlementReconciliationService,
       ) =>
-        new SubmitPaymentReceiptHandler(
-          portfolios,
-          accounts,
-          antifraud,
-          bank,
-          storage,
-          new LoggingTextSender(sender, log),
+        new SubmitReceiptThenSettleHandler(
+          [
+            portfolios,
+            accounts,
+            antifraud,
+            bank,
+            storage,
+            new LoggingTextSender(sender, log),
+          ],
+          settle,
         ),
     },
     {
@@ -232,6 +265,8 @@ function reconciliationMaxAttempts(): number {
     CREDIT_PORTFOLIO_REPOSITORY,
     MEDIA_CLASSIFIER,
     SubmitPaymentReceiptHandler,
+    // Reusado por ConversationsModule (diálogo de cobro conversacional).
+    PaymentChargeDrizzleRepository,
   ],
 })
 export class PaymentsModule {}

@@ -5,6 +5,7 @@ import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { BankCredentialDrizzleRepository } from './bank-credential.repository';
 import { CREDENTIAL_NAME } from './bank-credential.names';
 import { MercadoPagoAccountClient } from './banking/mercadopago/mp-account.client';
+import { PicPayAuthClient } from './banking/picpay/picpay-auth.client';
 
 /** Veredicto de probar las credenciales de un proveedor; sin secretos. */
 export interface CredentialVerification {
@@ -15,13 +16,15 @@ export interface CredentialVerification {
 /**
  * Caso de uso "Probar credenciales": resuelve el proveedor de la cuenta y delega la prueba al
  * cliente del proveedor. Lee el secreto solo para usarlo en la llamada saliente; jamás lo
- * devuelve. Hoy soporta Mercado Pago (GET /users/me); otros proveedores degradan a no soportado.
+ * devuelve. Soporta Mercado Pago (GET /users/me) y PicPay (token OAuth2 client_credentials);
+ * otros proveedores degradan a no soportado.
  */
 @Injectable()
 export class BankProviderVerifierService {
   constructor(
     private readonly credentials: BankCredentialDrizzleRepository,
     private readonly mercadoPago: MercadoPagoAccountClient,
+    private readonly picPay: PicPayAuthClient,
   ) {}
 
   async verify(
@@ -32,13 +35,23 @@ export class BankProviderVerifierService {
     if (!providerType) {
       throw new NotFoundException('Cuenta bancaria no encontrada');
     }
-    if (providerType !== 'MERCADOPAGO') {
-      return {
-        ok: false,
-        detail:
-          'La prueba de credenciales solo está disponible para Mercado Pago',
-      };
+    if (providerType === 'MERCADOPAGO') {
+      return this.verifyMercadoPago(tenantId, bankAccountId);
     }
+    if (providerType === 'PICPAY') {
+      return this.verifyPicPay(tenantId, bankAccountId);
+    }
+    return {
+      ok: false,
+      detail:
+        'La prueba de credenciales solo está disponible para Mercado Pago y PicPay',
+    };
+  }
+
+  private async verifyMercadoPago(
+    tenantId: string,
+    bankAccountId: string,
+  ): Promise<CredentialVerification> {
     const accessToken = await this.credentials.get({
       tenantId,
       bankAccountId,
@@ -46,6 +59,26 @@ export class BankProviderVerifierService {
     });
     if (!accessToken) return { ok: false, detail: 'Falta el access_token' };
     return this.mercadoPago.verifyAccessToken(accessToken);
+  }
+
+  private async verifyPicPay(
+    tenantId: string,
+    bankAccountId: string,
+  ): Promise<CredentialVerification> {
+    const clientId = await this.credentials.get({
+      tenantId,
+      bankAccountId,
+      name: CREDENTIAL_NAME.clientId,
+    });
+    const clientSecret = await this.credentials.get({
+      tenantId,
+      bankAccountId,
+      name: CREDENTIAL_NAME.clientSecret,
+    });
+    if (!clientId || !clientSecret) {
+      return { ok: false, detail: 'Faltan el client_id o el client_secret' };
+    }
+    return this.picPay.verifyClientCredentials({ clientId, clientSecret });
   }
 
   private async loadProviderType(

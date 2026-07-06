@@ -78,9 +78,12 @@ class FakePortfolioRepo implements CreditPortfolioRepository {
 }
 
 class FakeBankAccounts implements TenantBankAccountRepository {
-  constructor(private readonly account: ActiveTenantBankAccount | null) {}
-  async findActive() {
-    return this.account;
+  private readonly accounts: ActiveTenantBankAccount[];
+  constructor(accounts: ActiveTenantBankAccount | readonly ActiveTenantBankAccount[] | null) {
+    this.accounts = accounts === null ? [] : Array.isArray(accounts) ? [...accounts] : [accounts as ActiveTenantBankAccount];
+  }
+  async listForVerification() {
+    return this.accounts;
   }
 }
 
@@ -97,6 +100,17 @@ class FakeBank implements BankPaymentVerifier {
   async verify() {
     this.calls++;
     return this.result;
+  }
+}
+
+/** Verificador que enruta por (país, banco): simula varias entidades con veredictos distintos. */
+class RoutedFakeBank implements BankPaymentVerifier {
+  calls: string[] = [];
+  constructor(private readonly results: Record<string, BankVerificationResult>) {}
+  async verify(input: { tenantId: string; countryCode: string; bankCode: string; pix: PixReceiptData }) {
+    const key = `${input.countryCode}:${input.bankCode}`;
+    this.calls.push(key);
+    return this.results[key] ?? UNAVAILABLE;
   }
 }
 
@@ -128,15 +142,17 @@ const CONFIRMED: BankVerificationResult = {
 const UNAVAILABLE: BankVerificationResult = {
   verification: { status: "unavailable", reason: "timeout" },
 };
+const NOT_FOUND: BankVerificationResult = { verification: { status: "not_found" } };
 
 const ACCOUNT_HOLD: ActiveTenantBankAccount = { countryCode: "BR", bankCode: "INTER", unverifiedPolicy: "HOLD" };
 const ACCOUNT_ALLOCATE: ActiveTenantBankAccount = { ...ACCOUNT_HOLD, unverifiedPolicy: "ALLOCATE" };
+const ACCOUNT_PICPAY: ActiveTenantBankAccount = { countryCode: "BR", bankCode: "PICPAY", unverifiedPolicy: "HOLD" };
 
 function handler(deps: {
   repo: FakePortfolioRepo;
   accounts?: TenantBankAccountRepository;
   antifraud?: PaymentAntifraudService;
-  bank?: FakeBank;
+  bank?: BankPaymentVerifier;
   storage?: FakeStorage;
   sender?: SpySender;
 }) {
@@ -201,6 +217,46 @@ describe("SubmitPaymentReceiptHandler", () => {
     expect(outcome.payment.status).toBe("UNVERIFIED");
     const allocated = outcome.allocations.reduce((a, x) => a + x.amountMinor, 0);
     expect(allocated).toBe(25000);
+  });
+
+  it("varias cuentas habilitadas: si la primera no encuentra el PIX, la segunda puede confirmar", async () => {
+    const repo = new FakePortfolioRepo(PORTFOLIO);
+    const bank = new RoutedFakeBank({ "BR:PICPAY": NOT_FOUND, "BR:INTER": CONFIRMED });
+    await handler({
+      repo,
+      accounts: new FakeBankAccounts([ACCOUNT_PICPAY, ACCOUNT_HOLD]),
+      bank,
+    }).execute(command(receiptClassification()));
+
+    expect(bank.calls).toEqual(["BR:PICPAY", "BR:INTER"]);
+    expect(repo.saved[0]?.payment.status).toBe("VERIFIED");
+    expect(repo.saved[0]?.payment.bankStatus).toBe("CONFIRMED");
+  });
+
+  it("la primera cuenta confirma: no consulta las demás (prioridad del proveedor)", async () => {
+    const repo = new FakePortfolioRepo(PORTFOLIO);
+    const bank = new RoutedFakeBank({ "BR:PICPAY": CONFIRMED, "BR:INTER": CONFIRMED });
+    await handler({
+      repo,
+      accounts: new FakeBankAccounts([ACCOUNT_PICPAY, ACCOUNT_HOLD]),
+      bank,
+    }).execute(command(receiptClassification()));
+
+    expect(bank.calls).toEqual(["BR:PICPAY"]);
+    expect(repo.saved[0]?.payment.status).toBe("VERIFIED");
+  });
+
+  it("ninguna confirma: conserva el resultado más informativo (not_found sobre unavailable)", async () => {
+    const repo = new FakePortfolioRepo(PORTFOLIO);
+    const bank = new RoutedFakeBank({ "BR:PICPAY": UNAVAILABLE, "BR:INTER": NOT_FOUND });
+    await handler({
+      repo,
+      accounts: new FakeBankAccounts([ACCOUNT_PICPAY, ACCOUNT_HOLD]),
+      bank,
+    }).execute(command(receiptClassification()));
+
+    expect(repo.saved[0]?.payment.status).toBe("UNVERIFIED");
+    expect(repo.saved[0]?.payment.bankStatus).toBe("NOT_FOUND");
   });
 
   it("sin cuenta bancaria configurada: no consulta banco y queda UNVERIFIED", async () => {

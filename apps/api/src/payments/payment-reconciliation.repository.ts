@@ -222,6 +222,75 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
   }
 
   /**
+   * Conciliación MANUAL (toggle `autoConfirmSettlement` apagado): RESERVA un crédito real para un
+   * comprobante sin abonarlo. Consume el crédito (para que no lo tome otro match) y deja el pago
+   * UNVERIFIED con una marca "pendiente de aprobación" (evento + traza antifraude PHASE2), pero NO
+   * abona la cartera: eso lo hace un humano con el botón de validación. Atómico y idempotente: solo
+   * reserva si el pago sigue UNVERIFIED y el crédito sigue libre; si otra ejecución se adelantó,
+   * devuelve `reserved: false` sin tocar nada.
+   */
+  async reserveCreditForReview(input: {
+    tenantId: string;
+    paymentId: string;
+    creditSourceId: string;
+    creditAmountMinor: number;
+  }): Promise<{ reserved: boolean }> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const [pay] = await tx
+        .select({
+          status: schema.payment.status,
+          creditId: schema.payment.creditId,
+        })
+        .from(schema.payment)
+        .where(eq(schema.payment.id, input.paymentId))
+        .for('update');
+      if (!pay || pay.status !== 'UNVERIFIED') return { reserved: false };
+
+      const [credit] = await tx
+        .select({
+          id: schema.incomingCredit.id,
+          consumedByPaymentId: schema.incomingCredit.consumedByPaymentId,
+        })
+        .from(schema.incomingCredit)
+        .where(eq(schema.incomingCredit.sourceId, input.creditSourceId))
+        .for('update')
+        .limit(1);
+      if (!credit || credit.consumedByPaymentId !== null) {
+        return { reserved: false };
+      }
+
+      // Reserva: el crédito queda ligado al pago (consumido) pero SIN abonar.
+      await tx
+        .update(schema.incomingCredit)
+        .set({ consumedByPaymentId: input.paymentId })
+        .where(eq(schema.incomingCredit.id, credit.id));
+
+      await tx.insert(schema.paymentEvent).values({
+        tenantId: input.tenantId,
+        paymentId: input.paymentId,
+        creditId: pay.creditId,
+        type: 'settlement_match_pending_review',
+        payload: {
+          sourceId: input.creditSourceId,
+          creditAmountMinor: input.creditAmountMinor,
+        },
+      });
+
+      await recordFraudAssessmentTx(tx, {
+        tenantId: input.tenantId,
+        paymentId: input.paymentId,
+        phase: 'PHASE2_SETTLEMENT',
+        status: 'PENDING_REVIEW',
+        score: null,
+        reasons: [
+          `Crédito real conciliado (SOURCE_ID ${input.creditSourceId}); espera aprobación manual`,
+        ],
+      });
+      return { reserved: true };
+    });
+  }
+
+  /**
    * Abono + bitácora + ruteo a caja para un pago ya transicionado a VERIFIED, dentro de la
    * transacción del llamador. Compartido por la conciliación per-PIX (`applyVerification`) y la
    * de settlement (`confirmWithCredit`) para no duplicar la lógica de abono.
