@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  CreateChannelInput,
   SetDocumentRequirementsInput,
   UpdateAssistantConfigInput,
+  UpdateChannelInput,
   UpdateCollectionReminderSettingsInput,
   UpdateOperationalSettingsInput,
 } from "@preztiaos/contracts";
@@ -100,8 +102,23 @@ export function useWhatsappChannels() {
 export function useCreateChannel() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { phoneNumberId: string; zoneId: string }) =>
+    mutationFn: async (input: CreateChannelInput) =>
       unwrap(await api.createChannel({ headers: tenantHeader(), body: input })),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: channelKeys.all }),
+  });
+}
+
+export function useUpdateChannelCredentials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; credentials: UpdateChannelInput }) =>
+      unwrap(
+        await api.updateChannel({
+          headers: tenantHeader(),
+          params: { id: input.id },
+          body: input.credentials,
+        }),
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: channelKeys.all }),
   });
 }

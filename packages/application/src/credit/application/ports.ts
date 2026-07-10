@@ -101,9 +101,12 @@ export interface ApplicationCompletionNotifier {
   }): Promise<void>;
 }
 
-/** Puerto: descarga el binario de un media desde el proveedor (Graph API). */
+/**
+ * Puerto: descarga el binario de un media desde el proveedor (Graph API). `channelId` es el
+ * `phone_number_id` que recibió el mensaje: identifica el número para resolver sus credenciales.
+ */
 export interface MediaDownloader {
-  download(media: MediaRef): Promise<DownloadedMedia>;
+  download(media: MediaRef, channelId: string): Promise<DownloadedMedia>;
 }
 
 /** Puerto: almacena el documento de forma segura (cifrado en reposo). */

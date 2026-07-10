@@ -193,6 +193,23 @@ const es = {
   "zones.new.root": "Zona raíz (sin padre)",
   "zones.new.submit": "Crear zona",
   "zones.action.delete": "Eliminar",
+  "zones.action.whatsapp": "WhatsApp",
+  // WhatsApp por zona (número + credenciales de Meta, ADMIN)
+  "zonesWa.title": "WhatsApp de la zona",
+  "zonesWa.hint":
+    "Vincula un número de WhatsApp a esta zona y configura sus credenciales de Meta. Los secretos se guardan cifrados y nunca se muestran; deja un campo vacío para conservar el valor actual.",
+  "zonesWa.empty": "Esta zona no tiene ningún número de WhatsApp.",
+  "zonesWa.number": "Número (phone_number_id)",
+  "zonesWa.accessToken": "Access token",
+  "zonesWa.appSecret": "App secret",
+  "zonesWa.verifyToken": "Verify token",
+  "zonesWa.graphVersion": "Versión de la Graph API (ej. v21.0)",
+  "zonesWa.add": "Añadir número a esta zona",
+  "zonesWa.save": "Guardar credenciales",
+  "zonesWa.configured": "Configurado",
+  "zonesWa.unset": "Sin configurar",
+  "zonesWa.shareHint":
+    "Para compartir un número entre varias zonas, vincúlalo a la zona padre que las cubre: los mensajes se atribuyen a esa zona y los coordinadores de sus sub-zonas los ven.",
   // IAM — cobradores y clientes
   "collectors.tab": "Cobradores",
   "collectors.title": "Cobradores",

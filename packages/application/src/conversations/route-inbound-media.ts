@@ -58,7 +58,7 @@ export class RouteInboundMediaHandler {
     ]);
     if (!application && !portfolio) return; // sin contexto activo: el archivo se ignora
 
-    const downloaded = await this.downloader.download(message.media);
+    const downloaded = await this.downloader.download(message.media, message.channelId);
 
     // Solo solicitud KYC: directo a documentos, sin gastar IA en clasificar.
     if (application && !portfolio) {

@@ -21,6 +21,7 @@ import {
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useCreateZone, useDeleteZone, useZonesList } from "../api/queries";
+import { ZoneWhatsappEditor } from "./zone-whatsapp-editor";
 
 /** CRUD del árbol de zonas (ADMIN). La indentación refleja la profundidad del path ltree. */
 export function ZonesScreen() {
@@ -28,6 +29,7 @@ export function ZonesScreen() {
   const query = useZonesList();
   const remove = useDeleteZone();
   const [creating, setCreating] = useState(false);
+  const [whatsappZone, setWhatsappZone] = useState<ZoneNode | null>(null);
 
   if (query.isPending) return <Spinner label={t("common.loading")} />;
   const zones = query.data?.items ?? [];
@@ -54,12 +56,20 @@ export function ZonesScreen() {
                 title={item.name}
                 subtitle={item.path}
                 trailing={
-                  <Button
-                    label={t("zones.action.delete")}
-                    variant="ghost"
-                    size="sm"
-                    onPress={() => remove.mutate(item.id)}
-                  />
+                  <Row className="items-center gap-1">
+                    <Button
+                      label={t("zones.action.whatsapp")}
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => setWhatsappZone(item)}
+                    />
+                    <Button
+                      label={t("zones.action.delete")}
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => remove.mutate(item.id)}
+                    />
+                  </Row>
                 }
               />
             </View>
@@ -67,6 +77,11 @@ export function ZonesScreen() {
         }}
       />
       <CreateZoneModal visible={creating} onClose={() => setCreating(false)} zones={zones} />
+      <ZoneWhatsappEditor
+        visible={whatsappZone !== null}
+        onClose={() => setWhatsappZone(null)}
+        zone={whatsappZone}
+      />
     </SafeAreaView>
   );
 }

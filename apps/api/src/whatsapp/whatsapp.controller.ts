@@ -7,6 +7,7 @@ import {
   HttpCode,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -15,6 +16,7 @@ import { z } from 'zod';
 import {
   createChannelInput,
   listConversationsQuery,
+  updateChannelInput,
 } from '@preztiaos/contracts';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
@@ -62,6 +64,25 @@ export class WhatsappController {
     requireRole(authorization, ADMIN_ONLY);
     const dto = createChannelInput.parse(body);
     return this.channels.create({ tenantId: tenant, ...dto });
+  }
+
+  @Patch('whatsapp-channels/:id')
+  @HttpCode(204)
+  async updateChannel(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
+  ): Promise<void> {
+    const tenant = requireTenant(tenantId);
+    requireRole(authorization, ADMIN_ONLY);
+    const credentials = updateChannelInput.parse(body);
+    const ok = await this.channels.updateCredentials({
+      tenantId: tenant,
+      id: uuid.parse(id),
+      credentials,
+    });
+    if (!ok) throw new NotFoundException('Canal no encontrado');
   }
 
   @Delete('whatsapp-channels/:id')

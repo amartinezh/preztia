@@ -85,7 +85,8 @@ export class SubmitApplicationDocumentHandler {
     const recipient = { channelId: cmd.channelId, recipient: cmd.applicant };
 
     // 1) Descargar y validar estructuralmente (formato/tamaño/reuso) sobre los metadatos.
-    const media = cmd.prepared?.downloaded ?? (await this.downloader.download(cmd.media));
+    const media =
+      cmd.prepared?.downloaded ?? (await this.downloader.download(cmd.media, cmd.channelId));
     const structural = await this.antifraud.assess({
       tenantId,
       applicationId: active.id,

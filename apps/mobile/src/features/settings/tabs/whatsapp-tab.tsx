@@ -6,14 +6,11 @@ import {
   type RequiredDocumentTypeContract,
 } from "@preztiaos/contracts";
 import {
-  Badge,
   Banner,
   Button,
   Card,
   Field,
   Input,
-  ListItem,
-  Row,
   Select,
   Spinner,
   Stack,
@@ -24,28 +21,24 @@ import {
 
 import { isApiError } from "@/core/errors";
 import { useT, type MessageKey } from "@/core/i18n";
-import { useZonesList } from "@/features/zones/api/queries";
 import {
   useAssistantConfig,
-  useCreateChannel,
-  useDeleteChannel,
   useDocumentRequirements,
   useSetDocumentRequirements,
   useUpdateAssistantConfig,
-  useWhatsappChannels,
 } from "../api/queries";
 
 /**
- * Tab WHATSAPP / IA (solo ADMIN): asistente (base de conocimiento + IA), documentos requeridos del
- * crédito y canales (número → zona). Es una sección sensible que el Coordinador no ve (la pestaña
- * ni aparece), por lo que aquí los controles asumen edición.
+ * Tab WHATSAPP / IA (solo ADMIN): asistente (base de conocimiento + IA) y documentos requeridos del
+ * crédito. Es una sección sensible que el Coordinador no ve (la pestaña ni aparece), por lo que aquí
+ * los controles asumen edición. Los canales/credenciales de WhatsApp se configuran POR ZONA en el
+ * panel de Zonas.
  */
 export function WhatsappTab() {
   return (
     <Stack gap="lg">
       <AssistantConfigCard />
       <DocumentRequirementsCard />
-      <WhatsappChannelsCard />
     </Stack>
   );
 }
@@ -274,70 +267,3 @@ function DocumentRequirementsCard() {
   );
 }
 
-/** Canales de WhatsApp: vincula cada número (phone_number_id) a una zona. */
-function WhatsappChannelsCard() {
-  const { t } = useT();
-  const channels = useWhatsappChannels();
-  const zonesQuery = useZonesList();
-  const create = useCreateChannel();
-  const remove = useDeleteChannel();
-  const [phoneNumberId, setPhoneNumberId] = useState("");
-  const [zoneId, setZoneId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const zoneOptions: SelectOption<string>[] = (zonesQuery.data?.items ?? []).map((z) => ({
-    value: z.id,
-    label: z.name,
-    hint: z.path,
-  }));
-
-  const submit = () => {
-    setError(null);
-    if (!phoneNumberId.trim() || !zoneId) {
-      setError(t("errors.validation"));
-      return;
-    }
-    create.mutate(
-      { phoneNumberId: phoneNumberId.trim(), zoneId },
-      {
-        onSuccess: () => {
-          setPhoneNumberId("");
-          setZoneId("");
-        },
-        onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
-      },
-    );
-  };
-
-  return (
-    <Card>
-      <Stack gap="sm">
-        <Text variant="heading">{t("channels.title")}</Text>
-        {error ? <Banner tone="danger" title={error} /> : null}
-        {(channels.data?.items ?? []).map((ch) => (
-          <ListItem
-            key={ch.id}
-            title={ch.phoneNumberId}
-            subtitle={ch.zonePath}
-            trailing={
-              <Row className="items-center gap-2">
-                <Badge label={ch.zonePath} tone="info" />
-                <Button label={t("common.delete")} variant="ghost" size="sm" onPress={() => remove.mutate(ch.id)} />
-              </Row>
-            }
-          />
-        ))}
-        {(channels.data?.items ?? []).length === 0 ? (
-          <Text tone="muted">{t("channels.empty")}</Text>
-        ) : null}
-        <Field label={t("channels.phone")}>
-          <Input value={phoneNumberId} onChangeText={setPhoneNumberId} />
-        </Field>
-        <Field label={t("zones.tab")}>
-          <Select value={zoneId} options={zoneOptions} onChange={setZoneId} title={t("zones.tab")} />
-        </Field>
-        <Button label={t("channels.add")} loading={create.isPending} block onPress={submit} />
-      </Stack>
-    </Card>
-  );
-}

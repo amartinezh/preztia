@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OutboundRecipient, OutboundTextSender } from '@preztiaos/application';
+import { resolveWhatsappCredentialsByPhone } from '../../tenancy/unit-of-work';
 
 const DEFAULT_GRAPH_VERSION = 'v21.0';
 
@@ -9,7 +10,9 @@ export class WhatsappTextSender implements OutboundTextSender {
   private readonly logger = new Logger('WhatsApp:Send');
 
   async sendText(to: OutboundRecipient, body: string): Promise<void> {
-    const token = process.env.WHATSAPP_ACCESS_TOKEN;
+    // Credenciales por número (BD, cifradas). Fallback a `.env` para migrar sin downtime.
+    const creds = await resolveWhatsappCredentialsByPhone(to.channelId);
+    const token = creds?.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
     if (!token) {
       // En desarrollo, sin token, dejamos ver la respuesta en consola sin enviarla.
       this.logger.warn(
@@ -18,7 +21,10 @@ export class WhatsappTextSender implements OutboundTextSender {
       return;
     }
 
-    const version = process.env.WHATSAPP_GRAPH_VERSION ?? DEFAULT_GRAPH_VERSION;
+    const version =
+      creds?.graphVersion ??
+      process.env.WHATSAPP_GRAPH_VERSION ??
+      DEFAULT_GRAPH_VERSION;
     const url = `https://graph.facebook.com/${version}/${to.channelId}/messages`;
 
     const res = await fetch(url, {

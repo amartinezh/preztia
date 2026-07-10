@@ -5,6 +5,7 @@ import {
   type MediaDownloader,
 } from '@preztiaos/application';
 import { type MediaRef } from '@preztiaos/domain';
+import { resolveWhatsappCredentialsByPhone } from '../tenancy/unit-of-work';
 
 const DEFAULT_GRAPH_VERSION = 'v21.0';
 
@@ -20,9 +21,14 @@ interface MediaUrlResponse {
  */
 @Injectable()
 export class WhatsappMediaDownloader implements MediaDownloader {
-  async download(media: MediaRef): Promise<DownloadedMedia> {
-    const token = this.requireToken();
-    const version = process.env.WHATSAPP_GRAPH_VERSION ?? DEFAULT_GRAPH_VERSION;
+  async download(media: MediaRef, channelId: string): Promise<DownloadedMedia> {
+    // Credenciales por número (BD, cifradas). Fallback a `.env` para migrar sin downtime.
+    const creds = await resolveWhatsappCredentialsByPhone(channelId);
+    const token = this.requireToken(creds?.accessToken ?? null);
+    const version =
+      creds?.graphVersion ??
+      process.env.WHATSAPP_GRAPH_VERSION ??
+      DEFAULT_GRAPH_VERSION;
 
     const metaRes = await fetch(
       `https://graph.facebook.com/${version}/${media.mediaId}`,
@@ -55,8 +61,8 @@ export class WhatsappMediaDownloader implements MediaDownloader {
     };
   }
 
-  private requireToken(): string {
-    const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  private requireToken(channelToken: string | null): string {
+    const token = channelToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
     if (!token)
       throw new Error(
         'WHATSAPP_ACCESS_TOKEN no configurado: no se puede descargar el media',

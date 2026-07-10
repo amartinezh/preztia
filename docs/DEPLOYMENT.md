@@ -1,5 +1,10 @@
 # Despliegue a producción — PreztiaOS
 
+> ¿VPS Debian recién creado, sin Docker instalado? Empieza por
+> [PRODUCTION_SERVER_SETUP.md](./PRODUCTION_SERVER_SETUP.md) (acceso SSH, firewall, swap,
+> instalación de Docker) y vuelve aquí para el despliegue de la app. Esta guía asume que ya
+> tienes Docker + compose funcionando.
+
 Guía para desplegar en un **VPS Debian** con dominio propio. La configuración de producción es
 **independiente** de la local: `docker-compose.yml` (solo infra, para desarrollo) **no se toca**;
 todo lo de producción vive en `docker-compose.prod.yml` + `apps/api/Dockerfile` + `deploy/`.
