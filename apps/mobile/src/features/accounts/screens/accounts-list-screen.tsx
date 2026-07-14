@@ -98,7 +98,7 @@ export function AccountsListScreen() {
         renderItem={({ item }) => (
           <ListItem
             title={item.borrowerName ?? item.nationalId ?? item.creditId.slice(0, 8)}
-            subtitle={`${t("accounts.field.paid")}: ${item.paidCount}/${item.installmentsCount} · ${t("accounts.field.unsettled")}: ${minorToMajor(item.unsettledMinor)} · ${t("accounts.field.dueToday")}: ${minorToMajor(item.dueTodayMinor)}`}
+            subtitle={`${t("accounts.field.paid")}: ${item.paidCount}/${item.installmentsCount} · ${t("accounts.field.collectedToday")}: ${minorToMajor(item.collectedTodayMinor)} · ${t("accounts.field.dueToday")}: ${minorToMajor(item.dueTodayMinor)}`}
             onPress={() => router.push(`/account/${item.creditId}` as Href)}
             trailing={
               <Row className="items-center gap-2">

@@ -3,7 +3,6 @@ import { CashController } from './cash.controller';
 import { CashBoxController } from './cash-box.controller';
 import { BankAccountController } from './bank-account.controller';
 import { ExpenseDrizzleRepository } from './expense.repository';
-import { SettlementDrizzleRepository } from './settlement.repository';
 import { CashQueryRepository } from './cash-query.repository';
 import { CashBoxDrizzleRepository } from './cash-box.repository';
 import { BankAccountDrizzleRepository } from './bank-account.repository';
@@ -19,15 +18,14 @@ import { InterBalanceProvider } from './banking/inter/inter-balance.provider';
 import { BANK_BALANCE_PROVIDER } from './cash.tokens';
 
 /**
- * Módulo de CAJA: gastos (maker-checker), liquidadas (cierre de caja encadenado), reporte
- * diario, y el manejo de cajas/cuentas bancarias (clasificación, libro mayor, transferencias,
- * dashboard, arqueo y conciliación bancaria en línea). Plano de datos bajo `app` + RLS y JwtGuard.
+ * Módulo de CAJA: gastos (maker-checker), reporte diario (P&L), y el manejo de cajas/cuentas
+ * bancarias (clasificación, libro mayor, transferencias, dashboard, arqueo y conciliación bancaria
+ * en línea). El libro de cajas es la única fuente de verdad del dinero. Bajo `app` + RLS y JwtGuard.
  */
 @Module({
   controllers: [CashController, CashBoxController, BankAccountController],
   providers: [
     ExpenseDrizzleRepository,
-    SettlementDrizzleRepository,
     CashQueryRepository,
     CashBoxDrizzleRepository,
     BankAccountDrizzleRepository,

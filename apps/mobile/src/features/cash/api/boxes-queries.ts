@@ -47,6 +47,7 @@ export interface TransactionFilters {
   cashBoxId?: string;
   kind?:
     | "PAYMENT_IN"
+    | "DISBURSEMENT"
     | "WITHDRAWAL"
     | "EXPENSE"
     | "TRANSFER"

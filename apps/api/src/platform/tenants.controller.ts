@@ -1,7 +1,9 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -15,6 +17,7 @@ import {
   CreateTenantAdminHandler,
   CreateTenantHandler,
   DeleteTenantHandler,
+  PurgeTenantDataHandler,
   UpdateTenantAdminHandler,
   UpdateTenantHandler,
 } from '@preztiaos/application';
@@ -22,6 +25,7 @@ import {
   createTenantAdminInput,
   createTenantInput,
   paginationQuery,
+  purgeTenantDataInput,
   updateTenantAdminInput,
   updateTenantInput,
 } from '@preztiaos/contracts';
@@ -30,6 +34,8 @@ import { TenantDrizzleRepository } from './tenants.repository';
 import { TenantsQueryRepository } from './tenants-query.repository';
 import { TenantAdminsQueryRepository } from './tenant-admins-query.repository';
 import { PlatformUserRepository } from './platform-user.repository';
+import { TenantDataPurgeRepository } from './tenant-data-purge.repository';
+import { MinioTenantFilePurger } from './tenant-file-purge.storage';
 import { ScryptPasswordHasher } from '../auth/password-hasher';
 
 const uuid = z.string().uuid();
@@ -47,6 +53,7 @@ export class TenantsController {
   private readonly deleteHandler: DeleteTenantHandler;
   private readonly createAdminHandler: CreateTenantAdminHandler;
   private readonly updateAdminHandler: UpdateTenantAdminHandler;
+  private readonly purgeHandler: PurgeTenantDataHandler;
 
   constructor(
     private readonly tenants: TenantDrizzleRepository,
@@ -54,6 +61,8 @@ export class TenantsController {
     private readonly adminQueries: TenantAdminsQueryRepository,
     private readonly users: PlatformUserRepository,
     private readonly hasher: ScryptPasswordHasher,
+    private readonly dataPurger: TenantDataPurgeRepository,
+    private readonly filePurger: MinioTenantFilePurger,
   ) {
     this.createHandler = new CreateTenantHandler(this.tenants);
     this.updateHandler = new UpdateTenantHandler(this.tenants);
@@ -67,6 +76,11 @@ export class TenantsController {
       this.tenants,
       this.users,
       this.hasher,
+    );
+    this.purgeHandler = new PurgeTenantDataHandler(
+      this.tenants,
+      this.dataPurger,
+      this.filePurger,
     );
   }
 
@@ -132,5 +146,39 @@ export class TenantsController {
       adminId: uuid.parse(adminId),
       ...dto,
     });
+  }
+
+  /**
+   * Purga los datos de PRUEBA del tenant (reinicio): borra lo transaccional (BD + archivos)
+   * y conserva usuarios y configuración. Doble portón: rol SUPER_ADMIN (guard) + contraseña
+   * de confirmación "quemada" por entorno, para que un token robado no baste. La verificación
+   * del secreto es una autorización de FRONTERA (no una regla de negocio) → vive aquí.
+   */
+  @Post('admin/tenants/:id/purge')
+  @HttpCode(200)
+  async purge(@Param('id') id: string, @Body() body: unknown) {
+    const dto = purgeTenantDataInput.parse(body);
+    assertPurgePassword(dto.confirmationPassword);
+    return this.purgeHandler.execute(uuid.parse(id));
+  }
+}
+
+/**
+ * Verifica la contraseña de confirmación contra `PLATFORM_PURGE_PASSWORD` (secreto por
+ * entorno). Comparación en tiempo constante sobre el digest SHA-256 (evita fugas por
+ * longitud y por timing). Falla CERRADO: si el secreto no está configurado, la purga se
+ * rechaza (403), nunca se ejecuta "sin candado".
+ */
+function assertPurgePassword(provided: string): void {
+  const expected = process.env.PLATFORM_PURGE_PASSWORD;
+  if (!expected) {
+    throw new ForbiddenException(
+      'La purga no está habilitada: falta configurar PLATFORM_PURGE_PASSWORD',
+    );
+  }
+  const a = createHash('sha256').update(provided).digest();
+  const b = createHash('sha256').update(expected).digest();
+  if (!timingSafeEqual(a, b)) {
+    throw new ForbiddenException('Contraseña de purga incorrecta');
   }
 }

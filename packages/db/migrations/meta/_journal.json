@@ -323,6 +323,20 @@
       "when": 1783690168158,
       "tag": "0045_tranquil_post",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1783707355998,
+      "tag": "0046_nostalgic_kang",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1783720467124,
+      "tag": "0047_silly_killmonger",
+      "breakpoints": true
     }
   ]
 }

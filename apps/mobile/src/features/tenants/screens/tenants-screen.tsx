@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
 import { FlatList, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import type { TenantAdminOutput, TenantOutput } from "@preztiaos/contracts";
+import type {
+  PurgeTenantDataOutput,
+  TenantAdminOutput,
+  TenantOutput,
+} from "@preztiaos/contracts";
 import {
   createTenantAdminInput,
   createTenantInput,
@@ -30,6 +34,7 @@ import {
   useCreateTenant,
   useCreateTenantAdmin,
   useDeleteTenant,
+  usePurgeTenantData,
   useTenantAdminsList,
   useTenantsList,
   useUpdateTenant,
@@ -148,6 +153,7 @@ function TenantDetailModal({ tenant, onClose }: { tenant: TenantOutput; onClose:
   const update = useUpdateTenant();
   const [statusError, setStatusError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingPurge, setConfirmingPurge] = useState(false);
 
   const active = tenant.status === "ACTIVE";
 
@@ -184,15 +190,34 @@ function TenantDetailModal({ tenant, onClose }: { tenant: TenantOutput; onClose:
             <AdminsSection tenant={tenant} />
 
             {/* Zona de peligro */}
-            <Button
-              label={t("tenants.delete.title")}
-              variant="danger"
-              block
-              onPress={() => setConfirmingDelete(true)}
-            />
+            <Stack gap="sm">
+              <Text variant="label" tone="muted">
+                {t("tenants.danger.title")}
+              </Text>
+              {/* Reinicio de pruebas: limpia datos operativos, conserva el tenant. */}
+              <Button
+                label={t("tenants.purge.action")}
+                variant="secondary"
+                block
+                onPress={() => setConfirmingPurge(true)}
+              />
+              <Button
+                label={t("tenants.delete.title")}
+                variant="danger"
+                block
+                onPress={() => setConfirmingDelete(true)}
+              />
+            </Stack>
           </Stack>
         </ScrollView>
       </Modal>
+
+      {confirmingPurge ? (
+        <PurgeTenantConfirmModal
+          tenant={tenant}
+          onClose={() => setConfirmingPurge(false)}
+        />
+      ) : null}
 
       {confirmingDelete ? (
         <DeleteTenantConfirmModal
@@ -422,6 +447,97 @@ function AddAdminForm({ tenantId, onDone }: { tenantId: string; onDone: () => vo
   );
 }
 
+/**
+ * Reinicio de pruebas: doble candado. Se escribe el nombre exacto del tenant (para no
+ * purgar el equivocado) Y la contraseña "quemada" por entorno. Conserva usuarios y
+ * configuración; solo borra datos operativos + archivos. Al terminar muestra el resumen.
+ */
+function PurgeTenantConfirmModal({
+  tenant,
+  onClose,
+}: {
+  tenant: TenantOutput;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const purge = usePurgeTenantData();
+  const [confirmation, setConfirmation] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<PurgeTenantDataOutput | null>(null);
+
+  const nameMatches = confirmation.trim() === tenant.name;
+  const canSubmit = nameMatches && password.length > 0 && !purge.isPending;
+
+  if (result) {
+    return (
+      <Modal visible onClose={onClose} title={t("tenants.purge.action")}>
+        <Stack gap="md" className="p-4">
+          <Banner
+            tone="success"
+            title={`${t("tenants.purge.done")} — ${result.rowsDeleted} ${t(
+              "tenants.purge.rows",
+            )}, ${result.filesDeleted} ${t("tenants.purge.files")}`}
+          />
+          <Button label={t("tenants.purge.close")} block onPress={onClose} />
+        </Stack>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal visible onClose={onClose} title={t("tenants.purge.action")}>
+      <Stack gap="md" className="p-4">
+        <Banner tone="warning" title={t("tenants.purge.warning")} />
+        {error ? <Banner tone="danger" title={error} /> : null}
+        <Field label={t("tenants.delete.confirmPrompt")} required>
+          <Input
+            autoCapitalize="none"
+            value={confirmation}
+            onChangeText={setConfirmation}
+            placeholder={tenant.name}
+          />
+        </Field>
+        <Field label={t("tenants.purge.passwordPrompt")} required>
+          <Input
+            secureTextEntry
+            autoCapitalize="none"
+            value={password}
+            onChangeText={setPassword}
+            placeholder={t("tenants.purge.passwordPlaceholder")}
+          />
+        </Field>
+        <Row className="gap-2">
+          <Button
+            label={t("tenants.admins.cancel")}
+            variant="secondary"
+            className="flex-1"
+            onPress={onClose}
+          />
+          <Button
+            label={t("tenants.purge.confirm")}
+            variant="danger"
+            className="flex-1"
+            disabled={!canSubmit}
+            loading={purge.isPending}
+            onPress={() => {
+              setError(null);
+              purge.mutate(
+                { id: tenant.id, confirmationPassword: password },
+                {
+                  onSuccess: (report) => setResult(report),
+                  onError: (err) =>
+                    setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+                },
+              );
+            }}
+          />
+        </Row>
+      </Stack>
+    </Modal>
+  );
+}
+
 /** Confirmación segura: exige escribir el nombre exacto del tenant para borrarlo. */
 function DeleteTenantConfirmModal({
   tenant,
@@ -453,11 +569,16 @@ function DeleteTenantConfirmModal({
           />
         </Field>
         <Row className="gap-2">
-          <Button label={t("tenants.admins.cancel")} variant="secondary" block onPress={onClose} />
+          <Button
+            label={t("tenants.admins.cancel")}
+            variant="secondary"
+            className="flex-1"
+            onPress={onClose}
+          />
           <Button
             label={t("tenants.delete.confirm")}
             variant="danger"
-            block
+            className="flex-1"
             disabled={!matches || remove.isPending}
             loading={remove.isPending}
             onPress={() => {

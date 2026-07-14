@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import {
   approveApplicationInput,
   rejectApplicationInput,
@@ -14,7 +14,9 @@ import {
   Field,
   Input,
   Modal,
+  MoneyText,
   Row,
+  Spinner,
   Stack,
   Text,
   majorToMinor,
@@ -22,6 +24,7 @@ import {
 } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
+import { useCashDashboard } from "@/features/cash/api/boxes-queries";
 import { BorrowerPicker } from "./borrower-picker";
 
 // El dominio interpreta interestPct como base-mil (200 = 20%); la UI captura % y convierte.
@@ -91,15 +94,27 @@ export function DecisionModal({
   const [interest, setInterest] = useState("");
   const [installments, setInstallments] = useState("");
   const [reason, setReason] = useState("");
+  const [fundingCashBoxId, setFundingCashBoxId] = useState<string | null>(null);
   const [errors, setErrors] = useState<ApproveErrors>({});
 
   // Si hay un plan negociado, sus términos definen el crédito: no se piden a mano (se ocultan).
   const fromPlan = planTerms(planOffer);
-  // Regla de negocio: aprobar requiere deudor asignado y zona resuelta.
-  const canApprove = borrower != null && zoneId != null;
+
+  // Caja/cuenta de la que saldrá el dinero: solo CASH y BANK (la caja de tránsito no desembolsa).
+  const dashboard = useCashDashboard();
+  const fundableBoxes = (dashboard.data?.boxes ?? []).filter((b) => b.type !== "TRANSIT");
+  const selectedBox = fundableBoxes.find((b) => b.id === fundingCashBoxId) ?? null;
+  const principalMinor = fromPlan ? fromPlan.principalMinor : majorToMinor(Number(principal) || 0);
+  // El servidor también valida el saldo (fail-fast), pero lo avisamos antes de enviar.
+  const fundsInsufficient =
+    selectedBox != null && principalMinor > 0 && principalMinor > selectedBox.balanceMinor;
+
+  // Regla de negocio: aprobar requiere deudor, zona resuelta y una caja/cuenta origen con saldo.
+  const canApprove =
+    borrower != null && zoneId != null && fundingCashBoxId != null && !fundsInsufficient;
 
   const submitApprove = () => {
-    if (!borrower || !zoneId) return;
+    if (!borrower || !zoneId || !fundingCashBoxId) return;
     const candidate = {
       borrowerId: borrower.id,
       zoneId,
@@ -108,6 +123,7 @@ export function DecisionModal({
       installmentsCount: fromPlan ? fromPlan.installmentsCount : Math.trunc(Number(installments)),
       borrowerPhone: applicantPhone,
       reason: reason.trim(),
+      fundingCashBoxId,
     };
     const parsed = approveApplicationInput.safeParse(candidate);
     if (!parsed.success) {
@@ -203,6 +219,42 @@ export function DecisionModal({
                 </>
               )}
 
+              {/* Caja/cuenta de la que sale el dinero: el otorgamiento la debita (DISBURSEMENT). */}
+              <Field label={t("review.approve.fundingSource")} hint={t("review.approve.fundingHint")} required>
+                {dashboard.isPending ? (
+                  <Spinner label={t("common.loading")} />
+                ) : fundableBoxes.length === 0 ? (
+                  <Banner tone="warning" title={t("review.approve.fundingEmpty")} />
+                ) : (
+                  <Stack gap="xs">
+                    {fundableBoxes.map((b) => {
+                      const isSelected = b.id === fundingCashBoxId;
+                      return (
+                        <Pressable
+                          key={b.id}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isSelected }}
+                          onPress={() => setFundingCashBoxId(b.id)}
+                          className={`min-h-[48px] flex-row items-center justify-between rounded-xl border px-3 ${
+                            isSelected
+                              ? "border-brand-600 bg-brand-50 dark:bg-zinc-800"
+                              : "border-zinc-200 dark:border-zinc-700"
+                          }`}
+                        >
+                          <Text variant="label" tone={isSelected ? "primary" : "muted"}>
+                            {b.name}
+                          </Text>
+                          <MoneyText variant="label" amountMinor={b.balanceMinor} currency={b.currency} />
+                        </Pressable>
+                      );
+                    })}
+                  </Stack>
+                )}
+              </Field>
+              {fundsInsufficient ? (
+                <Banner tone="danger" title={t("review.approve.fundingInsufficient")} />
+              ) : null}
+
               <Field label={t("review.approve.reason")} error={errors.reason} required>
                 <Input value={reason} onChangeText={setReason} invalid={!!errors.reason} multiline />
               </Field>
@@ -215,7 +267,9 @@ export function DecisionModal({
               />
               {!canApprove ? (
                 <Text variant="caption" tone="muted">
-                  {t("review.approve.needBorrower")}
+                  {borrower == null || zoneId == null
+                    ? t("review.approve.needBorrower")
+                    : t("review.approve.needFunding")}
                 </Text>
               ) : null}
             </>

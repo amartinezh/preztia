@@ -8,6 +8,7 @@ export type CashBoxType = "CASH" | "BANK" | "TRANSIT";
 export type CashTxDirection = "IN" | "OUT";
 export type CashTxKind =
   | "PAYMENT_IN"
+  | "DISBURSEMENT"
   | "WITHDRAWAL"
   | "EXPENSE"
   | "TRANSFER"

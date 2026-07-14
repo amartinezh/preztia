@@ -13,12 +13,14 @@ import { sql } from "drizzle-orm";
 import { cashBox } from "./cash-box";
 import { payment } from "./payment";
 import { expense } from "./expense";
+import { credit } from "./credit";
 
 // Sentido del asiento sobre la caja (el saldo es Σ: IN suma, OUT resta).
 export const cashTxDirection = pgEnum("cash_tx_direction", ["IN", "OUT"]);
 
 // Naturaleza del movimiento (gobierna reglas de motivo y trazabilidad al origen):
 //  PAYMENT_IN   → abono de cliente (PIX/efectivo) que entra a una caja.
+//  DISBURSEMENT → egreso por otorgamiento de crédito (liga a credit); sale de la caja/cuenta origen.
 //  WITHDRAWAL   → retiro/egreso de dinero (exige motivo).
 //  EXPENSE      → gasto aprobado (liga a expense).
 //  TRANSFER     → movimiento entre cajas (dos asientos con el mismo transfer_group_id).
@@ -26,6 +28,7 @@ export const cashTxDirection = pgEnum("cash_tx_direction", ["IN", "OUT"]);
 //  UNIDENTIFIED → ingreso que no se pudo conciliar → caja TRANSIT.
 export const cashTxKind = pgEnum("cash_tx_kind", [
   "PAYMENT_IN",
+  "DISBURSEMENT",
   "WITHDRAWAL",
   "EXPENSE",
   "TRANSFER",
@@ -54,6 +57,8 @@ export const cashTransaction = pgTable(
     // Trazas al origen del movimiento (a lo sumo una poblada).
     paymentId: uuid("payment_id").references(() => payment.id),
     expenseId: uuid("expense_id").references(() => expense.id),
+    // Crédito que originó el egreso DISBURSEMENT (de qué caja/cuenta salió el préstamo).
+    creditId: uuid("credit_id").references(() => credit.id),
     // Las dos patas de una transferencia comparten transfer_group_id (Σ = 0).
     transferGroupId: uuid("transfer_group_id"),
     // Quién registró el asiento (app_user); sin FK, igual que actor_id de audit_log.
@@ -68,6 +73,14 @@ export const cashTransaction = pgTable(
     byPaymentIdx: uniqueIndex("cash_tx_payment_idx")
       .on(t.paymentId)
       .where(sql`payment_id is not null`),
+    // Un crédito se desembolsa UNA sola vez: idempotencia del egreso (sin doble desembolso).
+    byCreditIdx: uniqueIndex("cash_tx_credit_idx")
+      .on(t.creditId)
+      .where(sql`credit_id is not null`),
+    // Un gasto aprobado se paga UNA sola vez: idempotencia del egreso (sin doble cargo).
+    byExpenseIdx: uniqueIndex("cash_tx_expense_idx")
+      .on(t.expenseId)
+      .where(sql`expense_id is not null`),
     positive: check("cash_tx_amount_positive_chk", sql`amount_minor > 0`),
   }),
 );

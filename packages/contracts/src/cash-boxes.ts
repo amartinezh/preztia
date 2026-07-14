@@ -15,6 +15,7 @@ export type CashBoxType = z.infer<typeof cashBoxType>;
 export const cashTxDirection = z.enum(["IN", "OUT"]);
 export const cashTxKind = z.enum([
   "PAYMENT_IN",
+  "DISBURSEMENT",
   "WITHDRAWAL",
   "EXPENSE",
   "TRANSFER",

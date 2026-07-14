@@ -12,7 +12,6 @@ export * from "./payment";
 export * from "./borrower";
 export * from "./borrower-note";
 export * from "./expense";
-export * from "./settlement";
 export * from "./change-request";
 export * from "./collector-location";
 export * from "./borrower-list";

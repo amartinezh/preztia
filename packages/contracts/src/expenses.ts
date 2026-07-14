@@ -6,7 +6,7 @@ import { paginationQuery } from "./payments";
 const c = initContract();
 
 // Contrato de GASTOS de cobro ("Solicitud Gastos"): el cobrador solicita; el ADMIN/COORDINATOR
-// aprueba o rechaza (maker-checker). Solo los aprobados afectan la caja de la liquidada.
+// aprueba o rechaza (maker-checker). Aprobar debita el dinero de una caja/cuenta (asiento EXPENSE).
 
 export const expenseStatus = z.enum(["PENDING", "APPROVED", "REJECTED"]);
 export type ExpenseStatus = z.infer<typeof expenseStatus>;
@@ -40,9 +40,23 @@ export const createExpenseInput = z.object({
 });
 export type CreateExpenseInput = z.infer<typeof createExpenseInput>;
 
-export const reviewExpenseInput = z.object({
-  approve: z.boolean(),
-});
+// Aprobar un gasto lo paga: exige la caja/cuenta de la que sale el dinero (asiento EXPENSE OUT).
+// Rechazar no mueve dinero, así que no lleva caja.
+export const reviewExpenseInput = z
+  .object({
+    approve: z.boolean(),
+    paidFromCashBoxId: z.string().uuid().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.approve && !v.paidFromCashBoxId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["paidFromCashBoxId"],
+        message: "Aprobar un gasto exige elegir la caja/cuenta pagadora",
+      });
+    }
+  });
+export type ReviewExpenseInput = z.infer<typeof reviewExpenseInput>;
 
 const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 const idParam = z.object({ id: z.string().uuid() });

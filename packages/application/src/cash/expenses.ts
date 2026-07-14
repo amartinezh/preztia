@@ -34,6 +34,8 @@ export interface ReviewExpenseCommand {
   expenseId: string;
   reviewerId: string;
   approve: boolean;
+  /** Caja/cuenta de la que sale el dinero del gasto; requerida al aprobar (validada en el contrato). */
+  paidFromCashBoxId?: string;
 }
 
 export class ReviewExpenseHandler {
@@ -53,6 +55,10 @@ export class ReviewExpenseHandler {
       status,
       reviewedBy: cmd.reviewerId,
       reviewedAt: new Date(),
+      // Aprobar debita el gasto de la caja pagadora en la misma transacción.
+      ...(cmd.approve && cmd.paidFromCashBoxId
+        ? { paidFromCashBoxId: cmd.paidFromCashBoxId }
+        : {}),
     });
     if (!updated) throw new NotFoundError("El gasto no existe");
     return updated;

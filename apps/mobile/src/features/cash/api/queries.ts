@@ -6,8 +6,6 @@ import { api, tenantHeader, unwrap } from "@/core/api/client";
 export const cashKeys = {
   all: ["cash"] as const,
   expenses: (status?: ExpenseStatus) => [...cashKeys.all, "expenses", status ?? "all"] as const,
-  settlements: () => [...cashKeys.all, "settlements"] as const,
-  preview: () => [...cashKeys.all, "preview"] as const,
   daily: () => [...cashKeys.all, "daily"] as const,
 };
 
@@ -45,38 +43,17 @@ export function useCreateExpense() {
 export function useReviewExpense() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; approve: boolean }) =>
+    mutationFn: async (input: { id: string; approve: boolean; paidFromCashBoxId?: string }) =>
       unwrap(
         await api.reviewExpense({
           headers: tenantHeader(),
           params: { id: input.id },
-          body: { approve: input.approve },
+          body: {
+            approve: input.approve,
+            ...(input.paidFromCashBoxId ? { paidFromCashBoxId: input.paidFromCashBoxId } : {}),
+          },
         }),
       ),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: cashKeys.all }),
-  });
-}
-
-export function useSettlementPreview() {
-  return useQuery({
-    queryKey: cashKeys.preview(),
-    queryFn: async () => unwrap(await api.previewSettlement({ headers: tenantHeader() })),
-  });
-}
-
-export function useSettlementsList() {
-  return useQuery({
-    queryKey: cashKeys.settlements(),
-    queryFn: async () =>
-      unwrap(await api.listSettlements({ headers: tenantHeader(), query: { page: 1, pageSize: PAGE_SIZE } })),
-  });
-}
-
-export function useCloseSettlement() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async () =>
-      unwrap(await api.closeSettlement({ headers: tenantHeader(), body: {} })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: cashKeys.all }),
   });
 }

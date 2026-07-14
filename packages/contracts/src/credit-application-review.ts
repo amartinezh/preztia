@@ -215,9 +215,12 @@ export const offerPlansOutput = z.object({
 });
 
 // ── Decisiones del coordinador ──────────────────────────────────────────────
-// Aprobar reusa los términos del crédito (fuente única) y añade el motivo de la decisión.
+// Aprobar reusa los términos del crédito (fuente única), añade el motivo de la decisión y la
+// caja/cuenta de la que sale el dinero: el otorgamiento debita ese saldo de forma atómica
+// (asiento DISBURSEMENT), para que el libro de cajas siempre refleje el efectivo/banco real.
 export const approveApplicationInput = grantCreditInput.extend({
   reason: z.string().min(3).max(500),
+  fundingCashBoxId: z.string().uuid(),
 });
 export type ApproveApplicationInput = z.infer<typeof approveApplicationInput>;
 

@@ -8,6 +8,7 @@ import type {
 } from '@preztiaos/application';
 import type { ScheduledInstallment } from '@preztiaos/application';
 import { withTenantTxFor, type Tx } from '../../tenancy/unit-of-work';
+import { postCashOut } from '../../cash/cash-out-poster';
 
 const DECISION_EVENT = 'MANUAL_REVIEW_DECISION';
 
@@ -54,6 +55,7 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
     decidedBy: string;
     credit: GrantedCreditData;
     schedule: readonly ScheduledInstallment[];
+    fundingCashBoxId: string;
     contact?: { phone: string };
     override?: boolean;
   }): Promise<void> {
@@ -72,6 +74,17 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
           : {}),
       });
       await this.persistCredit(tx, input.credit, input.schedule, input.contact);
+      // El dinero SALE de la caja/cuenta origen en la misma transacción: el crédito nace fondeado
+      // y el libro refleja el efectivo/banco real. Si el saldo no alcanza, todo se revierte.
+      await postCashOut(tx, {
+        tenantId: input.tenantId,
+        cashBoxId: input.fundingCashBoxId,
+        kind: 'DISBURSEMENT',
+        amountMinor: input.credit.principalMinor,
+        reason: 'Desembolso de crédito',
+        createdBy: input.decidedBy,
+        origin: { creditId: input.credit.id },
+      });
     });
   }
 

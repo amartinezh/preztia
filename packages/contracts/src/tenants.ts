@@ -82,6 +82,25 @@ export const updateTenantAdminInput = z
   });
 export type UpdateTenantAdminInput = z.infer<typeof updateTenantAdminInput>;
 
+// Purga de datos de PRUEBA de un tenant: borra todo lo transaccional (solicitudes,
+// créditos, cuotas, pagos, documentos/archivos, conversaciones, caja, auditoría) pero
+// CONSERVA el tenant, sus usuarios y su configuración (zonas, canales, cuentas, planes,
+// catálogo KYC) para poder volver a operar de cero. Operación irreversible y destructiva:
+// se protege con una contraseña de confirmación fijada por entorno (no viaja en el token).
+export const purgeTenantDataInput = z.object({
+  confirmationPassword: z.string().min(1),
+});
+export type PurgeTenantDataInput = z.infer<typeof purgeTenantDataInput>;
+
+// Reporte de la purga: filas borradas por tabla y objetos eliminados de MinIO. Sirve como
+// retroalimentación al super admin (qué tanto se limpió) sin exponer datos de negocio.
+export const purgeTenantDataOutput = z.object({
+  tables: z.record(z.string(), z.number().int()),
+  rowsDeleted: z.number().int(),
+  filesDeleted: z.number().int(),
+});
+export type PurgeTenantDataOutput = z.infer<typeof purgeTenantDataOutput>;
+
 // El PLANO DE CONTROL no lleva `x-tenant-id`; el `Authorization: Bearer` lo inyecta el
 // fetcher del cliente y el servidor lo valida con el SuperAdminGuard.
 export const tenantsContract = c.router({
@@ -138,5 +157,14 @@ export const tenantsContract = c.router({
     body: updateTenantAdminInput,
     responses: { 200: tenantAdminOutput.omit({ createdAt: true }) },
     summary: "Activa/desactiva o restablece la contraseña de un admin",
+  },
+  purgeTenantData: {
+    method: "POST",
+    path: "/admin/tenants/:id/purge",
+    pathParams: z.object({ id: z.string().uuid() }),
+    body: purgeTenantDataInput,
+    responses: { 200: purgeTenantDataOutput },
+    summary:
+      "Purga los datos transaccionales de un tenant (reinicio de pruebas); conserva usuarios y configuración",
   },
 });

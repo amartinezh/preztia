@@ -64,8 +64,10 @@ export function DonutChart({
     <Row className="items-center gap-4">
       <View style={{ width: size, height: size }}>
         <Svg width={size} height={size}>
-          {/* Rotamos el lienzo para que el primer arco arranque en las 12 en punto. */}
-          <G rotation={-90} origin={`${center}, ${center}`}>
+          {/* Rotamos el lienzo para que el primer arco arranque en las 12 en punto. Usamos la prop
+              estándar SVG `transform="rotate(a cx cy)"` (no `rotation`/`origin`) porque en web esas
+              props generan el atributo DOM inválido `transform-origin`. */}
+          <G transform={`rotate(-90 ${center} ${center})`}>
             <Circle
               cx={center}
               cy={center}

@@ -10,6 +10,7 @@ import {
 } from '@preztiaos/domain';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { recordFraudAssessmentTx } from './fraud-assessment.recorder';
+import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
 
 export interface ManualVerifyResult {
   id: string;
@@ -42,6 +43,7 @@ export class ManualVerifyPaymentRepository {
           status: schema.payment.status,
           amountMinor: schema.payment.amountMinor,
           currency: schema.payment.currency,
+          receiverPixKey: schema.payment.receiverPixKey,
         })
         .from(schema.payment)
         .where(eq(schema.payment.id, input.paymentId))
@@ -121,6 +123,18 @@ export class ManualVerifyPaymentRepository {
         .update(schema.payment)
         .set({ status: 'VERIFIED', amountMinor, verifiedAt: new Date() })
         .where(eq(schema.payment.id, pay.id));
+
+      // La confirmación humana es lo que hace ENTRAR el dinero a su caja: postea PAYMENT_IN a la
+      // caja bancaria (por llave PIX) o a Tránsito si no se identifica, en esta misma transacción.
+      // Idempotente por `cash_tx_payment_idx`: un pago se rutea a una sola caja.
+      await routeVerifiedPaymentToBox(tx, {
+        tenantId: input.tenantId,
+        paymentId: pay.id,
+        receiverPixKey: pay.receiverPixKey,
+        amountMinor,
+        currency: pay.currency,
+        createdBy: input.decidedBy,
+      });
 
       await tx.insert(schema.paymentEvent).values({
         tenantId: input.tenantId,

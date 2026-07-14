@@ -45,6 +45,29 @@ export interface TenantStore {
   findById(id: string): Promise<TenantRecord | null>;
 }
 
+/** Filas borradas por tabla (nombre físico → conteo) durante una purga de datos. */
+export type PurgeCounts = Readonly<Record<string, number>>;
+
+/**
+ * Purga ATÓMICA de los datos transaccionales de un tenant (reinicio de pruebas): borra
+ * solicitudes, créditos, cuotas, pagos, documentos, conversaciones, caja y auditoría, en
+ * orden seguro de claves foráneas. NO toca el tenant, sus usuarios ni la configuración
+ * (zonas, canales, cuentas, planes, catálogo). El orden de borrado es detalle de
+ * persistencia y vive en la infraestructura.
+ */
+export interface TenantDataPurger {
+  purge(tenantId: string): Promise<PurgeCounts>;
+}
+
+/**
+ * Purga de los archivos de un tenant en el almacén de objetos (MinIO): documentos KYC y
+ * comprobantes cifrados en reposo. Devuelve cuántos objetos se eliminaron. Es "best-effort"
+ * fuera de la transacción de BD: los objetos huérfanos no tienen referencias.
+ */
+export interface TenantFilePurger {
+  purge(tenantId: string): Promise<number>;
+}
+
 // ---------------------------------------------------------------------------
 // Plano de datos: usuarios del tenant
 // ---------------------------------------------------------------------------

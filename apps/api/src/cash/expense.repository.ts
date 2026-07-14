@@ -7,6 +7,7 @@ import type {
   NewExpense,
 } from '@preztiaos/application';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { postCashOut } from './cash-out-poster';
 
 // Adaptador del puerto ExpenseStore: opera `expense` bajo el rol `app` + RLS. Sin reglas.
 @Injectable()
@@ -43,6 +44,7 @@ export class ExpenseDrizzleRepository implements ExpenseStore {
     status: ExpenseRecord['status'];
     reviewedBy: string;
     reviewedAt: Date;
+    paidFromCashBoxId?: string;
   }): Promise<ExpenseRecord | null> {
     return withTenantTxFor(input.tenantId, async (tx) => {
       const [row] = await tx
@@ -54,7 +56,23 @@ export class ExpenseDrizzleRepository implements ExpenseStore {
         })
         .where(eq(schema.expense.id, input.expenseId))
         .returning();
-      return row ? toRecord(row) : null;
+      if (!row) return null;
+
+      // El gasto aprobado SALE de la caja/cuenta pagadora en la misma transacción: si el saldo no
+      // alcanza, todo se revierte (sin gasto aprobado sin egreso; sin sobregiro).
+      if (input.status === 'APPROVED' && input.paidFromCashBoxId) {
+        await postCashOut(tx, {
+          tenantId: input.tenantId,
+          cashBoxId: input.paidFromCashBoxId,
+          kind: 'EXPENSE',
+          amountMinor: row.amountMinor,
+          reason: row.description,
+          createdBy: input.reviewedBy,
+          origin: { expenseId: row.id },
+        });
+      }
+
+      return toRecord(row);
     });
   }
 }

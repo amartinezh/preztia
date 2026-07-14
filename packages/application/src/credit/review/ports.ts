@@ -50,7 +50,11 @@ export interface ApplicationDecisionStore {
     applicationId: string;
   }): Promise<ApplicationDecisionSnapshot | null>;
 
-  /** Marca APPROVED, audita la decisión y genera el crédito, todo en una transacción. */
+  /**
+   * Marca APPROVED, audita la decisión, genera el crédito y **debita el desembolso** de la
+   * caja/cuenta origen (`fundingCashBoxId`), todo en una transacción. Si el saldo no alcanza,
+   * la transacción falla completa (no queda crédito activo sin egreso ni saldo negativo).
+   */
   approveAndGrant(input: {
     tenantId: string;
     applicationId: string;
@@ -58,6 +62,8 @@ export interface ApplicationDecisionStore {
     decidedBy: string;
     credit: GrantedCreditData;
     schedule: readonly ScheduledInstallment[];
+    /** Caja/cuenta de la que sale el dinero del préstamo (asiento DISBURSEMENT). */
+    fundingCashBoxId: string;
     contact?: { phone: string };
     /** true si se creó sin aceptación del cliente (override del administrador): queda auditado. */
     override?: boolean;

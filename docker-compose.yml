@@ -6,7 +6,8 @@ services:
       POSTGRES_USER: preztia
       POSTGRES_PASSWORD: preztia
       POSTGRES_DB: preztiaos
-    ports: ["5432:5432"]
+    # Host 5442 → contenedor 5432: el 5432 del host lo ocupa otro proyecto (antigravity_db).
+    ports: ["5442:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/initdb:/docker-entrypoint-initdb.d:ro
@@ -19,7 +20,8 @@ services:
   redis:
     image: redis:7
     container_name: preztiaos-redis
-    ports: ["6379:6379"]
+    # Host 6389 → contenedor 6379: el 6379 del host lo ocupa otro proyecto (antigravity_redis).
+    ports: ["6389:6379"]
 
   minio:
     image: minio/minio:latest

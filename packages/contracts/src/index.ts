@@ -9,7 +9,6 @@ export * from "./payment-plans";
 export * from "./accounts";
 export * from "./expenses";
 export * from "./cash-boxes";
-export * from "./settlements";
 export * from "./daily-report";
 export * from "./change-requests";
 export * from "./routes";

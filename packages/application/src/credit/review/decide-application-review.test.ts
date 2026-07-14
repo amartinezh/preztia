@@ -18,13 +18,13 @@ import type { TenantSettingsStore } from "../../tenant/settings";
 
 /** Store en memoria que registra lo persistido para verificar la orquestación. */
 class FakeStore implements ApplicationDecisionStore {
-  approvals: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; contact?: { phone: string }; override?: boolean }[] = [];
+  approvals: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; fundingCashBoxId: string; contact?: { phone: string }; override?: boolean }[] = [];
   rejections: { tenantId: string; applicationId: string; reason: string; decidedBy: string }[] = [];
   constructor(private readonly snapshot: ApplicationDecisionSnapshot | null) {}
   async loadDecisionSnapshot() {
     return this.snapshot;
   }
-  async approveAndGrant(input: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; contact?: { phone: string }; override?: boolean }) {
+  async approveAndGrant(input: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; fundingCashBoxId: string; contact?: { phone: string }; override?: boolean }) {
     this.approvals.push(input);
   }
   async reject(input: { tenantId: string; applicationId: string; reason: string; decidedBy: string }) {
@@ -48,6 +48,7 @@ const approveCmd = {
   interestPct: 200,
   installmentsCount: 10,
   currency: "BRL",
+  fundingCashBoxId: "33333333-3333-3333-3333-333333333333",
 };
 
 describe("ApproveApplicationReviewHandler", () => {
@@ -67,6 +68,8 @@ describe("ApproveApplicationReviewHandler", () => {
     const total = persisted!.schedule.reduce((s, i) => s + i.amountDueMinor, 0);
     expect(total).toBe(120_000);
     expect(persisted!.reason).toBe(approveCmd.reason);
+    // El desembolso se dirige a la caja/cuenta origen elegida por el coordinador.
+    expect(persisted!.fundingCashBoxId).toBe(approveCmd.fundingCashBoxId);
     // El teléfono del deudor cae por defecto al del solicitante del expediente.
     expect(persisted!.contact?.phone).toBe("5511999990000");
   });

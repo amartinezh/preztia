@@ -65,11 +65,50 @@ describe("assertCanPost", () => {
     expect(() => canPost("BANK", 50000, out)).not.toThrow();
   });
 
+  it("un desembolso (DISBURSEMENT) no puede sobregirar la caja/cuenta origen", () => {
+    const out = intent({ direction: "OUT", kind: "DISBURSEMENT", amountMinor: 100000, reason: "Desembolso crédito" });
+    expect(() => canPost("BANK", 99999, out)).toThrow(/insuficiente/i);
+    expect(() => canPost("BANK", 100000, out)).not.toThrow();
+  });
+
   it("la caja de tránsito solo libera fondos por transferencia", () => {
     const withdrawal = intent({ direction: "OUT", kind: "WITHDRAWAL", amountMinor: 1000, reason: "x" });
     const transfer = intent({ direction: "OUT", kind: "TRANSFER", amountMinor: 1000, reason: "Reclasificación" });
     expect(() => canPost("TRANSIT", 5000, withdrawal)).toThrow(/transferencia/i);
     expect(() => canPost("TRANSIT", 5000, transfer)).not.toThrow();
+  });
+});
+
+describe("cuadre de tesorería (conservación del dinero)", () => {
+  // Aplica un asiento a una caja: valida el invariante (no sobregiro) y devuelve el nuevo saldo.
+  function apply(type: CashBoxType, balanceMinor: number, i: PostingIntent): number {
+    assertCanPost({ type, currentBalanceMinor: balanceMinor, intent: i });
+    return balanceMinor + (i.direction === "IN" ? i.amountMinor : -i.amountMinor);
+  }
+
+  it("desembolso/cobro/gasto no sobregiran y Σ saldos = inicial − desembolsos + cobros − gastos", () => {
+    let efectivo = 1_000_00; // caja de oficina
+    let banco = 5_000_00; // cuenta bancaria
+    const inicial = efectivo + banco;
+
+    // Desembolso de un crédito: sale de la cuenta bancaria (OUT DISBURSEMENT).
+    banco = apply("BANK", banco, intent({ direction: "OUT", kind: "DISBURSEMENT", amountMinor: 800_00, reason: "Desembolso de crédito" }));
+    // Cobro del cliente por PIX: entra a la cuenta bancaria (IN PAYMENT_IN).
+    banco = apply("BANK", banco, intent({ direction: "IN", kind: "PAYMENT_IN", amountMinor: 120_00 }));
+    // Gasto aprobado, pagado desde la caja de efectivo (OUT EXPENSE; CASH exige motivo).
+    efectivo = apply("CASH", efectivo, intent({ direction: "OUT", kind: "EXPENSE", amountMinor: 50_00, reason: "Combustible" }));
+
+    const liquidez = efectivo + banco;
+    // Invariante de conservación: la liquidez refleja exactamente los movimientos del período.
+    expect(liquidez).toBe(inicial - 800_00 + 120_00 - 50_00);
+    expect(liquidez).toBe(5_270_00);
+  });
+
+  it("un desembolso que excede la liquidez de la caja origen se rechaza (protege el dinero)", () => {
+    const banco = 500_00;
+    expect(() =>
+      apply("BANK", banco, intent({ direction: "OUT", kind: "DISBURSEMENT", amountMinor: 500_01, reason: "Desembolso" })),
+    ).toThrow(/insuficiente/i);
   });
 });
 

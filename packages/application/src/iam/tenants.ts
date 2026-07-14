@@ -8,6 +8,9 @@ import {
 } from "@preztiaos/domain";
 import type {
   PasswordHasher,
+  PurgeCounts,
+  TenantDataPurger,
+  TenantFilePurger,
   TenantRecord,
   TenantStore,
   UserStore,
@@ -149,4 +152,39 @@ export interface TenantAdminRecord {
   readonly id: string;
   readonly email: string;
   readonly active: boolean;
+}
+
+export interface PurgeTenantDataReport {
+  /** Filas borradas por tabla (nombre físico → conteo). */
+  readonly tables: PurgeCounts;
+  /** Total de filas borradas en toda la base. */
+  readonly rowsDeleted: number;
+  /** Objetos eliminados del almacén de archivos (MinIO). */
+  readonly filesDeleted: number;
+}
+
+/**
+ * Reinicia los datos de PRUEBA de un tenant: borra todo lo transaccional (BD + archivos)
+ * conservando el tenant, sus usuarios y su configuración, para volver a operar de cero.
+ * Falla rápido si el tenant no existe. La autorización (contraseña de confirmación) se
+ * resuelve en la frontera HTTP; aquí solo se orquesta la purga. Primero la BD (atómica) y
+ * luego los archivos: si quedaran objetos huérfanos en MinIO no tienen referencias.
+ */
+export class PurgeTenantDataHandler {
+  constructor(
+    private readonly tenants: TenantStore,
+    private readonly data: TenantDataPurger,
+    private readonly files: TenantFilePurger,
+  ) {}
+
+  async execute(tenantId: string): Promise<PurgeTenantDataReport> {
+    const tenant = await this.tenants.findById(tenantId);
+    if (!tenant) throw new NotFoundError("El tenant no existe");
+
+    const tables = await this.data.purge(tenantId);
+    const filesDeleted = await this.files.purge(tenantId);
+
+    const rowsDeleted = Object.values(tables).reduce((sum, n) => sum + n, 0);
+    return { tables, rowsDeleted, filesDeleted };
+  }
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Pressable } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import type { Expense } from "@preztiaos/contracts";
 import {
@@ -10,6 +11,7 @@ import {
   Input,
   ListItem,
   majorToMinor,
+  minorToMajor,
   MoneyText,
   Row,
   Spinner,
@@ -24,14 +26,12 @@ import { can } from "@/core/auth/authorization";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import {
-  useCloseSettlement,
   useCreateExpense,
   useDailyReport,
   useExpensesList,
   useReviewExpense,
-  useSettlementPreview,
-  useSettlementsList,
 } from "../api/queries";
+import { useCashDashboard } from "../api/boxes-queries";
 
 const EXPENSE_TONE: Record<Expense["status"], BadgeTone> = {
   PENDING: "warning",
@@ -39,7 +39,11 @@ const EXPENSE_TONE: Record<Expense["status"], BadgeTone> = {
   REJECTED: "danger",
 };
 
-/** Caja: reporte diario, liquidada (cierre encadenado) y gastos (maker-checker). */
+/**
+ * Caja / Tesorería: el dinero real al frente (liquidez del libro de cajas), seguido del reporte
+ * diario (P&L de cartera) y los gastos (maker-checker). El detalle por caja (saldos, arqueo,
+ * conciliación, movimientos) vive en "Cajas y cuentas".
+ */
 export function CashScreen() {
   const { t } = useT();
   const router = useRouter();
@@ -58,11 +62,46 @@ export function CashScreen() {
             onPress={() => router.push("/cash/boxes" as Href)}
           />
         </Row>
+        <TreasurySummaryCard onOpenBoxes={() => router.push("/cash/boxes" as Href)} />
         <DailyReportCard />
-        <SettlementSection canManage={manages} />
         <ExpensesSection canManage={manages} />
       </Stack>
     </Screen>
+  );
+}
+
+/**
+ * Resumen de tesorería (fuente única = libro de cajas): liquidez total, efectivo y banco, y la
+ * alerta de dinero en tránsito. Toca "Ver detalle" para ir a las cajas (arqueo, conciliación).
+ */
+function TreasurySummaryCard({ onOpenBoxes }: { onOpenBoxes: () => void }) {
+  const { t } = useT();
+  const query = useCashDashboard();
+  if (query.isPending) return <Spinner label={t("common.loading")} />;
+  if (query.isError || !query.data) return <Banner tone="danger" title={t("errors.network")} />;
+  const d = query.data;
+  return (
+    <Stack gap="sm">
+      <Text variant="heading">{t("cash.treasury.title")}</Text>
+      <Card>
+        <Stack gap="sm">
+          <Stack gap="xs">
+            <Text tone="muted">{t("cash.boxes.liquidity")}</Text>
+            <MoneyText variant="heading" amountMinor={d.liquidityTotalMinor} currency={d.currency} />
+          </Stack>
+          <Line label={t("cash.boxes.cashCustody")} amountMinor={d.cashTotalMinor} currency={d.currency} />
+          <Line label={t("cash.boxes.bankTotal")} amountMinor={d.bankTotalMinor} currency={d.currency} />
+          {d.unidentifiedMinor > 0 ? (
+            <Banner
+              tone="warning"
+              title={t("cash.boxes.unidentified")}
+              description={`${minorToMajor(d.unidentifiedMinor)} ${d.currency}`}
+            />
+          ) : null}
+          <Button label={t("cash.treasury.detail")} variant="secondary" size="sm" block onPress={onOpenBoxes} />
+        </Stack>
+      </Card>
+    </Stack>
   );
 }
 
@@ -102,60 +141,18 @@ function DailyReportCard() {
   );
 }
 
-function SettlementSection({ canManage }: { canManage: boolean }) {
-  const { t } = useT();
-  const preview = useSettlementPreview();
-  const history = useSettlementsList();
-  const close = useCloseSettlement();
-  const [error, setError] = useState<string | null>(null);
-
-  const onClose = () => {
-    setError(null);
-    close.mutate(undefined, {
-      onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
-    });
-  };
-
-  return (
-    <Stack gap="sm">
-      <Text variant="heading">{t("cash.settlement.title")}</Text>
-      {error ? <Banner tone="danger" title={error} /> : null}
-      {canManage && preview.data ? (
-        <Card>
-          <Stack gap="xs">
-            <Line label={t("cash.field.previousCash")} amountMinor={preview.data.cajaAnteriorMinor} currency={preview.data.currency} />
-            <Line label={t("cash.field.collected")} amountMinor={preview.data.totalCobradoMinor} currency={preview.data.currency} />
-            <Line label={t("cash.field.lent")} amountMinor={preview.data.totalPrestadoMinor} currency={preview.data.currency} />
-            <Line label={t("cash.field.expenses")} amountMinor={preview.data.gastosMinor} currency={preview.data.currency} />
-            <Line label={t("cash.field.currentCash")} amountMinor={preview.data.cajaActualMinor} currency={preview.data.currency} />
-            <Button label={t("cash.settlement.close")} loading={close.isPending} block onPress={onClose} />
-          </Stack>
-        </Card>
-      ) : null}
-      <Text variant="label" tone="muted">{t("cash.settlement.history")}</Text>
-      {history.data?.items.length ? (
-        history.data.items.map((s) => (
-          <ListItem
-            key={s.id}
-            title={new Date(s.createdAt).toLocaleDateString()}
-            subtitle={`${t("cash.field.currentCash")}`}
-            trailing={<MoneyText variant="body" amountMinor={s.cajaActualMinor} currency={"COP"} />}
-          />
-        ))
-      ) : (
-        <Text tone="muted">{t("cash.settlement.empty")}</Text>
-      )}
-    </Stack>
-  );
-}
-
 function ExpensesSection({ canManage }: { canManage: boolean }) {
   const { t } = useT();
   const list = useExpensesList();
   const create = useCreateExpense();
   const review = useReviewExpense();
+  // Aprobar un gasto lo paga desde una caja/cuenta (asiento EXPENSE OUT): saldos desde el dashboard.
+  const dashboard = useCashDashboard();
+  const fundableBoxes = (dashboard.data?.boxes ?? []).filter((b) => b.type !== "TRANSIT");
+  const currency = dashboard.data?.currency ?? "BRL";
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [paidFromCashBoxId, setPaidFromCashBoxId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const submit = () => {
@@ -177,6 +174,8 @@ function ExpensesSection({ canManage }: { canManage: boolean }) {
     );
   };
 
+  const hasPending = canManage && (list.data?.items.some((e) => e.status === "PENDING") ?? false);
+
   return (
     <Stack gap="sm">
       <Text variant="heading">{t("cash.expenses.title")}</Text>
@@ -192,6 +191,42 @@ function ExpensesSection({ canManage }: { canManage: boolean }) {
           <Button label={t("cash.expenses.request")} loading={create.isPending} block onPress={submit} />
         </Stack>
       </Card>
+
+      {/* Caja/cuenta pagadora: al aprobar, el gasto la debita (EXPENSE OUT). */}
+      {hasPending ? (
+        <Field label={t("cash.expenses.paidFrom")} hint={t("cash.expenses.paidFromHint")}>
+          {dashboard.isPending ? (
+            <Spinner label={t("common.loading")} />
+          ) : fundableBoxes.length === 0 ? (
+            <Banner tone="warning" title={t("cash.expenses.paidFromEmpty")} />
+          ) : (
+            <Stack gap="xs">
+              {fundableBoxes.map((b) => {
+                const isSelected = b.id === paidFromCashBoxId;
+                return (
+                  <Pressable
+                    key={b.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    onPress={() => setPaidFromCashBoxId(b.id)}
+                    className={`min-h-[48px] flex-row items-center justify-between rounded-xl border px-3 ${
+                      isSelected
+                        ? "border-brand-600 bg-brand-50 dark:bg-zinc-800"
+                        : "border-zinc-200 dark:border-zinc-700"
+                    }`}
+                  >
+                    <Text variant="label" tone={isSelected ? "primary" : "muted"}>
+                      {b.name}
+                    </Text>
+                    <MoneyText variant="label" amountMinor={b.balanceMinor} currency={b.currency} />
+                  </Pressable>
+                );
+              })}
+            </Stack>
+          )}
+        </Field>
+      ) : null}
+
       {list.data?.items.map((e) => (
         <ListItem
           key={e.id}
@@ -199,10 +234,18 @@ function ExpensesSection({ canManage }: { canManage: boolean }) {
           subtitle={t(`cash.status.${e.status}` as Parameters<typeof t>[0])}
           trailing={
             <Row className="items-center gap-2">
-              <MoneyText variant="body" amountMinor={e.amountMinor} currency={"COP"} />
+              <MoneyText variant="body" amountMinor={e.amountMinor} currency={currency} />
               {canManage && e.status === "PENDING" ? (
                 <>
-                  <Button label={t("cash.expenses.approve")} size="sm" onPress={() => review.mutate({ id: e.id, approve: true })} />
+                  <Button
+                    label={t("cash.expenses.approve")}
+                    size="sm"
+                    disabled={!paidFromCashBoxId}
+                    onPress={() =>
+                      paidFromCashBoxId &&
+                      review.mutate({ id: e.id, approve: true, paidFromCashBoxId })
+                    }
+                  />
                   <Button label={t("cash.expenses.reject")} variant="ghost" size="sm" onPress={() => review.mutate({ id: e.id, approve: false })} />
                 </>
               ) : (

@@ -15,25 +15,26 @@ export const dashboard = z.object({
   portfolioOutstandingMinor: z.number().int(),
   collectedTodayMinor: z.number().int(),
   lentTodayMinor: z.number().int(),
-  /** Saldo de caja al cierre de la última liquidada. */
+  /** Liquidez real del libro de cajas (Σ saldo de cajas CASH + BANK activas). */
   cashCurrentMinor: z.number().int(),
   pendingExpenses: z.number().int(),
   pendingChangeRequests: z.number().int(),
 });
 export type Dashboard = z.infer<typeof dashboard>;
 
-// Resumen de un cliente ("Resumen Cliente desde la última liquidada").
+// Resumen de un cliente (actividad del día: ya no hay liquidación que cierre el período).
 export const borrowerReport = z.object({
   borrowerId: z.string().uuid(),
   name: z.string().nullable(),
   nationalId: z.string(),
+  currency: z.string(),
   activeCredits: z.number().int(),
   settledCredits: z.number().int(),
   outstandingMinor: z.number().int(),
-  /** Lo que debió pagar desde la última liquidada (cuotas vencidas en la ventana). */
-  dueSinceLastSettlementMinor: z.number().int(),
-  /** Lo que efectivamente pagó (abonos) desde la última liquidada. */
-  paidSinceLastSettlementMinor: z.number().int(),
+  /** Lo que debe pagar hoy (cuotas que vencen hoy). */
+  dueTodayMinor: z.number().int(),
+  /** Lo que efectivamente pagó (abonos) hoy. */
+  paidTodayMinor: z.number().int(),
 });
 export type BorrowerReport = z.infer<typeof borrowerReport>;
 
@@ -60,7 +61,7 @@ export const reportingContract = c.router({
     pathParams: z.object({ id: z.string().uuid() }),
     headers: tenantHeaders,
     responses: { 200: borrowerReport },
-    summary: "Resumen del cliente desde la última liquidada",
+    summary: "Resumen del cliente con su actividad del día",
   },
   exportAccounts: {
     method: "GET",

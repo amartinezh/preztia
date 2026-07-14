@@ -17,7 +17,6 @@ import type {
   DailyReport,
   Expense,
   ExpenseStatus,
-  Settlement,
 } from '@preztiaos/contracts';
 import type { CashTxDirection, CashTxKind } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
@@ -35,7 +34,7 @@ function maskAccountNumber(accountNumber: string | null): string | null {
   return `••••${digits.slice(-ACCOUNT_MASK_VISIBLE_DIGITS)}`;
 }
 
-// Read models de CAJA: listado de gastos, historial de liquidadas y reporte diario. Solo
+// Read models de CAJA: listado de gastos, dashboard financiero y reporte diario (P&L). Solo
 // lectura; RLS aísla por tenant. La moneda la resuelve el controlador por tenant (tenant_config).
 
 @Injectable()
@@ -69,38 +68,6 @@ export class CashQueryRepository {
         status: row.status,
         reviewedBy: row.reviewedBy,
         reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
-        createdAt: row.createdAt.toISOString(),
-      }));
-      return { items, total: Number(totalRow?.value ?? 0) };
-    });
-  }
-
-  async listSettlements(input: {
-    tenantId: string;
-    page: number;
-    pageSize: number;
-  }): Promise<{ items: Settlement[]; total: number }> {
-    return withTenantTxFor(input.tenantId, async (tx) => {
-      const [totalRow] = await tx
-        .select({ value: count() })
-        .from(schema.settlement);
-      const rows = await tx
-        .select()
-        .from(schema.settlement)
-        .orderBy(desc(schema.settlement.createdAt))
-        .limit(input.pageSize)
-        .offset((input.page - 1) * input.pageSize);
-      const items: Settlement[] = rows.map((row) => ({
-        id: row.id,
-        periodStart: row.periodStart.toISOString(),
-        periodEnd: row.periodEnd.toISOString(),
-        cajaAnteriorMinor: row.cajaAnteriorMinor,
-        totalCobradoMinor: row.totalCobradoMinor,
-        totalPrestadoMinor: row.totalPrestadoMinor,
-        gastosMinor: row.gastosMinor,
-        cajaActualMinor: row.cajaActualMinor,
-        cuentasNuevas: row.cuentasNuevas,
-        cuentasTerminadas: row.cuentasTerminadas,
         createdAt: row.createdAt.toISOString(),
       }));
       return { items, total: Number(totalRow?.value ?? 0) };

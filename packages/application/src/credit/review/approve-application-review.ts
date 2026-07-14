@@ -28,6 +28,8 @@ export interface ApproveApplicationReviewCommand {
   readonly installmentsCount: number;
   readonly currency: string;
   readonly frequency?: ScheduleFrequency;
+  /** Caja/cuenta de la que sale el dinero del préstamo (asiento DISBURSEMENT atómico). */
+  readonly fundingCashBoxId: string;
   /** Teléfono del deudor; por defecto el del solicitante del expediente. */
   readonly borrowerPhone?: string;
 }
@@ -100,6 +102,7 @@ export class ApproveApplicationReviewHandler {
       applicationId: cmd.applicationId,
       reason: cmd.reason,
       decidedBy: cmd.decidedBy,
+      fundingCashBoxId: cmd.fundingCashBoxId,
       override,
       credit: {
         id: creditId,

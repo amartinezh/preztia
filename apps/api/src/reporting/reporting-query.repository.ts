@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type { BorrowerReport, Dashboard } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
 // Read models de REPORTERÍA (CQRS): panel del tenant, resumen de cliente y export CSV. Derivan
 // de cartera/pagos/caja/operación; solo lectura, RLS aísla por tenant.
@@ -70,11 +71,22 @@ export class ReportingQueryRepository {
           ),
         );
 
+      // Caja actual = liquidez real del libro: Σ saldo de cajas CASH + BANK activas (fuente única).
       const [cash] = await tx
-        .select({ v: schema.settlement.cajaActualMinor })
-        .from(schema.settlement)
-        .orderBy(desc(schema.settlement.createdAt))
-        .limit(1);
+        .select({
+          v: sql<number>`COALESCE(SUM(CASE WHEN ${schema.cashTransaction.direction} = 'IN' THEN ${schema.cashTransaction.amountMinor} ELSE -${schema.cashTransaction.amountMinor} END), 0)`,
+        })
+        .from(schema.cashTransaction)
+        .innerJoin(
+          schema.cashBox,
+          eq(schema.cashBox.id, schema.cashTransaction.cashBoxId),
+        )
+        .where(
+          and(
+            inArray(schema.cashBox.type, ['CASH', 'BANK']),
+            eq(schema.cashBox.active, true),
+          ),
+        );
 
       const [pendingExp] = await tx
         .select({ v: count() })
@@ -117,14 +129,8 @@ export class ReportingQueryRepository {
         .limit(1);
       if (!borrower) return null;
 
-      // Corte = fin de la última liquidada (o epoch si no hay).
-      const [lastSettlement] = await tx
-        .select({ periodEnd: schema.settlement.periodEnd })
-        .from(schema.settlement)
-        .orderBy(desc(schema.settlement.createdAt))
-        .limit(1);
-      const cutoffTs = lastSettlement?.periodEnd ?? new Date(0);
-      const cutoffDate = cutoffTs.toISOString().slice(0, 10);
+      // Ventana = el día de hoy (operación diaria; ya no hay liquidación que cierre el período).
+      const dayStart = new Date(`${today}T00:00:00Z`);
 
       const [activeC] = await tx
         .select({ v: count() })
@@ -148,7 +154,7 @@ export class ReportingQueryRepository {
       const [outstanding] = await tx
         .select({
           v: sql<number>`COALESCE(SUM(${schema.installment.amountDueMinor} - ${schema.installment.paidMinor}), 0)`,
-          due: sql<number>`COALESCE(SUM(${schema.installment.amountDueMinor}) FILTER (WHERE ${schema.installment.dueDate} > ${cutoffDate} AND ${schema.installment.dueDate} <= ${today}), 0)`,
+          due: sql<number>`COALESCE(SUM(${schema.installment.amountDueMinor} - ${schema.installment.paidMinor}) FILTER (WHERE ${schema.installment.dueDate} = ${today}), 0)`,
         })
         .from(schema.installment)
         .innerJoin(
@@ -173,7 +179,7 @@ export class ReportingQueryRepository {
         .where(
           and(
             eq(schema.credit.borrowerId, input.borrowerId),
-            sql`${schema.paymentAllocation.createdAt} > ${cutoffTs.toISOString()}::timestamptz`,
+            gte(schema.paymentAllocation.createdAt, dayStart),
           ),
         );
 
@@ -181,11 +187,12 @@ export class ReportingQueryRepository {
         borrowerId: input.borrowerId,
         name: fullName(borrower.firstName, borrower.lastName),
         nationalId: borrower.nationalId,
+        currency: await resolveTenantCurrency(input.tenantId),
         activeCredits: Number(activeC?.v ?? 0),
         settledCredits: Number(settledC?.v ?? 0),
         outstandingMinor: Number(outstanding?.v ?? 0),
-        dueSinceLastSettlementMinor: Number(outstanding?.due ?? 0),
-        paidSinceLastSettlementMinor: Number(paid?.v ?? 0),
+        dueTodayMinor: Number(outstanding?.due ?? 0),
+        paidTodayMinor: Number(paid?.v ?? 0),
       };
     });
   }

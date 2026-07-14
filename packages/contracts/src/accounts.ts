@@ -28,8 +28,8 @@ export const accountRow = z.object({
   paidCount: z.number().int(),
   daysOverdue: z.number().int(),
   outstandingMinor: z.number().int(),
-  /** Cobrado en esta cuenta aún no incluido en una liquidada ("Sin Liquidar"). */
-  unsettledMinor: z.number().int(),
+  /** Abonos aplicados HOY a esta cuenta ("Cobrado hoy"). */
+  collectedTodayMinor: z.number().int(),
   /** Saldo de la(s) cuota(s) que vencen hoy ("Pago en Fecha"). */
   dueTodayMinor: z.number().int(),
   currency: z.string(),

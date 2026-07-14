@@ -28,6 +28,7 @@ import {
 type Kind = NonNullable<TransactionFilters["kind"]>;
 const KINDS: readonly Kind[] = [
   "PAYMENT_IN",
+  "DISBURSEMENT",
   "WITHDRAWAL",
   "EXPENSE",
   "TRANSFER",

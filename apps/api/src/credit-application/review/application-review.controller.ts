@@ -234,6 +234,7 @@ export class ApplicationReviewController {
       principalMinor: dto.principalMinor,
       interestPct: dto.interestPct,
       installmentsCount: dto.installmentsCount,
+      fundingCashBoxId: dto.fundingCashBoxId,
       currency: await resolveTenantCurrency(tenant),
       ...(dto.borrowerPhone ? { borrowerPhone: dto.borrowerPhone } : {}),
     });

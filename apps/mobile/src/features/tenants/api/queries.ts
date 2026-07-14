@@ -68,6 +68,20 @@ export function useDeleteTenant() {
   });
 }
 
+// Purga de datos de prueba de un tenant (conserva usuarios y configuración). Exige la
+// contraseña de confirmación "quemada" por entorno; el backend la valida en tiempo constante.
+export function usePurgeTenantData() {
+  return useMutation({
+    mutationFn: async (input: { id: string; confirmationPassword: string }) =>
+      unwrap(
+        await api.purgeTenantData({
+          params: { id: input.id },
+          body: { confirmationPassword: input.confirmationPassword },
+        }),
+      ),
+  });
+}
+
 export function useTenantAdminsList(tenantId: string) {
   return useInfiniteQuery({
     queryKey: tenantKeys.admins(tenantId),

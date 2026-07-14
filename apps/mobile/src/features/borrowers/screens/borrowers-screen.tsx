@@ -180,15 +180,15 @@ function BorrowerReportModal({
             <ReportRow label={t("reports.settledCredits")} value={String(query.data.settledCredits)} />
             <Row className="justify-between">
               <Text tone="muted">{t("reports.debt")}</Text>
-              <MoneyText variant="label" amountMinor={query.data.outstandingMinor} currency="COP" />
+              <MoneyText variant="label" amountMinor={query.data.outstandingMinor} currency={query.data.currency} />
             </Row>
             <Row className="justify-between">
               <Text tone="muted">{t("reports.due")}</Text>
-              <MoneyText variant="label" amountMinor={query.data.dueSinceLastSettlementMinor} currency="COP" />
+              <MoneyText variant="label" amountMinor={query.data.dueTodayMinor} currency={query.data.currency} />
             </Row>
             <Row className="justify-between">
               <Text tone="muted">{t("reports.paid")}</Text>
-              <MoneyText variant="label" amountMinor={query.data.paidSinceLastSettlementMinor} currency="COP" />
+              <MoneyText variant="label" amountMinor={query.data.paidTodayMinor} currency={query.data.currency} />
             </Row>
           </>
         )}

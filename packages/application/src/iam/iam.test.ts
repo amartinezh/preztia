@@ -12,9 +12,11 @@ import type {
   ZoneRecord,
   ZoneStore,
 } from "./ports";
+import type { TenantDataPurger, TenantFilePurger } from "./ports";
 import {
   CreateTenantHandler,
   CreateTenantAdminHandler,
+  PurgeTenantDataHandler,
   UpdateTenantAdminHandler,
 } from "./tenants";
 import { CreateUserHandler } from "./users";
@@ -204,6 +206,52 @@ describe("UpdateTenantAdminHandler", () => {
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
     expect(users.updates).toHaveLength(0);
+  });
+});
+
+describe("PurgeTenantDataHandler", () => {
+  const activeTenant: TenantRecord = { id: "t1", name: "Acme", slug: "acme", status: "ACTIVE" };
+  const tenantsFound: TenantStore = {
+    create: async () => undefined,
+    update: async () => null,
+    remove: async () => false,
+    findById: async () => activeTenant,
+  };
+
+  it("purga datos + archivos y reporta la suma de filas borradas", async () => {
+    const purgedFor: string[] = [];
+    const data: TenantDataPurger = {
+      purge: async (id) => {
+        purgedFor.push(id);
+        return { credit: 3, payment: 5, borrower: 2 };
+      },
+    };
+    const files: TenantFilePurger = { purge: async () => 7 };
+
+    const report = await new PurgeTenantDataHandler(tenantsFound, data, files).execute("t1");
+
+    expect(purgedFor).toEqual(["t1"]);
+    // INVARIANTE: rowsDeleted === Σ de los conteos por tabla.
+    expect(report.rowsDeleted).toBe(10);
+    expect(report.filesDeleted).toBe(7);
+    expect(report.tables).toEqual({ credit: 3, payment: 5, borrower: 2 });
+  });
+
+  it("falla si el tenant no existe y NO purga nada", async () => {
+    const missingTenant: TenantStore = { ...tenantsFound, findById: async () => null };
+    const data: TenantDataPurger = {
+      purge: async () => {
+        throw new Error("no debería llamarse");
+      },
+    };
+    const files: TenantFilePurger = {
+      purge: async () => {
+        throw new Error("no debería llamarse");
+      },
+    };
+    await expect(
+      new PurgeTenantDataHandler(missingTenant, data, files).execute("missing"),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 

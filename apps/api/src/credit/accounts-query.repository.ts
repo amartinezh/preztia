@@ -3,10 +3,9 @@ import {
   asc,
   desc,
   eq,
-  gt,
+  gte,
   ilike,
   inArray,
-  max,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -100,10 +99,11 @@ export class AccountsQueryRepository {
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize);
 
-      // "Sin Liquidar": abonos aplicados después de la última liquidada, por crédito.
-      const unsettledByCredit = await this.unsettledByCredit(
+      // "Cobrado hoy": abonos aplicados hoy, por crédito.
+      const collectedTodayByCredit = await this.collectedTodayByCredit(
         tx,
         rows.map((r) => r.creditId),
+        today,
       );
 
       const items: AccountRow[] = rows.map((row) => ({
@@ -119,7 +119,7 @@ export class AccountsQueryRepository {
         paidCount: Number(row.paidCount),
         daysOverdue: daysSince(row.earliestOverdue, today),
         outstandingMinor: Number(row.totalDue) - Number(row.totalPaid),
-        unsettledMinor: unsettledByCredit.get(row.creditId) ?? 0,
+        collectedTodayMinor: collectedTodayByCredit.get(row.creditId) ?? 0,
         dueTodayMinor: Number(row.dueToday),
         currency: row.currency,
         status: row.status,
@@ -225,24 +225,18 @@ export class AccountsQueryRepository {
   }
 
   /**
-   * Suma, por crédito, los abonos (payment_allocation) aplicados DESPUÉS de la última liquidada
-   * del tenant ("Sin Liquidar"). Antes de la primera liquidada, cuenta todo lo abonado.
+   * Suma, por crédito, los abonos (payment_allocation) aplicados HOY ("Cobrado hoy"). Ventana =
+   * el día de hoy (operación diaria; ya no hay liquidación que cierre el período).
    */
-  private async unsettledByCredit(
+  private async collectedTodayByCredit(
     tx: Parameters<Parameters<typeof withTenantTxFor>[1]>[0],
     creditIds: string[],
+    today: string,
   ): Promise<Map<string, number>> {
     const result = new Map<string, number>();
     if (creditIds.length === 0) return result;
 
-    const [lastSettlement] = await tx
-      .select({ periodEnd: max(schema.settlement.periodEnd) })
-      .from(schema.settlement);
-    const cutoff = lastSettlement?.periodEnd ?? null;
-
-    const conditions: SQL[] = [inArray(schema.installment.creditId, creditIds)];
-    if (cutoff) conditions.push(gt(schema.paymentAllocation.createdAt, cutoff));
-
+    const dayStart = new Date(`${today}T00:00:00Z`);
     const rows = await tx
       .select({
         creditId: schema.installment.creditId,
@@ -253,7 +247,12 @@ export class AccountsQueryRepository {
         schema.installment,
         eq(schema.installment.id, schema.paymentAllocation.installmentId),
       )
-      .where(and(...conditions))
+      .where(
+        and(
+          inArray(schema.installment.creditId, creditIds),
+          gte(schema.paymentAllocation.createdAt, dayStart),
+        ),
+      )
       .groupBy(schema.installment.creditId);
 
     for (const row of rows) result.set(row.creditId, Number(row.amount));
