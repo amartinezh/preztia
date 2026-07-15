@@ -60,7 +60,7 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       minio: { condition: service_started }
-    # Sin `ports`: solo Caddy alcanza la API por la red interna (api:3000).
+    # Sin `ports`: solo Caddy alcanza la API por la red interna (api:3010).
 
   # Migraciones de esquema (drizzle-kit). One-shot bajo perfil `migrate`: reutiliza la MISMA
   # imagen que `api` (trae drizzle-kit). No arranca con `up -d` normal.

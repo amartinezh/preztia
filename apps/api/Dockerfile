@@ -48,10 +48,10 @@ COPY --from=builder /app /app
 
 # Ejecuta como usuario sin privilegios (la imagen node trae el usuario `node`).
 USER node
-EXPOSE 3000
+EXPOSE 3010
 
 # Healthcheck sin binarios extra: GET / responde "Hello World!" (200).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
-  CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||3000)+'/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+  CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||3010)+'/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["node", "apps/api/dist/main.js"]
