@@ -86,7 +86,7 @@ pnpm --filter api seed:user
 Luego, en **dos terminales**:
 
 ```bash
-# Terminal A — API (http://localhost:3000)
+# Terminal A — API (http://localhost:3010)
 pnpm --filter api start
 
 # Terminal B — App (Web / iOS / Android)
@@ -95,8 +95,9 @@ pnpm --filter @preztiaos/mobile web        # navegador (abre la URL que muestra 
 # pnpm --filter @preztiaos/mobile android   # emulador Android
 ```
 
-> **Nota de puertos:** la API corre en **3000**; la app web abre su propia URL (Metro). En el
-> emulador de Android el host de la API es `10.0.2.2:3000`; en dispositivo físico define
+> **Nota de puertos:** la API corre en **3010** (no 3000, para evitar choques con otros proyectos
+> locales; configurable con `PORT` en `.env`); la app web abre su propia URL (Metro). En el
+> emulador de Android el host de la API es `10.0.2.2:3010`; en dispositivo físico define
 > `EXPO_PUBLIC_API_URL` con la IP LAN de tu máquina.
 
 ---

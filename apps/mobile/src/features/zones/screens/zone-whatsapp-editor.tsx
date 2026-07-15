@@ -22,6 +22,7 @@ import {
   useUpdateChannelCredentials,
   useWhatsappChannels,
 } from "@/features/settings/api/queries";
+import { useUpdateZone } from "../api/queries";
 
 type CredDraft = {
   accessToken: string;
@@ -75,6 +76,8 @@ export function ZoneWhatsappEditor({
           {t("zonesWa.hint")}
         </Text>
 
+        <ZoneSupportPhoneCard zone={zone} />
+
         {channels.isPending ? <Spinner label={t("common.loading")} /> : null}
         {!channels.isPending && zoneChannels.length === 0 ? (
           <Text tone="muted">{t("zonesWa.empty")}</Text>
@@ -91,6 +94,50 @@ export function ZoneWhatsappEditor({
         </Text>
       </ScrollView>
     </Modal>
+  );
+}
+
+/**
+ * Teléfono de atención al cliente de la zona (ADMIN): número humano que se comparte con el cliente
+ * ante inconvenientes. Es un atributo de la zona (updateZone), distinto del phone_number_id de Meta.
+ */
+function ZoneSupportPhoneCard({ zone }: { zone: ZoneNode }) {
+  const { t } = useT();
+  const update = useUpdateZone();
+  const [phone, setPhone] = useState(zone.supportPhone ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const save = () => {
+    setError(null);
+    setSaved(false);
+    update.mutate(
+      { id: zone.id, name: zone.name, supportPhone: phone.trim() || null },
+      {
+        onSuccess: () => setSaved(true),
+        onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+      },
+    );
+  };
+
+  return (
+    <Stack gap="sm" className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+      {error ? <Banner tone="danger" title={error} /> : null}
+      {saved ? <Banner tone="success" title={t("zones.support.saved")} /> : null}
+      <Field label={t("zones.support.label")} hint={t("zones.support.hint")}>
+        <Input
+          value={phone}
+          onChangeText={(v) => {
+            setPhone(v);
+            setSaved(false);
+          }}
+          keyboardType="phone-pad"
+          autoCapitalize="none"
+          placeholder={t("zones.support.placeholder")}
+        />
+      </Field>
+      <Button label={t("zones.support.save")} loading={update.isPending} block onPress={save} />
+    </Stack>
   );
 }
 

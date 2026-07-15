@@ -1,5 +1,6 @@
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Row, Text } from "@preztiaos/ui";
 
 import { can } from "@/core/auth/authorization";
@@ -16,10 +17,14 @@ type Segment = { key: string; label: string; render: () => ReactNode };
 /**
  * Hub de "Cuentas" (#4): agrupa la gestión de Clientes y Pagos (y Cobradores/Operación según
  * rol) bajo una sola pestaña con un control segmentado, en lugar de varias pestañas sueltas.
+ * El segmento activo vive en la URL (`?tab=`), como en Ajustes: recargar o compartir el enlace
+ * no pierde el contexto; si la URL pide un segmento no visible, cae al primero permitido.
  */
 export function CuentasHubScreen() {
   const { t } = useT();
   const { role } = useSession();
+  const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
 
   const segments: Segment[] = [];
   if (can(role, "borrower:manage")) {
@@ -37,8 +42,7 @@ export function CuentasHubScreen() {
     segments.push({ key: "operacion", label: t("operations.tab"), render: () => <OperationsScreen /> });
   }
 
-  const [active, setActive] = useState(0);
-  const current = segments[active] ?? segments[0];
+  const current = segments.find((s) => s.key === params.tab) ?? segments[0];
 
   return (
     <View className="flex-1 bg-white dark:bg-zinc-950">
@@ -46,14 +50,14 @@ export function CuentasHubScreen() {
         <View className="border-b border-zinc-200 px-4 py-2 dark:border-zinc-800">
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <Row gap="sm">
-              {segments.map((s, i) => {
-                const isActive = i === active;
+              {segments.map((s) => {
+                const isActive = s.key === current?.key;
                 return (
                   <Pressable
                     key={s.key}
                     accessibilityRole="button"
                     accessibilityState={{ selected: isActive }}
-                    onPress={() => setActive(i)}
+                    onPress={() => router.setParams({ tab: s.key })}
                     className={`min-h-[40px] justify-center rounded-full border px-4 ${
                       isActive
                         ? "border-brand-600 bg-brand-50 dark:bg-zinc-800"

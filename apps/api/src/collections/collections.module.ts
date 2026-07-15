@@ -10,6 +10,7 @@ import {
 import { CollectionsController } from './collections.controller';
 import { DueCreditsRepository } from './due-credits.repository';
 import { CriticalClientsRepository } from './critical-clients.repository';
+import { PortfolioMapRepository } from './portfolio-map.repository';
 import { OsrmRouteOptimizer } from './osrm-route-optimizer';
 import { DueTenantsRepository } from './due-tenants.repository';
 import { ReminderIdempotencyRepository } from './reminder-idempotency.repository';
@@ -32,6 +33,7 @@ import { ConversationMessageLog } from '../conversations/conversation-message.lo
     DueCreditsRepository,
     DueTenantsRepository,
     CriticalClientsRepository,
+    PortfolioMapRepository,
     OsrmRouteOptimizer,
     ReminderIdempotencyRepository,
     CollectionAuditLogAdapter,

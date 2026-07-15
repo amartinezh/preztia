@@ -1,0 +1,1 @@
+ALTER TABLE "zone" ADD COLUMN "support_phone" text;

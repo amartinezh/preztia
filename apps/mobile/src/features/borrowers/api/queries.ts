@@ -1,5 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateBorrowerInput, UpdateBorrowerInput } from "@preztiaos/contracts";
+import type {
+  BorrowerSummary,
+  CreateBorrowerInput,
+  UpdateBorrowerInput,
+} from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
 
@@ -33,6 +37,33 @@ export function useBorrowersList(params: BorrowersListParams = {}) {
         }),
       ),
   });
+}
+
+// Normaliza la cédula igual que el dominio (`normalizeNationalId`): recorta extremos y colapsa
+// espacios internos. Se duplica aquí porque el móvil solo depende de `contracts`, no de `domain`.
+function normalizeNationalId(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Busca el cliente cuya cédula coincide EXACTAMENTE con la dada, dentro del tenant. Sostiene la
+ * idempotencia del alta desde OCR: si la cédula ya existe (el alta chocaría por unicidad), permite
+ * reusar ese cliente en vez de dejar el flujo en un callejón sin salida. `null` si no hay match.
+ */
+export async function findBorrowerByNationalId(
+  nationalId: string,
+): Promise<BorrowerSummary | null> {
+  const trimmed = nationalId.trim();
+  if (!trimmed) return null;
+  // El filtro del listado es por subcadena (ilike); afinamos a coincidencia exacta normalizada.
+  const { items } = unwrap(
+    await api.listBorrowers({
+      headers: tenantHeader(),
+      query: { page: 1, pageSize: PAGE_SIZE, nationalId: trimmed },
+    }),
+  );
+  const target = normalizeNationalId(trimmed);
+  return items.find((b) => normalizeNationalId(b.nationalId) === target) ?? null;
 }
 
 export function useCreateBorrower() {

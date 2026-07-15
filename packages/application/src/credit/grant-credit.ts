@@ -25,6 +25,7 @@ export interface CreditRepository {
       tenantId: string;
       borrowerId: string;
       zoneId: string;
+      paymentPlanId?: string | null;
       principalMinor: number;
       interestPct: number;
       installmentsCount: number;
@@ -54,6 +55,8 @@ export interface GrantCreditCommand {
   tenantId: string; borrowerId: string; zoneId: string;
   principalMinor: number; interestPct: number; installmentsCount: number; currency: string;
   frequency?: ScheduleFrequency;
+  /** Plan de pago del que salieron los términos (opcional): se registra en el crédito. */
+  paymentPlanId?: string;
   /** Teléfono WhatsApp del deudor (E.164 sin '+'): habilita abonos por PIX. */
   borrowerPhone?: string;
 }
@@ -82,6 +85,7 @@ export class GrantCreditHandler {
         tenantId: cmd.tenantId,
         borrowerId: cmd.borrowerId,
         zoneId: cmd.zoneId,
+        paymentPlanId: cmd.paymentPlanId ?? null,
         principalMinor: cmd.principalMinor,
         interestPct: cmd.interestPct,
         installmentsCount: cmd.installmentsCount,

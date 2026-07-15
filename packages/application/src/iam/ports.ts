@@ -115,6 +115,8 @@ export interface ZoneRecord {
   readonly parentZoneId: string | null;
   readonly path: string;
   readonly name: string;
+  /** Teléfono de atención al cliente de la zona (null si no se configuró). */
+  readonly supportPhone: string | null;
 }
 
 export interface ZoneStore {
@@ -124,11 +126,14 @@ export interface ZoneStore {
     parentZoneId: string | null;
     path: string;
     name: string;
+    supportPhone: string | null;
   }): Promise<void>;
   update(input: {
     tenantId: string;
     zoneId: string;
     name: string;
+    /** `undefined` conserva el valor actual; `null`/string lo actualiza. */
+    supportPhone?: string | null;
   }): Promise<ZoneRecord | null>;
   /** Elimina la zona si es hoja; informa si tiene hijas (para impedirlo). */
   remove(input: {

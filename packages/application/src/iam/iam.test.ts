@@ -332,6 +332,7 @@ describe("CreateZoneHandler", () => {
       parentZoneId: null,
       path: "co.antioquia",
       name: "Antioquia",
+      supportPhone: null,
     };
     const out = await new CreateZoneHandler(zoneStore(parent)).execute({
       actor: adminActor(),

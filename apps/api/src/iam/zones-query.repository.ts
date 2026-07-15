@@ -33,6 +33,7 @@ export class ZonesQueryRepository {
         parentZoneId: zone.parentZoneId,
         path: zone.path,
         name: zone.name,
+        supportPhone: zone.supportPhone,
         coordinatorIds: byZone.get(zone.id) ?? [],
         createdAt: zone.createdAt.toISOString(),
       }));

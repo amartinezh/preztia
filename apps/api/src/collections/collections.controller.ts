@@ -21,6 +21,7 @@ import { requireTenant } from '../auth/require-tenant';
 import { requireReviewer } from '../auth/require-reviewer';
 import { DueCreditsRepository } from './due-credits.repository';
 import { CriticalClientsRepository } from './critical-clients.repository';
+import { PortfolioMapRepository } from './portfolio-map.repository';
 import { OsrmRouteOptimizer } from './osrm-route-optimizer';
 
 const uuid = z.string().uuid();
@@ -39,6 +40,7 @@ export class CollectionsController {
     private readonly dueCredits: DueCreditsRepository,
     private readonly sendReminder: SendCollectionReminderHandler,
     private readonly criticalClients: CriticalClientsRepository,
+    private readonly portfolioMap: PortfolioMapRepository,
     private readonly routeOptimizer: OsrmRouteOptimizer,
   ) {}
 
@@ -51,6 +53,17 @@ export class CollectionsController {
     const reviewer = requireReviewer(authorization);
     const items = await this.criticalClients.list(reviewer);
     return { threshold: this.criticalClients.threshold(), items };
+  }
+
+  @Get('collections/portfolio-map')
+  async listPortfolioMap(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    requireTenant(tenantId);
+    const reviewer = requireReviewer(authorization);
+    const items = await this.portfolioMap.list(reviewer);
+    return { threshold: this.portfolioMap.threshold(), items };
   }
 
   @Post('collections/critical-route')

@@ -293,14 +293,14 @@ function BorrowerFormModal({
 
   const submit = () => {
     setError(null);
+    // lat/lng NO se envían: la ubicación llega del flujo de WhatsApp (se propaga al aprobar el
+    // crédito) y el PATCH parcial la preserva; incluirlos aquí en null la borraría al editar.
     const fields = {
       nationalId: nationalId.trim(),
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       business: business.trim() || null,
       phone: phone.trim() || null,
-      lat: null,
-      lng: null,
       color,
       creditBlocked,
       creditLimitMinor: majorToMinor(Number(creditLimit) || 0),

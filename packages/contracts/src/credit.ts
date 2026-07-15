@@ -2,6 +2,7 @@ import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 
 import { paginationQuery } from "./payments";
+import { planFrequency } from "./payment-plans";
 
 const c = initContract();
 
@@ -39,6 +40,11 @@ export const grantCreditInput = z.object({
   principalMinor: z.number().int().positive(),
   interestPct: z.number().nonnegative(),
   installmentsCount: z.number().int().positive(),
+  // Plan de pago del que salieron los términos (opcional): registra el vínculo `payment_plan_id`.
+  // Ausente en otorgamientos directos ("Personalizado"), igual que en los créditos del legado.
+  paymentPlanId: z.string().uuid().optional(),
+  // Periodicidad del cronograma. Ausente ⇒ el servidor usa DIARIO (retrocompatibilidad).
+  frequency: planFrequency.optional(),
   // Teléfono WhatsApp del deudor (E.164 sin '+'): habilita el abono de pagos PIX.
   borrowerPhone: z.string().regex(/^\d{8,15}$/).optional(),
 });

@@ -29,9 +29,12 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
         .select({
           status: schema.creditApplication.status,
           applicantPhone: schema.creditApplication.applicantPhone,
+          channelId: schema.creditApplication.channelId,
           planOffer: schema.creditApplication.planOffer,
           offeredPlanId: schema.creditApplication.offeredPlanId,
           offeredPrincipalMinor: schema.creditApplication.offeredPrincipalMinor,
+          latitude: schema.creditApplication.latitude,
+          longitude: schema.creditApplication.longitude,
         })
         .from(schema.creditApplication)
         .where(eq(schema.creditApplication.id, input.applicationId))
@@ -40,9 +43,14 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
         ? {
             status: row.status,
             applicantPhone: row.applicantPhone,
+            channelId: row.channelId,
             planOffer: row.planOffer,
             offeredPlanId: row.offeredPlanId,
             offeredPrincipalMinor: row.offeredPrincipalMinor,
+            applicantLocation:
+              row.latitude != null && row.longitude != null
+                ? { latitude: row.latitude, longitude: row.longitude }
+                : null,
           }
         : null;
     });
@@ -57,6 +65,7 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
     schedule: readonly ScheduledInstallment[];
     fundingCashBoxId: string;
     contact?: { phone: string };
+    borrowerLocation?: { latitude: number; longitude: number };
     override?: boolean;
   }): Promise<void> {
     await withTenantTxFor(input.tenantId, async (tx) => {
@@ -74,6 +83,18 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
           : {}),
       });
       await this.persistCredit(tx, input.credit, input.schedule, input.contact);
+      // La ubicación verificada de la solicitud pasa a ser la ubicación operativa del cliente
+      // (la fuente de los mapas de cobro), en la misma transacción de la aprobación.
+      if (input.borrowerLocation) {
+        await tx
+          .update(schema.borrower)
+          .set({
+            lat: input.borrowerLocation.latitude,
+            lng: input.borrowerLocation.longitude,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.borrower.id, input.credit.borrowerId));
+      }
       // El dinero SALE de la caja/cuenta origen en la misma transacción: el crédito nace fondeado
       // y el libro refleja el efectivo/banco real. Si el saldo no alcanza, todo se revierte.
       await postCashOut(tx, {

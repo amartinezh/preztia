@@ -14,6 +14,7 @@ import { ApplicationDecisionRepository } from './application-decision.repository
 import { DocumentOriginalStorage } from './document-original.storage';
 import { PlanOfferRepository } from './plan-offer.repository';
 import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
+import { CreditRegisteredWhatsappNotifier } from './credit-registered.notifier';
 import { ReExtractDocumentService } from './re-extract-document.service';
 import { AiDocumentReviewer } from '../document-reviewer';
 import { GeminiBusinessPhotoAnalyzer } from '../ai/gemini-business-photo.analyzer';
@@ -46,6 +47,7 @@ import { TenantConfigModule } from '../../tenant-config/tenant-config.module';
     DocumentOriginalStorage,
     PlanOfferRepository,
     PlanOfferWhatsappNotifier,
+    CreditRegisteredWhatsappNotifier,
 
     // Re-extracción de IA pedida por el revisor + su pipeline de validación.
     AiDocumentReviewer,

@@ -59,4 +59,24 @@ describe("canReceiveCredit", () => {
     );
     expect(d).toEqual({ allowed: false, reason: CREDIT_DENIED_BLOCKED });
   });
+
+  it("cupo 0 = sin cupo: permite el crédito sin importar el monto", () => {
+    const sinCupo = { creditBlocked: false, creditLimitMinor: 0 };
+    const d = canReceiveCredit(sinCupo, { requestedMinor: 90000, outstandingMinor: 0 });
+    expect(d.allowed).toBe(true);
+  });
+
+  it("cupo 0 = sin cupo: permite un crédito adicional aunque haya saldo vigente", () => {
+    const sinCupo = { creditBlocked: false, creditLimitMinor: 0 };
+    const d = canReceiveCredit(sinCupo, { requestedMinor: 90000, outstandingMinor: 250000 });
+    expect(d.allowed).toBe(true);
+  });
+
+  it("cupo 0 sigue negando si el cliente está bloqueado", () => {
+    const d = canReceiveCredit(
+      { creditBlocked: true, creditLimitMinor: 0 },
+      { requestedMinor: 90000, outstandingMinor: 0 },
+    );
+    expect(d).toEqual({ allowed: false, reason: CREDIT_DENIED_BLOCKED });
+  });
 });

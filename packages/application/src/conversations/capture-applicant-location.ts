@@ -38,7 +38,7 @@ export class CaptureApplicantLocationHandler {
 
     await this.sender.sendText(
       { channelId: message.channelId, recipient: message.from },
-      "📍 ¡Gracias! Recibimos tu ubicación. Con esto completamos tu solicitud; un asesor la revisará.",
+      "📍 ¡Gracias! Recibimos tu ubicación. Con esto completamos tu solicitud; un asesor la revisará y nos comunicaremos contigo en el menor tiempo posible.",
     );
   }
 }

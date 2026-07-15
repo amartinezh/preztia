@@ -21,6 +21,7 @@ export * from "./credit/portfolio/installment";
 export * from "./credit/portfolio/allocate-payment";
 export * from "./credit/collection/collection-reminder";
 export * from "./credit/portfolio/account";
+export * from "./credit/portfolio/account-inquiry";
 export * from "./cash/expense";
 export * from "./cash/cash-box";
 export * from "./cash/cash-count";

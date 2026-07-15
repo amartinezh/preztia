@@ -9,6 +9,9 @@ export const zone = pgTable("zone", {
   parentZoneId: uuid("parent_zone_id"),
   path: ltree("path").notNull(),
   name: text("name").notNull(),
+  // Teléfono de atención al cliente de la zona: número humano que se comparte con el cliente
+  // para soporte/informativo (NO el phone_number_id de Meta). Nullable; puede repetirse entre zonas.
+  supportPhone: text("support_phone"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

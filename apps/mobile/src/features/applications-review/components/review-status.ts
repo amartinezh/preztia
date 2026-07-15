@@ -1,6 +1,7 @@
 import type { BadgeTone } from "@preztiaos/ui";
 import type {
   CreditApplicationStatus,
+  PlanOfferStatus,
   VerdictStatus,
 } from "@preztiaos/contracts";
 
@@ -51,6 +52,20 @@ export function documentStatusBadge(
     case "REJECTED":
       return { tone: "danger", label: "Rechazado" };
   }
+}
+
+// Sub-estados de la oferta en los que la respuesta del cliente sigue pendiente por WhatsApp.
+const OFFER_AWAITING_CLIENT: readonly PlanOfferStatus[] = [
+  "AWAITING_SELECTION",
+  "AWAITING_ACCEPTANCE",
+];
+
+/**
+ * true si la oferta sigue esperando respuesta del cliente: es la condición para observarla en
+ * vivo (sondeo) y para avisar en pantalla que el expediente se actualiza solo.
+ */
+export function isOfferAwaitingClient(status: PlanOfferStatus | undefined): boolean {
+  return status != null && OFFER_AWAITING_CLIENT.includes(status);
 }
 
 /** Severidad de una alerta antifraude → tono. */

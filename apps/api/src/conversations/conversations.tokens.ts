@@ -19,6 +19,7 @@ export const CREDIT_APPLICATION_RESTARTER = Symbol(
   'CreditApplicationRestarter',
 );
 export const PENDING_DOCUMENT_REMINDER = Symbol('PendingDocumentReminder');
+export const APPLICANT_JOURNEY_READER = Symbol('ApplicantJourneyReader');
 
 // Slice de solicitud de crédito (start/submit + antifraude + KYC).
 export const CREDIT_APPLICATION_REPOSITORY = Symbol(

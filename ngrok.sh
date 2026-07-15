@@ -5,7 +5,7 @@ set -euo pipefail
 # Útil para recibir webhooks de WhatsApp en desarrollo.
 # El puerto coincide con apps/api (process.env.PORT ?? 3000).
 
-PORT="${PORT:-3000}"
+PORT="${PORT:-3010}"
 
 if ! command -v ngrok >/dev/null 2>&1; then
   echo "ngrok no está instalado o no está en el PATH." >&2

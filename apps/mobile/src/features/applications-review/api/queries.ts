@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   ApproveApplicationInput,
   CreditApplicationStatus,
   OfferPlansInput,
+  PlanOfferStatus,
   RejectApplicationInput,
   RequiredDocumentTypeContract,
 } from "@preztiaos/contracts";
@@ -11,8 +13,13 @@ import { api, tenantHeader, unwrap } from "@/core/api/client";
 import { authState } from "@/core/auth/auth-state";
 import { env } from "@/core/env";
 import { normalizeHttpError } from "@/core/errors";
+import { isOfferAwaitingClient } from "../components/review-status";
 
 const PAGE_SIZE = 20;
+
+// Cadencia del sondeo en vivo de la oferta: percepción de "inmediato" con una lectura liviana
+// (una fila) por ciclo; solo corre mientras el expediente está abierto y espera al cliente.
+const PLAN_OFFER_POLL_MS = 3000;
 
 export const reviewKeys = {
   all: ["applications-review"] as const,
@@ -20,6 +27,7 @@ export const reviewKeys = {
   detail: (id: string) => [...reviewKeys.all, "detail", id] as const,
   conversation: (id: string) => [...reviewKeys.all, "conversation", id] as const,
   rejections: () => [...reviewKeys.all, "rejections"] as const,
+  planOffer: (id: string) => [...reviewKeys.all, "plan-offer", id] as const,
 };
 
 /** Lista paginada de intentos de solicitud con su veredicto (filtrable por estado). */
@@ -59,6 +67,32 @@ export function useApplicationReview(id: string) {
   });
 }
 
+/**
+ * Observa EN VIVO la respuesta del cliente a la oferta de planes: mientras la oferta espera
+ * respuesta por WhatsApp, sondea el sub-estado (lectura liviana) y, apenas cambia (eligió plan,
+ * aceptó o rechazó), refresca el detalle para que la pantalla lo refleje sin recargar. Se
+ * invalida (no se parchea la caché) para que el detalle siempre venga del servidor: un dato de
+ * sondeo viejo solo cuesta un refetch redundante, nunca una pantalla incorrecta.
+ */
+export function usePlanOfferLive(id: string, currentStatus: PlanOfferStatus | undefined) {
+  const qc = useQueryClient();
+  const watching = isOfferAwaitingClient(currentStatus);
+  const { data } = useQuery({
+    queryKey: reviewKeys.planOffer(id),
+    enabled: watching,
+    refetchInterval: PLAN_OFFER_POLL_MS,
+    queryFn: async () =>
+      unwrap(await api.getPlanOfferStatus({ headers: tenantHeader(), params: { id } })),
+  });
+
+  const polledStatus = data?.status;
+  useEffect(() => {
+    if (watching && polledStatus != null && polledStatus !== currentStatus) {
+      void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) });
+    }
+  }, [watching, polledStatus, currentStatus, id, qc]);
+}
+
 /** Transcript de la conversación con el cliente (lazy: solo al abrir el panel). */
 export function useApplicationConversation(id: string, enabled: boolean) {
   return useQuery({
@@ -87,7 +121,12 @@ export function useOfferPlans(id: string) {
   return useMutation({
     mutationFn: async (input: OfferPlansInput) =>
       unwrap(await api.offerPlans({ headers: tenantHeader(), params: { id }, body: input })),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) });
+      // La nueva oferta reinicia el sondeo en vivo: sin esto, un sub-estado viejo en caché
+      // (p. ej. DECLINED de la oferta anterior) dispararía un refetch redundante al reanudar.
+      void qc.invalidateQueries({ queryKey: reviewKeys.planOffer(id) });
+    },
   });
 }
 

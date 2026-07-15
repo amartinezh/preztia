@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateZoneInput } from "@preztiaos/contracts";
+import type { CreateZoneInput, UpdateZoneInput } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
 
@@ -21,6 +21,21 @@ export function useCreateZone() {
   return useMutation({
     mutationFn: async (input: CreateZoneInput) =>
       unwrap(await api.createZone({ headers: tenantHeader(), body: input })),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: zoneKeys.all }),
+  });
+}
+
+export function useUpdateZone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string } & UpdateZoneInput) =>
+      unwrap(
+        await api.updateZone({
+          headers: tenantHeader(),
+          params: { id: input.id },
+          body: { name: input.name, supportPhone: input.supportPhone },
+        }),
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: zoneKeys.all }),
   });
 }

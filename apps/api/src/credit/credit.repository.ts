@@ -10,6 +10,7 @@ export class CreditDrizzleRepository implements CreditRepository {
       tenantId: string;
       borrowerId: string;
       zoneId: string;
+      paymentPlanId?: string | null;
       principalMinor: number;
       interestPct: number;
       installmentsCount: number;
@@ -27,6 +28,7 @@ export class CreditDrizzleRepository implements CreditRepository {
         tenantId: c.tenantId,
         borrowerId: c.borrowerId,
         zoneId: c.zoneId,
+        paymentPlanId: c.paymentPlanId ?? null,
         principalMinor: c.principalMinor,
         interestPct: c.interestPct,
         installmentsCount: c.installmentsCount,

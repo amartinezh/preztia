@@ -36,6 +36,10 @@ const DEFAULT_WHATSAPP_PHONE_NUMBER_ID = '1108588789011965';
 // Inter es banco de Brasil → PIX en BRL. Configurable por env.
 const CURRENCY = process.env.SEED_CURRENCY ?? 'BRL';
 
+// Teléfono de atención al cliente de las zonas (se comparte con el cliente ante inconvenientes).
+// Configurable por env; el mismo número se siembra en ambas zonas de demo (puede repetirse).
+const SUPPORT_PHONE = process.env.SEED_SUPPORT_PHONE ?? '+55 11 4000-0000';
+
 // Cuenta bancaria Inter (BR). La llave PIX es la "recaudadora": un comprobante cuyo
 // receiver_pix_key coincida con ésta se rutea AUTOMÁTICAMENTE a la caja bancaria.
 const INTER_PIX_KEY = 'tesouraria@preztia.com.br';
@@ -230,6 +234,9 @@ async function main() {
     ]);
 
     // 4) Árbol de zonas (raíz → hija): el ADMIN asigna la zona al aprobar la solicitud.
+    // El `supportPhone` es el número de atención al cliente de la zona (se comparte con el cliente
+    // ante inconvenientes); aquí ambas zonas usan el MISMO número de ejemplo a propósito, para
+    // mostrar que un número puede repetirse entre zonas. Se edita en el panel Zonas.
     await tx.insert(schema.zone).values([
       {
         id: ZONE_ROOT_ID,
@@ -237,6 +244,7 @@ async function main() {
         parentZoneId: null,
         path: 'antioquia',
         name: 'Antioquia',
+        supportPhone: SUPPORT_PHONE,
       },
       {
         id: ids.zoneChild,
@@ -244,6 +252,7 @@ async function main() {
         parentZoneId: ZONE_ROOT_ID,
         path: 'antioquia.medellin',
         name: 'Medellín',
+        supportPhone: SUPPORT_PHONE,
       },
     ]);
     await tx.insert(schema.zoneCoordinator).values({

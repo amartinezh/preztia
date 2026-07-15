@@ -30,6 +30,10 @@ import { BorrowerPicker } from "./borrower-picker";
 // El dominio interpreta interestPct como base-mil (200 = 20%); la UI captura % y convierte.
 const PERCENT_TO_BASE_THOUSAND = 10;
 
+// Longitud mínima del motivo (espejo de `approveApplicationInput.reason.min(3)` del contrato):
+// gatea el botón de aprobar/rechazar para que no se envíe una decisión sin justificación.
+const MIN_REASON_LENGTH = 3;
+
 export type DecisionMode = "approve" | "reject" | null;
 
 type Props = {
@@ -109,9 +113,16 @@ export function DecisionModal({
   const fundsInsufficient =
     selectedBox != null && principalMinor > 0 && principalMinor > selectedBox.balanceMinor;
 
-  // Regla de negocio: aprobar requiere deudor, zona resuelta y una caja/cuenta origen con saldo.
+  // El motivo es obligatorio (min 3 según el contrato): gatea el envío para no aprobar sin justificar.
+  const reasonValid = reason.trim().length >= MIN_REASON_LENGTH;
+
+  // Regla de negocio: aprobar requiere deudor, zona resuelta, una caja/cuenta origen con saldo y motivo.
   const canApprove =
-    borrower != null && zoneId != null && fundingCashBoxId != null && !fundsInsufficient;
+    borrower != null &&
+    zoneId != null &&
+    fundingCashBoxId != null &&
+    !fundsInsufficient &&
+    reasonValid;
 
   const submitApprove = () => {
     if (!borrower || !zoneId || !fundingCashBoxId) return;
@@ -269,7 +280,9 @@ export function DecisionModal({
                 <Text variant="caption" tone="muted">
                   {borrower == null || zoneId == null
                     ? t("review.approve.needBorrower")
-                    : t("review.approve.needFunding")}
+                    : fundingCashBoxId == null || fundsInsufficient
+                      ? t("review.approve.needFunding")
+                      : t("review.approve.needReason")}
                 </Text>
               ) : null}
             </>

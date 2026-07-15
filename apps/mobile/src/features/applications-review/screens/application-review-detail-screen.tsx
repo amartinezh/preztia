@@ -10,6 +10,7 @@ import {
   useApplicationReview,
   useApproveApplication,
   useOfferPlans,
+  usePlanOfferLive,
   useRejectApplication,
 } from "../api/queries";
 import { applicationStatusBadge } from "../components/review-status";
@@ -34,6 +35,9 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
   const approve = useApproveApplication(applicationId);
   const reject = useRejectApplication(applicationId);
   const offer = useOfferPlans(applicationId);
+  // Respuesta del cliente en vivo: mientras la oferta espera respuesta por WhatsApp, el
+  // detalle se refresca solo apenas el cliente conteste (sin recargar la pantalla).
+  usePlanOfferLive(applicationId, query.data?.planOffer.status);
 
   const [conversationOpen, setConversationOpen] = useState(false);
   const [viewerDocument, setViewerDocument] = useState<string | null>(null);

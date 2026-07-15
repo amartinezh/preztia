@@ -4,7 +4,11 @@ import { Badge, Banner, Button, Field, Input, ListItem, Row, Stack, Text } from 
 
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
-import { useBorrowersList, useCreateBorrower } from "@/features/borrowers/api/queries";
+import {
+  findBorrowerByNationalId,
+  useBorrowersList,
+  useCreateBorrower,
+} from "@/features/borrowers/api/queries";
 
 const MIN_SEARCH = 2;
 
@@ -28,6 +32,8 @@ export function BorrowerPicker({ extractedIdentity, applicantPhone, selected, on
   const create = useCreateBorrower();
   const [term, setTerm] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Mientras, tras un conflicto de cédula, resolvemos el cliente ya existente para reusarlo.
+  const [resolving, setResolving] = useState(false);
 
   const search = useBorrowersList(term.trim().length >= MIN_SEARCH ? { name: term.trim() } : {});
   const results = term.trim().length >= MIN_SEARCH ? search.data?.items ?? [] : [];
@@ -54,8 +60,35 @@ export function BorrowerPicker({ extractedIdentity, applicantPhone, selected, on
     create.mutate(input, {
       onSuccess: ({ id }) =>
         onSelect({ id, label: `${input.firstName} ${input.lastName}`.trim() || input.nationalId }),
-      onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+      onError: (err) => {
+        // El alta desde OCR es "buscar-o-crear": si la cédula ya existe (409), reusamos ese
+        // cliente en vez de dejar el flujo bloqueado. Idempotencia ante reintentos.
+        if (isApiError(err) && err.messageKey === "errors.conflict") {
+          void reuseExisting(input.nationalId);
+          return;
+        }
+        setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
+      },
     });
+  };
+
+  // Resuelve el cliente ya registrado con esa cédula y lo selecciona (recuperación del 409).
+  const reuseExisting = async (nationalId: string) => {
+    setResolving(true);
+    try {
+      const existing = await findBorrowerByNationalId(nationalId);
+      if (existing) {
+        const label = `${existing.firstName} ${existing.lastName}`.trim() || existing.nationalId;
+        onSelect({ id: existing.id, label });
+      } else {
+        // El conflicto no era por cédula (o ya no existe): mostramos el mensaje original.
+        setError(t("errors.conflict"));
+      }
+    } catch (err) {
+      setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
+    } finally {
+      setResolving(false);
+    }
   };
 
   if (selected) {
@@ -88,7 +121,7 @@ export function BorrowerPicker({ extractedIdentity, applicantPhone, selected, on
           </Row>
           <Button
             label={t("borrower.create")}
-            loading={create.isPending}
+            loading={create.isPending || resolving}
             disabled={!canCreateFromOcr}
             block
             onPress={createFromOcr}

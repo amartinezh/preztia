@@ -17,6 +17,7 @@ import {
 } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
+import { isOfferAwaitingClient } from "./review-status";
 
 // Presentación del sub-estado de la oferta (espejo del enum del contrato).
 const OFFER_LABEL: Record<PlanOfferStatus, string> = {
@@ -92,6 +93,13 @@ export function PlanOfferPanel({
 
       {planOffer.status === "ACCEPTED" ? (
         <Banner tone="success" title={t("offer.acceptedFlag")} />
+      ) : null}
+
+      {/* Mientras se espera al cliente, el sondeo en vivo refresca el expediente solo. */}
+      {isOfferAwaitingClient(planOffer.status) ? (
+        <Text variant="caption" tone="muted">
+          {t("offer.liveHint")}
+        </Text>
       ) : null}
 
       {offered ? (

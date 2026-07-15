@@ -7,11 +7,23 @@ const c = initContract();
 // completo del tenant (ordenado por path) sin paginar: un tenant maneja decenas de zonas,
 // no miles, y el cliente las pinta como árbol.
 
+// Teléfono de atención al cliente de la zona: número humano que se comparte con el cliente para
+// soporte/informativo (NO el phone_number_id de Meta). String vacío ⇒ null (sin número). El mismo
+// número puede repetirse en varias zonas.
+const supportPhone = z
+  .string()
+  .trim()
+  .max(30)
+  .nullable()
+  .transform((v) => (v && v.length > 0 ? v : null));
+
 export const zoneNode = z.object({
   id: z.string().uuid(),
   parentZoneId: z.string().uuid().nullable(),
   path: z.string(),
   name: z.string(),
+  // Teléfono de atención al cliente de la zona (null si no se configuró).
+  supportPhone: z.string().nullable(),
   coordinatorIds: z.array(z.string().uuid()),
   createdAt: z.string(),
 });
@@ -22,10 +34,16 @@ export const zoneTreeOutput = z.object({ items: z.array(zoneNode) });
 export const createZoneInput = z.object({
   name: z.string().min(2).max(80),
   parentZoneId: z.string().uuid().nullable().default(null),
+  supportPhone: supportPhone.optional().default(null),
 });
 export type CreateZoneInput = z.infer<typeof createZoneInput>;
 
-export const updateZoneInput = z.object({ name: z.string().min(2).max(80) });
+export const updateZoneInput = z.object({
+  name: z.string().min(2).max(80),
+  // Ausente ⇒ conserva el valor actual; presente (incluido null) ⇒ lo actualiza.
+  supportPhone: supportPhone.optional(),
+});
+export type UpdateZoneInput = z.infer<typeof updateZoneInput>;
 
 export const assignCoordinatorInput = z.object({
   coordinatorId: z.string().uuid(),

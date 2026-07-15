@@ -38,6 +38,8 @@ export * from "./credit/collection/send-collection-reminder";
 export * from "./credit/collection/run-tenant-collection-reminders";
 export * from "./credit/payment-charge/ports";
 export * from "./credit/payment-charge/offer-or-create-charge";
+export * from "./credit/account-inquiry/ports";
+export * from "./credit/account-inquiry/answer-account-inquiry";
 export * from "./conversations/ports";
 export * from "./conversations/process-inbound-message";
 export * from "./conversations/route-inbound-media";

@@ -2,13 +2,16 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   ASSISTANT_UNAVAILABLE_REPLY,
   OFF_TOPIC_REPLY,
+  buildCommittedApplicantReply,
   type AssistantAnswer,
   type TextMessage,
 } from "@preztiaos/domain";
 import { AnswerTextMessageHandler } from "./answer-text-message";
 import type { InboundMessageDeduplicator } from "../../credit/application/ports";
 import type {
+  ApplicantJourneyReader,
   AssistantRequest,
+  CommittedApplicantContext,
   CreditApplicationRestarter,
   CreditApplicationStarter,
   KnowledgeAssistant,
@@ -55,6 +58,10 @@ class StubReminder implements PendingDocumentReminder {
   constructor(private readonly reminder: string | null = null) {}
   async forApplicant() { return this.reminder; }
 }
+class StubJourney implements ApplicantJourneyReader {
+  constructor(private readonly context: CommittedApplicantContext | null = null) {}
+  async committedContext() { return this.context; }
+}
 
 const config: TenantAssistantConfig = {
   tenantId: "11111111-1111-1111-1111-111111111111",
@@ -88,7 +95,7 @@ describe("AnswerTextMessageHandler", () => {
 
   const handlerWith = (
     assistant: KnowledgeAssistant,
-    opts: { reminder?: StubReminder; dedup?: FakeDedup } = {},
+    opts: { reminder?: StubReminder; dedup?: FakeDedup; journey?: StubJourney } = {},
   ) =>
     new AnswerTextMessageHandler(
       new FakeConfigRepo(config),
@@ -98,6 +105,7 @@ describe("AnswerTextMessageHandler", () => {
       credit,
       restart,
       opts.reminder ?? new StubReminder(),
+      opts.journey ?? new StubJourney(),
     );
 
   it("A: responde una pregunta de conocimiento sin iniciar solicitud", async () => {
@@ -136,6 +144,32 @@ describe("AnswerTextMessageHandler", () => {
     await handlerWith(new StubAssistant(answer()), { reminder: new StubReminder("Aún falta: Envíame tu cédula.") }).execute(message);
 
     expect(sender.sent[0]?.body).toBe("La cuota diaria es de $10.000.\n\nAún falta: Envíame tu cédula.");
+  });
+
+  it("comprometido: a quien ya aceptó/tiene crédito NO se le re-ofrece iniciar; no llama a la IA", async () => {
+    const assistant = new StubAssistant(answer({ classification: "credit_application" }));
+    await handlerWith(assistant, {
+      journey: new StubJourney({ supportPhone: "+57 300 000 0000" }),
+    }).execute(message);
+
+    // No se consulta a la IA ni se inicia/reinicia nada: se corta con el aviso determinista.
+    expect(assistant.requests).toHaveLength(0);
+    expect(credit.started).toHaveLength(0);
+    expect(restart.restarted).toHaveLength(0);
+    expect(sender.sent).toEqual([
+      {
+        to: { channelId: "PNID", recipient: "573001112233" },
+        body: buildCommittedApplicantReply("+57 300 000 0000"),
+      },
+    ]);
+  });
+
+  it("comprometido sin teléfono de zona: usa el aviso genérico (sin número de atención)", async () => {
+    await handlerWith(new StubAssistant(answer()), {
+      journey: new StubJourney({ supportPhone: null }),
+    }).execute(message);
+
+    expect(sender.sent[0]?.body).toBe(buildCommittedApplicantReply(null));
   });
 
   it("idempotencia: no reprocesa un wamid ya visto (no llama a la IA ni responde)", async () => {

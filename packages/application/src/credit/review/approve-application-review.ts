@@ -12,7 +12,11 @@ import {
 import type { ScheduledInstallment } from "../grant-credit";
 import type { PaymentPlanStore } from "../plan/ports";
 import type { TenantSettingsStore } from "../../tenant/settings";
-import type { ApplicationDecisionSnapshot, ApplicationDecisionStore } from "./ports";
+import type {
+  ApplicationDecisionSnapshot,
+  ApplicationDecisionStore,
+  CreditRegisteredNotifier,
+} from "./ports";
 
 /** Orden del coordinador: aprobar el expediente y otorgar el crédito con estos términos. */
 export interface ApproveApplicationReviewCommand {
@@ -65,6 +69,8 @@ export class ApproveApplicationReviewHandler {
     private readonly store: ApplicationDecisionStore,
     private readonly plans?: PaymentPlanStore,
     private readonly settings?: TenantSettingsStore,
+    /** Avisa al cliente por WhatsApp que el crédito quedó registrado (best-effort). */
+    private readonly registeredNotifier?: CreditRegisteredNotifier,
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
@@ -121,7 +127,24 @@ export class ApproveApplicationReviewHandler {
       schedule: scheduled,
       // contact solo cuando hay teléfono (exactOptionalPropertyTypes).
       ...(borrowerPhone ? { contact: { phone: borrowerPhone } } : {}),
+      // La ubicación compartida por WhatsApp es la evidencia verificada más reciente del
+      // domicilio/negocio: pasa a ser la ubicación operativa del cliente (la leen los mapas
+      // de cobro). La de la solicitud queda intacta como evidencia de originación.
+      ...(snapshot.applicantLocation
+        ? { borrowerLocation: snapshot.applicantLocation }
+        : {}),
     });
+
+    // El crédito ya está creado y desembolsándose: avisamos al cliente por WhatsApp. Es una cortesía
+    // posterior a la transacción; si el envío falla, el adaptador lo absorbe (no revierte el crédito).
+    if (this.registeredNotifier && snapshot.channelId && borrowerPhone) {
+      await this.registeredNotifier.notifyRegistered({
+        tenantId: cmd.tenantId,
+        zoneId: cmd.zoneId,
+        channelId: snapshot.channelId,
+        recipient: borrowerPhone,
+      });
+    }
 
     return { applicationId: cmd.applicationId, creditId, status: "APPROVED" };
   }

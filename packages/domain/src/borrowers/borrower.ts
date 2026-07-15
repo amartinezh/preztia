@@ -42,7 +42,11 @@ export function assertCreditLimitMinor(creditLimitMinor: number): void {
 export interface BorrowerCreditPolicy {
   /** Si el cliente está bloqueado para recibir nuevos créditos (Créditos → Bloquear). */
   readonly creditBlocked: boolean;
-  /** Cupo aprobado (límite de crédito) en unidades menores. */
+  /**
+   * Cupo aprobado (límite de crédito) en unidades menores. `0` = "sin cupo asignado": no impone
+   * tope, de modo que un cliente puede tener varios créditos simultáneos. Un valor > 0 sí limita
+   * la exposición total (saldo vigente + solicitado).
+   */
   readonly creditLimitMinor: number;
 }
 
@@ -66,11 +70,13 @@ export type CreditDecision =
   | { readonly allowed: false; readonly reason: CreditDenialReason };
 
 /**
- * Decide si un cliente puede recibir un crédito nuevo: no puede estar bloqueado y el saldo
- * vigente más lo solicitado no puede exceder el cupo. Decisión pura (no lanza): la frontera
- * traduce el rechazo a 409/422 según corresponda.
+ * Decide si un cliente puede recibir un crédito nuevo: no puede estar bloqueado y, si tiene un
+ * cupo asignado (> 0), el saldo vigente más lo solicitado no puede excederlo. Un cupo de `0`
+ * significa "sin cupo": no limita el monto, lo que permite varios créditos por cliente. Decisión
+ * pura (no lanza): la frontera traduce el rechazo a 409/422 según corresponda.
  *
- * Invariante: `outstandingMinor + requestedMinor ≤ creditLimitMinor` cuando `allowed === true`.
+ * Invariante: cuando `creditLimitMinor > 0` y `allowed === true`, se cumple
+ * `outstandingMinor + requestedMinor ≤ creditLimitMinor`.
  */
 export function canReceiveCredit(
   policy: BorrowerCreditPolicy,
@@ -79,7 +85,8 @@ export function canReceiveCredit(
   if (policy.creditBlocked) {
     return { allowed: false, reason: CREDIT_DENIED_BLOCKED };
   }
-  if (request.outstandingMinor + request.requestedMinor > policy.creditLimitMinor) {
+  const hasLimit = policy.creditLimitMinor > 0;
+  if (hasLimit && request.outstandingMinor + request.requestedMinor > policy.creditLimitMinor) {
     return { allowed: false, reason: CREDIT_DENIED_OVER_LIMIT };
   }
   return { allowed: true };

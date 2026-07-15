@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import {
+  AnswerAccountInquiryHandler,
   AnswerTextMessageHandler,
   type AntifraudService,
+  type ApplicantJourneyReader,
+  type BorrowerAccountReader,
   type ApplicantLocationStore,
   type ApplicationCompletionNotifier,
   type BusinessPhotoVisionAnalyzer,
@@ -56,6 +59,7 @@ import { PaymentChargeDrizzleRepository } from '../payments/charge/payment-charg
 import { ChargeableCreditDrizzleReader } from '../payments/charge/chargeable-credit.reader';
 import { PicPayChargeClient } from '../payments/banking/picpay/picpay-charge.client';
 import { PicPayChargeContextReader } from '../payments/banking/picpay/picpay-charge-context.reader';
+import { BorrowerAccountDrizzleReader } from './text/borrower-account.reader';
 import { PlanReplyRepository } from '../credit-application/review/plan-reply.repository';
 import { AmountCaptureRepository } from '../credit-application/amount-capture.repository';
 import { PlanOfferWhatsappNotifier } from '../credit-application/review/plan-offer.notifier';
@@ -93,6 +97,7 @@ import { StructuralAntifraudService } from '../credit-application/antifraud.serv
 import { ProcessedInboundMessageDeduplicator } from '../credit-application/inbound-message-deduplicator';
 import { WhatsappTenantResolver } from '../credit-application/tenant-resolver';
 import { CreditApplicationPendingDocumentReminder } from './text/pending-document-reminder.adapter';
+import { ApplicantJourneyRepository } from './applicant-journey.repository';
 import {
   ANTIFRAUD_SERVICE,
   APPLICATION_COMPLETION_NOTIFIER,
@@ -119,6 +124,7 @@ import {
   MEDIA_DOWNLOADER,
   OUTBOUND_TEXT_SENDER,
   PENDING_DOCUMENT_REMINDER,
+  APPLICANT_JOURNEY_READER,
   REQUIRED_DOCUMENT_CATALOG,
   TENANT_RESOLVER,
   TEXT_CONSUMER,
@@ -181,6 +187,23 @@ import {
           sender,
           dedup,
         ),
+    },
+
+    // Consulta de cuenta por WhatsApp: el cliente pide su SALDO o el MOVIMIENTO de sus pagos → se
+    // lee su crédito activo y se responde cuánto debe, lo abonado, lo que falta y el saldo en mora.
+    BorrowerAccountDrizzleReader,
+    {
+      provide: AnswerAccountInquiryHandler,
+      inject: [
+        BorrowerAccountDrizzleReader,
+        OUTBOUND_TEXT_SENDER,
+        INBOUND_MESSAGE_DEDUPLICATOR,
+      ],
+      useFactory: (
+        accounts: BorrowerAccountReader,
+        sender: OutboundTextSender,
+        dedup: InboundMessageDeduplicator,
+      ) => new AnswerAccountInquiryHandler(accounts, sender, dedup),
     },
 
     // Negociación del plan por WhatsApp (Fase 10): respuesta del cliente a la oferta.
@@ -296,6 +319,10 @@ import {
     {
       provide: PENDING_DOCUMENT_REMINDER,
       useClass: CreditApplicationPendingDocumentReminder,
+    },
+    {
+      provide: APPLICANT_JOURNEY_READER,
+      useClass: ApplicantJourneyRepository,
     },
 
     // Puertos del slice de solicitud de crédito → adaptadores.
@@ -446,6 +473,7 @@ import {
         CREDIT_APPLICATION_STARTER,
         CREDIT_APPLICATION_RESTARTER,
         PENDING_DOCUMENT_REMINDER,
+        APPLICANT_JOURNEY_READER,
       ],
       useFactory: (
         configs: TenantAssistantConfigRepository,
@@ -455,6 +483,7 @@ import {
         credit: CreditApplicationStarter,
         restart: CreditApplicationRestarter,
         reminders: PendingDocumentReminder,
+        journey: ApplicantJourneyReader,
       ) =>
         new AnswerTextMessageHandler(
           configs,
@@ -464,6 +493,7 @@ import {
           credit,
           restart,
           reminders,
+          journey,
         ),
     },
 

@@ -505,8 +505,8 @@ flowchart TB
 
 | Entorno | Host de la API |
 |---|---|
-| Web / simulador iOS | `http://localhost:3000` |
-| **Emulador Android** | `http://10.0.2.2:3000` (localhost = el emulador) |
+| Web / simulador iOS | `http://localhost:3010` |
+| **Emulador Android** | `http://10.0.2.2:3010` (localhost = el emulador) |
 | Dispositivo físico | IP LAN de la máquina vía `EXPO_PUBLIC_API_URL` |
 
 - **Monorepo + Metro:** `metro.config.js` con `watchFolders` a la raíz y `nodeModulesPaths` (reemplaza al `transpilePackages` de Next). Requiere `node-linker=hoisted` (ver §16).

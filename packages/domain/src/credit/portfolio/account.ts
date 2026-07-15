@@ -64,6 +64,21 @@ export function daysOverdue(
 }
 
 /**
+ * Saldo EN MORA a una fecha: suma del saldo pendiente de las cuotas ya vencidas (vencimiento
+ * ESTRICTAMENTE anterior a `today`) que no están saldadas. Coherente con `markOverdue` (una cuota
+ * entra en mora cuando `dueDate < today`; la que vence hoy aún no está en mora). Reusa el
+ * invariante `remainingMinor` (abonos ≤ valor), por lo que nunca es negativo. 0 si está al día.
+ */
+export function overdueBalanceMinor(
+  installments: readonly PortfolioInstallment[],
+  today: string,
+): number {
+  return installments
+    .filter((installment) => installment.dueDate < today)
+    .reduce((total, installment) => total + remainingMinor(installment), 0);
+}
+
+/**
  * Monto que la cuenta debe pagar en una fecha dada ("Pago en Fecha" del legado): saldo
  * pendiente de las cuotas cuyo vencimiento es exactamente `date`. 0 si no vence nada ese día.
  */

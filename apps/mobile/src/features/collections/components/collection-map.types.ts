@@ -8,8 +8,8 @@ export interface MapPoint {
 export interface MapMarker extends MapPoint {
   id: string;
   label: string;
-  /** origin = punto de partida del cobrador; critical = cliente en mora. */
-  kind: "origin" | "critical";
+  /** origin = partida del cobrador; ok = al día; overdue = en mora; critical = mora crítica. */
+  kind: "origin" | "ok" | "overdue" | "critical";
   /** Orden de visita (1..N) cuando ya hay ruta optimizada; undefined si aún no. */
   order?: number;
 }
@@ -20,6 +20,10 @@ export interface CollectionMapProps {
   markers: MapMarker[];
   /** Vértices de la polilínea de la ruta; vacío = sin ruta dibujada. */
   route: MapPoint[];
+  /** true = encuadra la cámara para que TODOS los marcadores queden visibles. */
+  fitToMarkers?: boolean;
+  /** Toque sobre un marcador (id del marcador); si falta, el marcador solo muestra su rótulo. */
+  onMarkerPress?: (markerId: string) => void;
 }
 
 /** Estilo de tiles por defecto: OpenFreeMap (FOSS, sin API key). Configurable por env. */

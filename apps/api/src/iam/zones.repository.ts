@@ -16,6 +16,7 @@ export class ZoneDrizzleRepository implements ZoneStore {
     parentZoneId: string | null;
     path: string;
     name: string;
+    supportPhone: string | null;
   }): Promise<void> {
     await withTenantTxFor(input.tenantId, async (tx) => {
       await tx.insert(schema.zone).values({
@@ -24,6 +25,7 @@ export class ZoneDrizzleRepository implements ZoneStore {
         parentZoneId: input.parentZoneId,
         path: input.path,
         name: input.name,
+        supportPhone: input.supportPhone,
       });
     });
   }
@@ -32,11 +34,18 @@ export class ZoneDrizzleRepository implements ZoneStore {
     tenantId: string;
     zoneId: string;
     name: string;
+    supportPhone?: string | null;
   }): Promise<ZoneRecord | null> {
     return withTenantTxFor(input.tenantId, async (tx) => {
       const [row] = await tx
         .update(schema.zone)
-        .set({ name: input.name })
+        .set({
+          name: input.name,
+          // Solo se pisa el teléfono cuando el comando lo trae (undefined ⇒ conserva el actual).
+          ...(input.supportPhone !== undefined
+            ? { supportPhone: input.supportPhone }
+            : {}),
+        })
         .where(eq(schema.zone.id, input.zoneId))
         .returning();
       return row ? toRecord(row) : null;
@@ -127,5 +136,6 @@ function toRecord(row: typeof schema.zone.$inferSelect): ZoneRecord {
     parentZoneId: row.parentZoneId,
     path: row.path,
     name: row.name,
+    supportPhone: row.supportPhone,
   };
 }

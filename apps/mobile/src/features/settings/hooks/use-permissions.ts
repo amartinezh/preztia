@@ -43,6 +43,14 @@ function policyFor(role: UserRole | null): Record<SettingsSection, SectionAccess
 }
 
 /**
+ * ¿El rol puede ver al menos una sección de Ajustes? Lo usa el shell de navegación para NO
+ * ofrecer la pestaña a roles que aterrizarían en un "sin acceso" (COLLECTOR, SUPER_ADMIN).
+ */
+export function hasVisibleSettingsSections(role: UserRole | null): boolean {
+  return Object.values(policyFor(role)).some((access) => access.canView);
+}
+
+/**
  * Custom hook de permisos de Ajustes: recibe (implícitamente) el rol de la sesión y expone
  * helpers para validar una sección/acción y obtener un booleano (`canView`/`canEdit`). Es la única
  * fuente de verdad de RBAC para los tabs y los controles de cada formulario.

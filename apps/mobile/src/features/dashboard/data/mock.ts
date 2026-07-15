@@ -17,6 +17,12 @@ export const mockDashboardKpis: DashboardKpisOutput = {
     inProgress: 34,
     rejected: 19,
   },
+  applicationTimings: {
+    today: { decidedCount: 3, avgIntakeMinutes: 92, avgReviewMinutes: 41, avgTotalMinutes: 133 },
+    week: { decidedCount: 14, avgIntakeMinutes: 128, avgReviewMinutes: 74, avgTotalMinutes: 202 },
+    month: { decidedCount: 52, avgIntakeMinutes: 165, avgReviewMinutes: 96, avgTotalMinutes: 261 },
+    year: { decidedCount: 486, avgIntakeMinutes: 188, avgReviewMinutes: 122, avgTotalMinutes: 310 },
+  },
   risk: {
     documentUploadAttempts: 412,
     fraudAttemptsDetected: 23,

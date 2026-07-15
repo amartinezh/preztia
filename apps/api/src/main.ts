@@ -26,6 +26,7 @@ async function bootstrap() {
     ],
   });
 
-  await app.listen(process.env.PORT ?? 3000);
+  // 3010 por defecto (no 3000): evita choques con otros proyectos locales que ya usan ese puerto.
+  await app.listen(process.env.PORT ?? 3010);
 }
 void bootstrap();

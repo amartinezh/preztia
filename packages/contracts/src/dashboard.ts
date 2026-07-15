@@ -36,10 +36,38 @@ export const dashboardRisk = z.object({
   fraudAttemptsDetected: z.number().int(),
 });
 
+// Trazabilidad de TIEMPOS DE ATENCIÓN de las solicitudes (para detectar demoras humanas).
+// Cada solicitud resuelta atraviesa hitos sellados en la bitácora append-only:
+// Entró (created) → En estudio (docs completos → IN_REVIEW) → Decisión/Desembolso (aprobar/negar).
+// Aprobar y desembolsar ocurren en la MISMA transacción, así que ese instante es el desembolso.
+// Promedios en minutos (enteros); null cuando el periodo no tiene datos para ese tramo.
+export const applicationTimingWindow = z.object({
+  /** Solicitudes resueltas (aprobadas o negadas) cuya decisión cae dentro del periodo. */
+  decidedCount: z.number().int(),
+  /** Promedio Entró → En estudio: tiempo de documentación del cliente. */
+  avgIntakeMinutes: z.number().int().nullable(),
+  /** Promedio En estudio → Decisión/desembolso: la demora humana del coordinador. */
+  avgReviewMinutes: z.number().int().nullable(),
+  /** Promedio extremo a extremo Entró → Decisión/desembolso. */
+  avgTotalMinutes: z.number().int().nullable(),
+});
+export type ApplicationTimingWindow = z.infer<typeof applicationTimingWindow>;
+
+// Los mismos tiempos agregados en ventanas de calendario acumuladas: hoy, esta semana,
+// este mes, este año. Se resuelven en una sola consulta para que el selector no haga refetch.
+export const dashboardApplicationTimings = z.object({
+  today: applicationTimingWindow,
+  week: applicationTimingWindow,
+  month: applicationTimingWindow,
+  year: applicationTimingWindow,
+});
+export type DashboardApplicationTimings = z.infer<typeof dashboardApplicationTimings>;
+
 export const dashboardKpisOutput = z.object({
   currency: z.string(),
   treasury: dashboardTreasury,
   applications: dashboardApplications,
+  applicationTimings: dashboardApplicationTimings,
   risk: dashboardRisk,
 });
 export type DashboardKpisOutput = z.infer<typeof dashboardKpisOutput>;

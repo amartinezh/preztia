@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, Pressable } from "react-native";
 import * as Location from "expo-location";
 import type { CriticalRouteOutput } from "@preztiaos/contracts";
 import {
@@ -18,16 +18,66 @@ import { Screen } from "@/components/screen";
 import { useCriticalClients, useCriticalRoute } from "../api/map-queries";
 import { CollectionMap } from "../components/collection-map";
 import type { MapMarker, MapPoint } from "../components/collection-map.types";
+import { PortfolioMapView } from "./portfolio-map-view";
 
 // Centro por defecto si aún no hay ubicación del cobrador ni clientes (Bogotá).
 const DEFAULT_CENTER: MapPoint = { latitude: 4.711, longitude: -74.0721 };
 
+type TabKey = "route" | "all";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "route", label: "Ruta de cobro" },
+  { key: "all", label: "Todos los clientes" },
+];
+
 /**
- * Mapa de cobro: ubica a los clientes en mora CRÍTICA y, con un botón, genera la RUTA óptima
- * (OSRM, en backend) desde la posición actual del cobrador para visitarlos de la forma más
- * eficiente. Web y nativo comparten esta pantalla; el mapa se resuelve por plataforma.
+ * Mapa de cobro con dos pestañas: "Ruta de cobro" ubica a los clientes en mora CRÍTICA y genera
+ * la ruta óptima (OSRM, en backend) desde la posición del cobrador; "Todos los clientes" pinta
+ * toda la cartera activa y muestra la ficha del crédito al tocar un marcador. Web y nativo
+ * comparten esta pantalla; el mapa se resuelve por plataforma.
  */
 export function CollectionMapScreen() {
+  const [tab, setTab] = useState<TabKey>("route");
+
+  return (
+    <Screen>
+      <Stack gap="lg">
+        <Text variant="subtitle">Mapa de cobro</Text>
+
+        <Row gap="sm">
+          {TABS.map((t) => {
+            const isActive = t.key === tab;
+            return (
+              <Pressable
+                key={t.key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                onPress={() => setTab(t.key)}
+                className={`min-h-[40px] justify-center rounded-full border px-4 ${
+                  isActive
+                    ? "border-brand-600 bg-brand-50 dark:bg-zinc-800"
+                    : "border-zinc-200 dark:border-zinc-700"
+                }`}
+              >
+                <Text variant="label" tone={isActive ? "primary" : "muted"}>
+                  {t.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </Row>
+
+        {tab === "route" ? <CriticalRouteView /> : <PortfolioMapView />}
+      </Stack>
+    </Screen>
+  );
+}
+
+/**
+ * Pestaña "Ruta de cobro": clientes en mora crítica y, con un botón, la ruta óptima para
+ * visitarlos de la forma más eficiente desde la posición actual del cobrador.
+ */
+function CriticalRouteView() {
   const clientsQuery = useCriticalClients();
   const route = useCriticalRoute();
   const [origin, setOrigin] = useState<MapPoint | null>(null);
@@ -95,67 +145,62 @@ export function CollectionMapScreen() {
   }
 
   return (
-    <Screen>
-      <Stack gap="lg">
-        <Stack gap="xs">
-          <Text variant="subtitle">Mapa de cobro</Text>
-          <Text variant="caption" tone="muted">
-            Clientes con ≥ {clientsQuery.data?.threshold} cuotas vencidas ({clients.length} en riesgo).
-          </Text>
-        </Stack>
+    <Stack gap="lg">
+      <Text variant="caption" tone="muted">
+        Clientes con ≥ {clientsQuery.data?.threshold} cuotas vencidas ({clients.length} en riesgo).
+      </Text>
 
-        {clients.length === 0 ? (
-          <Card>
-            <Text tone="muted">No hay clientes en mora crítica con ubicación registrada.</Text>
-          </Card>
-        ) : (
-          <>
-            <CollectionMap center={center} markers={markers} route={routeGeometry} />
+      {clients.length === 0 ? (
+        <Card>
+          <Text tone="muted">No hay clientes en mora crítica con ubicación registrada.</Text>
+        </Card>
+      ) : (
+        <>
+          <CollectionMap center={center} markers={markers} route={routeGeometry} />
 
-            <Button
-              label="Generar ruta crítica"
-              block
-              loading={route.isPending}
-              onPress={generateRoute}
-            />
+          <Button
+            label="Generar ruta crítica"
+            block
+            loading={route.isPending}
+            onPress={generateRoute}
+          />
 
-            {result ? (
-              <Card>
-                <Stack gap="sm">
-                  <Row className="justify-between">
-                    <Text variant="heading">Ruta de cobro</Text>
-                    {result.degraded ? <Badge tone="warning" label="Sin optimizar" /> : null}
-                  </Row>
-                  {!result.degraded ? (
-                    <Text variant="caption" tone="muted">
-                      {(result.distanceMeters / 1000).toFixed(1)} km ·{" "}
-                      {Math.round(result.durationSeconds / 60)} min en total
-                    </Text>
-                  ) : null}
-                  {result.stops.map((s) => (
-                    <Row key={s.creditId} className="items-center justify-between">
-                      <Row className="items-center gap-2">
-                        <Badge tone="info" label={String(s.order)} />
-                        <Stack gap="none">
-                          <Text variant="label">{s.borrowerName}</Text>
-                          <Text variant="caption" tone="muted">
-                            {s.overdueCount} cuotas vencidas · {s.daysOverdue}d
-                          </Text>
-                        </Stack>
-                      </Row>
-                      <MoneyText
-                        variant="caption"
-                        amountMinor={s.outstandingMinor}
-                        currency={s.currency}
-                      />
+          {result ? (
+            <Card>
+              <Stack gap="sm">
+                <Row className="justify-between">
+                  <Text variant="heading">Ruta de cobro</Text>
+                  {result.degraded ? <Badge tone="warning" label="Sin optimizar" /> : null}
+                </Row>
+                {!result.degraded ? (
+                  <Text variant="caption" tone="muted">
+                    {(result.distanceMeters / 1000).toFixed(1)} km ·{" "}
+                    {Math.round(result.durationSeconds / 60)} min en total
+                  </Text>
+                ) : null}
+                {result.stops.map((s) => (
+                  <Row key={s.creditId} className="items-center justify-between">
+                    <Row className="items-center gap-2">
+                      <Badge tone="info" label={String(s.order)} />
+                      <Stack gap="none">
+                        <Text variant="label">{s.borrowerName}</Text>
+                        <Text variant="caption" tone="muted">
+                          {s.overdueCount} cuotas vencidas · {s.daysOverdue}d
+                        </Text>
+                      </Stack>
                     </Row>
-                  ))}
-                </Stack>
-              </Card>
-            ) : null}
-          </>
-        )}
-      </Stack>
-    </Screen>
+                    <MoneyText
+                      variant="caption"
+                      amountMinor={s.outstandingMinor}
+                      currency={s.currency}
+                    />
+                  </Row>
+                ))}
+              </Stack>
+            </Card>
+          ) : null}
+        </>
+      )}
+    </Stack>
   );
 }

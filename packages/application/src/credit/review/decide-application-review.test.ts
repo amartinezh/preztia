@@ -10,7 +10,11 @@ import {
 
 import { ApproveApplicationReviewHandler } from "./approve-application-review";
 import { RejectApplicationReviewHandler } from "./reject-application-review";
-import type { ApplicationDecisionSnapshot, ApplicationDecisionStore } from "./ports";
+import type {
+  ApplicationDecisionSnapshot,
+  ApplicationDecisionStore,
+  CreditRegisteredNotifier,
+} from "./ports";
 import type { ScheduledInstallment } from "../grant-credit";
 import type { GrantedCreditData } from "./ports";
 import type { PaymentPlanStore } from "../plan/ports";
@@ -18,17 +22,30 @@ import type { TenantSettingsStore } from "../../tenant/settings";
 
 /** Store en memoria que registra lo persistido para verificar la orquestación. */
 class FakeStore implements ApplicationDecisionStore {
-  approvals: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; fundingCashBoxId: string; contact?: { phone: string }; override?: boolean }[] = [];
+  approvals: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; fundingCashBoxId: string; contact?: { phone: string }; borrowerLocation?: { latitude: number; longitude: number }; override?: boolean }[] = [];
   rejections: { tenantId: string; applicationId: string; reason: string; decidedBy: string }[] = [];
   constructor(private readonly snapshot: ApplicationDecisionSnapshot | null) {}
   async loadDecisionSnapshot() {
     return this.snapshot;
   }
-  async approveAndGrant(input: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; fundingCashBoxId: string; contact?: { phone: string }; override?: boolean }) {
+  async approveAndGrant(input: { credit: GrantedCreditData; schedule: readonly ScheduledInstallment[]; reason: string; decidedBy: string; fundingCashBoxId: string; contact?: { phone: string }; borrowerLocation?: { latitude: number; longitude: number }; override?: boolean }) {
     this.approvals.push(input);
   }
   async reject(input: { tenantId: string; applicationId: string; reason: string; decidedBy: string }) {
     this.rejections.push(input);
+  }
+}
+
+/** Notificador en memoria: registra los avisos de "crédito registrado" para verificarlos. */
+class FakeRegisteredNotifier implements CreditRegisteredNotifier {
+  calls: { tenantId: string; zoneId: string; channelId: string; recipient: string }[] = [];
+  async notifyRegistered(input: {
+    tenantId: string;
+    zoneId: string;
+    channelId: string;
+    recipient: string;
+  }) {
+    this.calls.push(input);
   }
 }
 
@@ -72,6 +89,50 @@ describe("ApproveApplicationReviewHandler", () => {
     expect(persisted!.fundingCashBoxId).toBe(approveCmd.fundingCashBoxId);
     // El teléfono del deudor cae por defecto al del solicitante del expediente.
     expect(persisted!.contact?.phone).toBe("5511999990000");
+  });
+
+  it("avisa al cliente por WhatsApp que el crédito quedó registrado (con canal y notificador)", async () => {
+    const store = new FakeStore({ ...snapshot("IN_REVIEW"), channelId: "chan-1" });
+    const notifier = new FakeRegisteredNotifier();
+    const handler = new ApproveApplicationReviewHandler(store, undefined, undefined, notifier);
+
+    await handler.execute(approveCmd);
+
+    expect(notifier.calls).toEqual([
+      {
+        tenantId: "t-1",
+        zoneId: approveCmd.zoneId,
+        channelId: "chan-1",
+        recipient: "5511999990000", // por defecto, el teléfono del solicitante
+      },
+    ]);
+  });
+
+  it("no notifica si el expediente no tiene canal de WhatsApp resuelto", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW")); // sin channelId
+    const notifier = new FakeRegisteredNotifier();
+    await new ApproveApplicationReviewHandler(store, undefined, undefined, notifier).execute(
+      approveCmd,
+    );
+    expect(notifier.calls).toHaveLength(0);
+  });
+
+  it("propaga la ubicación compartida en la solicitud como ubicación operativa del cliente", async () => {
+    const location = { latitude: 4.711, longitude: -74.0721 };
+    const store = new FakeStore({ ...snapshot("IN_REVIEW"), applicantLocation: location });
+
+    await new ApproveApplicationReviewHandler(store).execute(approveCmd);
+
+    // La ubicación verificada por WhatsApp viaja con el otorgamiento (misma transacción).
+    expect(store.approvals[0]!.borrowerLocation).toEqual(location);
+  });
+
+  it("sin ubicación en la solicitud, no envía ubicación del cliente (no la pisa)", async () => {
+    const store = new FakeStore({ ...snapshot("IN_REVIEW"), applicantLocation: null });
+
+    await new ApproveApplicationReviewHandler(store).execute(approveCmd);
+
+    expect(store.approvals[0]!.borrowerLocation).toBeUndefined();
   });
 
   it("permite aprobar aunque el expediente quedó AWAITING_DOCUMENTS (override manual)", async () => {

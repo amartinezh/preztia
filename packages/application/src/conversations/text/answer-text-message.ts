@@ -1,9 +1,14 @@
 import type { AssistantAnswer, TextMessage } from "@preztiaos/domain";
-import { ASSISTANT_UNAVAILABLE_REPLY, OFF_TOPIC_REPLY } from "@preztiaos/domain";
+import {
+  ASSISTANT_UNAVAILABLE_REPLY,
+  OFF_TOPIC_REPLY,
+  buildCommittedApplicantReply,
+} from "@preztiaos/domain";
 // El deduplicador es un puerto genérico de idempotencia de webhooks (compartido con el
 // slice de documentos); se reutiliza para no reprocesar el mismo wamid de texto.
 import type { InboundMessageDeduplicator } from "../../credit/application/ports";
 import type {
+  ApplicantJourneyReader,
   CreditApplicationRestarter,
   CreditApplicationStarter,
   KnowledgeAssistant,
@@ -23,6 +28,10 @@ import type {
  *
  * Es idempotente (no reprocesa el mismo wamid) y degrada con elegancia si el asistente
  * de IA no está disponible. No conoce HTTP, Gemini ni la BD: solo coordina dominio + puertos.
+ *
+ * Guarda de estado: si el solicitante YA se comprometió (aceptó la oferta o su expediente quedó
+ * aprobado), NO se le re-ofrece iniciar una solicitud —sería ilógico ofrecerle "iniciar" a quien
+ * acaba de tomar un crédito—; se le confirma que su proceso ya está en curso.
  */
 export class AnswerTextMessageHandler {
   constructor(
@@ -33,6 +42,8 @@ export class AnswerTextMessageHandler {
     private readonly creditApplications: CreditApplicationStarter,
     private readonly creditRestarts: CreditApplicationRestarter,
     private readonly reminders: PendingDocumentReminder,
+    /** Opcional: si el solicitante ya se comprometió, corta el flujo del asistente. */
+    private readonly journey?: ApplicantJourneyReader,
   ) {}
 
   async execute(message: TextMessage): Promise<void> {
@@ -52,6 +63,19 @@ export class AnswerTextMessageHandler {
       applicant: message.from,
     };
     const recipient = { channelId: message.channelId, recipient: message.from };
+
+    // Guarda de estado: a quien ya aceptó la oferta o tiene el crédito otorgado NO se le vuelve a
+    // ofrecer "iniciar una solicitud". Se le confirma que su proceso está en curso y se le da el
+    // canal de atención de la zona. Corta antes de consultar a la IA (evita el re-ofrecimiento).
+    const committed = await this.journey?.committedContext({
+      tenantId: config.tenantId,
+      channelId: message.channelId,
+      applicantPhone: message.from,
+    });
+    if (committed) {
+      await this.sender.sendText(recipient, buildCommittedApplicantReply(committed.supportPhone));
+      return;
+    }
 
     let answer: AssistantAnswer;
     try {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { PortfolioInstallment } from "./installment";
-import { daysOverdue, dueOnDateMinor, summarizeAccount } from "./account";
+import { daysOverdue, dueOnDateMinor, overdueBalanceMinor, summarizeAccount } from "./account";
 
 function inst(
   seq: number,
@@ -60,6 +60,32 @@ describe("daysOverdue", () => {
 
   it("una cuota parcial vencida sí cuenta atraso", () => {
     expect(daysOverdue([inst(1, "2026-06-07", 4200, 1000)], today)).toBe(3);
+  });
+});
+
+describe("overdueBalanceMinor", () => {
+  const today = "2026-06-10";
+
+  it("suma el saldo de las cuotas vencidas antes de hoy", () => {
+    const list = [
+      inst(1, "2026-06-05", 4200, 1000), // vencida, saldo 3200
+      inst(2, "2026-06-08", 4200, 0), // vencida, saldo 4200
+      inst(3, "2026-06-12", 4200, 0), // futura, no cuenta
+    ];
+    expect(overdueBalanceMinor(list, today)).toBe(7400);
+  });
+
+  it("la cuota que vence hoy aún no está en mora (borde)", () => {
+    expect(overdueBalanceMinor([inst(1, today, 4200, 0)], today)).toBe(0);
+  });
+
+  it("0 cuando toda cuota vencida está saldada", () => {
+    const list = [inst(1, "2026-06-05", 4200, 4200), inst(2, "2026-06-12", 4200, 0)];
+    expect(overdueBalanceMinor(list, today)).toBe(0);
+  });
+
+  it("cartera vacía no tiene mora", () => {
+    expect(overdueBalanceMinor([], today)).toBe(0);
   });
 });
 

@@ -46,3 +46,17 @@ export const OFF_TOPIC_REPLY =
  */
 export const ASSISTANT_UNAVAILABLE_REPLY =
   "En este momento tenemos alta demanda y no puedo procesar tu mensaje. Por favor, inténtalo de nuevo en unos minutos. 🙏";
+
+/**
+ * Respuesta fija para un solicitante que YA aceptó su oferta o ya tiene el crédito otorgado.
+ * El asistente de conocimiento NO debe re-ofrecerle iniciar una solicitud (no tiene lógica pedirle
+ * "¿Deseas iniciar una solicitud?" a quien acaba de tomar un crédito): en su lugar confirma que su
+ * proceso ya está en curso y le ofrece el canal de atención de la zona ante inconvenientes. Vive en
+ * el dominio (no la genera el modelo) para que sea determinista.
+ */
+export function buildCommittedApplicantReply(supportPhone: string | null): string {
+  const support = supportPhone
+    ? `Si tienes alguna duda o inconveniente, escríbenos por este medio o comunícate con servicio al cliente al ${supportPhone}.`
+    : "Si tienes alguna duda o inconveniente, escríbenos por este medio o comunícate con servicio al cliente.";
+  return `Tu crédito ya está registrado y en proceso. 🙌 ${support}`;
+}

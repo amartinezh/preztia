@@ -6,6 +6,7 @@ import { api, tenantHeader, unwrap } from "@/core/api/client";
 export const mapKeys = {
   all: ["collections", "map"] as const,
   criticalClients: () => [...mapKeys.all, "critical-clients"] as const,
+  portfolio: () => [...mapKeys.all, "portfolio"] as const,
 };
 
 /** Clientes en mora crítica (≥ umbral de cuotas vencidas) con coordenadas, para el mapa de cobro. */
@@ -14,6 +15,15 @@ export function useCriticalClients() {
     queryKey: mapKeys.criticalClients(),
     queryFn: async () =>
       unwrap(await api.listCriticalClients({ headers: tenantHeader() })),
+  });
+}
+
+/** Toda la cartera activa con coordenadas y detalle del crédito, para el mapa de clientes. */
+export function usePortfolioMapClients() {
+  return useQuery({
+    queryKey: mapKeys.portfolio(),
+    queryFn: async () =>
+      unwrap(await api.listPortfolioMap({ headers: tenantHeader() })),
   });
 }
 

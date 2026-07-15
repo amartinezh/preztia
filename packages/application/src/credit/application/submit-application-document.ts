@@ -204,8 +204,8 @@ function rejectionMessage(
     }
     case "offer_manual_review":
       return (
-        "Hemos intentado validar tu documento varias veces y al parecer no es el correcto. " +
-        "Si estás seguro de que es el documento solicitado, *envíalo una vez más* y lo " +
+        "Hemos intentado validar tus fotos varias veces y al parecer no son las correctas. " +
+        "Si estás seguro de que son las fotos solicitadas, *envíalas una vez más* y las " +
         "remitiremos a un analista de cartera para revisión manual."
       );
   }

@@ -37,6 +37,7 @@ import { ApplicationDecisionRepository } from './application-decision.repository
 import { DocumentOriginalStorage } from './document-original.storage';
 import { PlanOfferRepository } from './plan-offer.repository';
 import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
+import { CreditRegisteredWhatsappNotifier } from './credit-registered.notifier';
 import { ReExtractDocumentService } from './re-extract-document.service';
 
 const uuid = z.string().uuid();
@@ -61,14 +62,17 @@ export class ApplicationReviewController {
     private readonly plans: PaymentPlanRepository,
     private readonly tenantConfig: TenantConfigRepository,
     private readonly offerNotifier: PlanOfferWhatsappNotifier,
+    private readonly registeredNotifier: CreditRegisteredWhatsappNotifier,
     private readonly reExtractService: ReExtractDocumentService,
   ) {
     // Fase 10: el otorgamiento toma los términos del plan negociado y exige aceptación del cliente
-    // (salvo override permitido por el tenant).
+    // (salvo override permitido por el tenant). Al aprobar, avisa al cliente por WhatsApp que el
+    // crédito quedó registrado (best-effort, con el teléfono de atención de la zona).
     this.approveHandler = new ApproveApplicationReviewHandler(
       this.decisions,
       this.plans,
       this.tenantConfig,
+      this.registeredNotifier,
     );
     this.rejectHandler = new RejectApplicationReviewHandler(this.decisions);
     this.offerHandler = new OfferPlansHandler(
@@ -128,6 +132,24 @@ export class ApplicationReviewController {
     });
     if (!detail) throw new NotFoundException('Expediente no encontrado');
     return detail;
+  }
+
+  // Lectura liviana para el sondeo en vivo del expediente: solo el sub-estado de la oferta,
+  // para reflejar la respuesta del cliente por WhatsApp sin recargar el detalle completo.
+  @Get('applications/:id/plan-offer')
+  async planOfferStatus(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    requireTenant(tenantId);
+    const reviewer = requireReviewer(authorization);
+    const result = await this.queries.getPlanOfferStatus({
+      session: reviewer,
+      applicationId: uuid.parse(id),
+    });
+    if (!result) throw new NotFoundException('Expediente no encontrado');
+    return result;
   }
 
   @Get('applications/:id/conversation')

@@ -2,19 +2,33 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { MAP_STYLE_URL, type CollectionMapProps } from "./collection-map.types";
+import { MAP_STYLE_URL, type CollectionMapProps, type MapMarker } from "./collection-map.types";
 
-const ORIGIN_COLOR = "#208AEF";
-const CRITICAL_COLOR = "#e11d48";
+// Color del pin según el estado del cliente (misma paleta que la versión nativa).
+const MARKER_COLORS: Record<MapMarker["kind"], string> = {
+  origin: "#208AEF",
+  ok: "#059669",
+  overdue: "#d97706",
+  critical: "#e11d48",
+};
 const ROUTE_COLOR = "#208AEF";
+const FIT_PADDING_PX = 48;
+const FIT_MAX_ZOOM = 15;
 
 /**
  * Mapa de cobro — implementación WEB con MapLibre GL JS (FOSS) + tiles OpenFreeMap (sin API key).
- * Pinta los marcadores de clientes críticos y el del cobrador, y dibuja la polilínea de la ruta
- * optimizada. Reactivo: re-pinta cuando cambian marcadores o ruta. (Expo web corre sobre el DOM,
- * por eso usa un contenedor `div` real.)
+ * Pinta los marcadores (color según severidad) y la polilínea de la ruta optimizada. Con
+ * `onMarkerPress` el clic sobre un pin selecciona al cliente (el detalle lo pinta la pantalla);
+ * sin él, el pin abre un popup con su rótulo. `fitToMarkers` encuadra todos los pines. Reactivo:
+ * re-pinta cuando cambian marcadores o ruta. (Expo web corre sobre el DOM, por eso usa un `div`.)
  */
-export function CollectionMap({ center, markers, route }: CollectionMapProps) {
+export function CollectionMap({
+  center,
+  markers,
+  route,
+  fitToMarkers,
+  onMarkerPress,
+}: CollectionMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerObjs = useRef<maplibregl.Marker[]>([]);
@@ -37,20 +51,39 @@ export function CollectionMap({ center, markers, route }: CollectionMapProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Marcadores.
+  // Marcadores (y encuadre a todos ellos si se pidió).
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     markerObjs.current.forEach((m) => m.remove());
     markerObjs.current = markers.map((mk) => {
-      const color = mk.kind === "origin" ? ORIGIN_COLOR : CRITICAL_COLOR;
-      const label = mk.order ? `${mk.order}. ${mk.label}` : mk.label;
-      return new maplibregl.Marker({ color })
-        .setLngLat([mk.longitude, mk.latitude])
-        .setPopup(new maplibregl.Popup({ offset: 24 }).setText(label))
-        .addTo(map);
+      const marker = new maplibregl.Marker({ color: MARKER_COLORS[mk.kind] }).setLngLat([
+        mk.longitude,
+        mk.latitude,
+      ]);
+      if (onMarkerPress) {
+        const el = marker.getElement();
+        el.style.cursor = "pointer";
+        el.addEventListener("click", (event) => {
+          event.stopPropagation();
+          onMarkerPress(mk.id);
+        });
+      } else {
+        const label = mk.order ? `${mk.order}. ${mk.label}` : mk.label;
+        marker.setPopup(new maplibregl.Popup({ offset: 24 }).setText(label));
+      }
+      return marker.addTo(map);
     });
-  }, [markers]);
+
+    if (fitToMarkers && markers.length > 0) {
+      const first: [number, number] = [markers[0].longitude, markers[0].latitude];
+      const bounds = markers.reduce(
+        (b, mk) => b.extend([mk.longitude, mk.latitude]),
+        new maplibregl.LngLatBounds(first, first),
+      );
+      map.fitBounds(bounds, { padding: FIT_PADDING_PX, maxZoom: FIT_MAX_ZOOM, duration: 0 });
+    }
+  }, [markers, fitToMarkers, onMarkerPress]);
 
   // Polilínea de la ruta.
   useEffect(() => {

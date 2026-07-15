@@ -59,6 +59,41 @@ export const listCriticalClientsOutput = z.object({
   items: z.array(criticalClient),
 });
 
+// ── Mapa de cartera: TODOS los clientes con crédito activo y coordenadas ────────────────────
+// Vista complementaria al mapa crítico: ubica a toda la cartera activa en el mapa; al tocar un
+// marcador la UI muestra el detalle completo del crédito. `critical` replica el umbral del mapa
+// de cobro para pintar el marcador según severidad (al día / en mora / crítico).
+export const portfolioMapClient = z.object({
+  creditId: z.string().uuid(),
+  borrowerName: z.string(),
+  // Teléfono en claro: el consumidor es un revisor autorizado (igual que el panel de cobranza).
+  phone: z.string().nullable(),
+  business: z.string().nullable(),
+  zoneName: z.string().nullable(),
+  latitude: z.number(),
+  longitude: z.number(),
+  principalMinor: z.number().int(),
+  totalDueMinor: z.number().int(),
+  paidMinor: z.number().int(),
+  outstandingMinor: z.number().int(),
+  currency: z.string(),
+  installmentsCount: z.number().int(),
+  installmentsPaid: z.number().int(),
+  overdueCount: z.number().int(),
+  daysOverdue: z.number().int(),
+  // Próxima cuota pendiente (ISO date); null si ya no queda ninguna por saldar.
+  nextDueDate: z.string().nullable(),
+  startDate: z.string(),
+  critical: z.boolean(),
+});
+export type PortfolioMapClient = z.infer<typeof portfolioMapClient>;
+
+export const listPortfolioMapOutput = z.object({
+  // Umbral vigente (nº de cuotas vencidas) con el que se marcó `critical`; informa la UI.
+  threshold: z.number().int(),
+  items: z.array(portfolioMapClient),
+});
+
 // Un punto de la geografía (cliente o punto de partida del cobrador).
 export const geoPoint = z.object({ latitude: z.number(), longitude: z.number() });
 
@@ -107,6 +142,13 @@ export const collectionsContract = c.router({
     headers: tenantHeaders,
     responses: { 200: listCriticalClientsOutput },
     summary: "Clientes en mora crítica (≥ umbral de cuotas vencidas) con coordenadas, para el mapa",
+  },
+  listPortfolioMap: {
+    method: "GET",
+    path: "/collections/portfolio-map",
+    headers: tenantHeaders,
+    responses: { 200: listPortfolioMapOutput },
+    summary: "Toda la cartera activa con coordenadas y detalle del crédito, para el mapa de clientes",
   },
   criticalRoute: {
     method: "POST",

@@ -7,6 +7,7 @@ import type {
   ConversationEntry,
   CreditApplicationStatus,
   ExtractedIdentityView,
+  PlanOfferStatusOutput,
   RejectionSummary,
   ValidationRunView,
 } from '@preztiaos/contracts';
@@ -257,6 +258,30 @@ export class ApplicationReviewQueryRepository {
               }
             : null,
       };
+    });
+  }
+
+  /**
+   * Sub-estado vigente de la oferta de plan: lectura liviana (una sola fila, mismo alcance por
+   * zona que el detalle) pensada para el sondeo en vivo mientras se espera la respuesta del
+   * cliente por WhatsApp. `null` si el expediente no existe o está fuera del alcance del revisor.
+   */
+  async getPlanOfferStatus(input: {
+    session: Session;
+    applicationId: string;
+  }): Promise<PlanOfferStatusOutput | null> {
+    return withTenantTxFor(input.session.tenantId, async (tx) => {
+      const [row] = await tx
+        .select({ status: schema.creditApplication.planOffer })
+        .from(schema.creditApplication)
+        .where(
+          and(
+            eq(schema.creditApplication.id, input.applicationId),
+            applicationScope(input.session),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
     });
   }
 

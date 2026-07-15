@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { View } from "react-native";
-import { Banner, Card, formatMoney, Spinner, Stack, Text, useTheme } from "@preztiaos/ui";
+import { Banner, Card, formatMoney, Row, Spinner, Stack, Text, useTheme } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { useT, type MessageKey } from "@/core/i18n";
@@ -8,7 +9,12 @@ import { BarChart } from "../components/bar-chart";
 import { DonutChart } from "../components/donut-chart";
 import { KpiCard } from "../components/kpi-card";
 import { dashboardPalette } from "../components/palette";
+import { PeriodToggle, type PeriodOption } from "../components/period-toggle";
 import { SectionHeader } from "../components/section-header";
+import { StageTimeline } from "../components/stage-timeline";
+
+// Ventanas de calendario acumuladas para la trazabilidad de tiempos (clave del DTO del backend).
+type TimePeriod = "today" | "week" | "month" | "year";
 
 /**
  * Dashboard inicial de KPIs: panel de bienvenida que consolida en una sola vista (con scroll)
@@ -20,6 +26,16 @@ export function DashboardScreen() {
   const { colors } = useTheme();
   const query = useDashboardKpis();
   const kpis = query.data;
+
+  // Ventana temporal seleccionada para la trazabilidad de tiempos de atención. El backend ya
+  // entrega las cuatro ventanas, así que cambiar de periodo no dispara refetch (solo re-render).
+  const [period, setPeriod] = useState<TimePeriod>("today");
+  const periodOptions: readonly PeriodOption<TimePeriod>[] = [
+    { key: "today", label: t("home.timings.period.today") },
+    { key: "week", label: t("home.timings.period.week") },
+    { key: "month", label: t("home.timings.period.month") },
+    { key: "year", label: t("home.timings.period.year") },
+  ];
 
   // Colores derivados del tema para pasar a los componentes SVG (que no leen nativewind).
   const textColor = colors.text;
@@ -166,6 +182,71 @@ export function DashboardScreen() {
                   ]}
                 />
               </Card>
+
+              {/* Trazabilidad de tiempos de atención: revela dónde se concentra la demora. */}
+              <Card>
+                <Stack gap="md">
+                  <Stack gap="xs">
+                    <Text variant="label" style={{ color: textColor }}>
+                      {t("home.timings.title")}
+                    </Text>
+                    <Text variant="caption" style={{ color: muted }}>
+                      {t("home.timings.subtitle")}
+                    </Text>
+                  </Stack>
+
+                  <PeriodToggle
+                    options={periodOptions}
+                    value={period}
+                    onChange={setPeriod}
+                    accent={dashboardPalette.sky}
+                    textColor={textColor}
+                    mutedColor={muted}
+                    trackColor={track}
+                  />
+
+                  {/* Titulares del periodo: tiempo extremo a extremo y solicitudes resueltas. */}
+                  <Row className="items-center gap-3">
+                    <View style={{ flex: 1 }}>
+                      <Text variant="caption" style={{ color: muted }}>
+                        {t("home.timings.total")}
+                      </Text>
+                      <Text variant="heading" style={{ color: textColor }}>
+                        {formatDuration(kpis.applicationTimings[period].avgTotalMinutes, t)}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text variant="caption" style={{ color: muted }}>
+                        {t("home.timings.resolved")}
+                      </Text>
+                      <Text variant="heading" style={{ color: textColor }}>
+                        {String(kpis.applicationTimings[period].decidedCount)}
+                      </Text>
+                    </View>
+                  </Row>
+
+                  <StageTimeline
+                    textColor={textColor}
+                    mutedColor={muted}
+                    trackColor={track}
+                    emptyLabel={t("home.timings.empty")}
+                    stages={[
+                      {
+                        label: t("home.timings.stage.intake"),
+                        minutes: kpis.applicationTimings[period].avgIntakeMinutes ?? 0,
+                        display: formatDuration(kpis.applicationTimings[period].avgIntakeMinutes, t),
+                        color: dashboardPalette.sky,
+                      },
+                      {
+                        label: t("home.timings.stage.review"),
+                        minutes: kpis.applicationTimings[period].avgReviewMinutes ?? 0,
+                        display: formatDuration(kpis.applicationTimings[period].avgReviewMinutes, t),
+                        color: dashboardPalette.amber,
+                      },
+                    ]}
+                  />
+                </Stack>
+              </Card>
             </Stack>
 
             {/* ── Bloque Seguridad y Control (Riesgo + Fraude) ──────────────── */}
@@ -262,6 +343,32 @@ function overdueRate(activeMinor: number, overdueMinor: number): string | undefi
 function fraudRate(uploads: number, fraud: number): string | undefined {
   if (uploads <= 0) return undefined;
   return `${Math.round((fraud / uploads) * 100)}% del total`;
+}
+
+const MINUTES_PER_HOUR = 60;
+const MINUTES_PER_DAY = 1440;
+
+/**
+ * Formatea una duración media (en minutos) a una escala legible según su magnitud: minutos para
+ * lo corto, horas + minutos para lo intermedio, días + horas para lo largo (promedios anuales).
+ * `null` (periodo sin datos para ese tramo) se muestra como guion.
+ */
+function formatDuration(minutes: number | null, t: (key: MessageKey) => string): string {
+  if (minutes === null) return "—";
+  if (minutes < 1) return `<1 ${t("home.timings.unit.min")}`;
+  if (minutes < MINUTES_PER_HOUR) return `${Math.round(minutes)} ${t("home.timings.unit.min")}`;
+  if (minutes < MINUTES_PER_DAY) {
+    const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+    const rest = Math.round(minutes % MINUTES_PER_HOUR);
+    return rest > 0
+      ? `${hours} ${t("home.timings.unit.hour")} ${rest} ${t("home.timings.unit.min")}`
+      : `${hours} ${t("home.timings.unit.hour")}`;
+  }
+  const days = Math.floor(minutes / MINUTES_PER_DAY);
+  const hours = Math.round((minutes % MINUTES_PER_DAY) / MINUTES_PER_HOUR);
+  return hours > 0
+    ? `${days} ${t("home.timings.unit.day")} ${hours} ${t("home.timings.unit.hour")}`
+    : `${days} ${t("home.timings.unit.day")}`;
 }
 
 const THOUSANDS = 1000;

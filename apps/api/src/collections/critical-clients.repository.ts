@@ -4,9 +4,9 @@ import { schema } from '@preztiaos/db';
 import type { CriticalClient } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { zoneScopePredicate } from '../iam/zone-scope';
+import { criticalOverdueThreshold } from './critical-overdue-threshold';
 import type { Session } from '../auth/require-role';
 
-const DEFAULT_CRITICAL_OVERDUE_THRESHOLD = 3;
 const MILLIS_PER_DAY = 86_400_000;
 
 /**
@@ -19,10 +19,7 @@ const MILLIS_PER_DAY = 86_400_000;
 export class CriticalClientsRepository {
   /** Umbral vigente de cuotas vencidas para marcar a un cliente como crítico. */
   threshold(): number {
-    const n = Number(process.env.CRITICAL_OVERDUE_THRESHOLD);
-    return Number.isFinite(n) && n >= 1
-      ? Math.floor(n)
-      : DEFAULT_CRITICAL_OVERDUE_THRESHOLD;
+    return criticalOverdueThreshold();
   }
 
   async list(session: Session): Promise<CriticalClient[]> {
@@ -86,7 +83,8 @@ export class CriticalClientsRepository {
   }
 }
 
-function daysSince(date: string | null, today: string): number {
+/** Días transcurridos desde `date` hasta `today` (0 si no hay fecha o aún no vence). */
+export function daysSince(date: string | null, today: string): number {
   if (!date) return 0;
   const diff = Date.parse(today) - Date.parse(date);
   return diff > 0 ? Math.floor(diff / MILLIS_PER_DAY) : 0;

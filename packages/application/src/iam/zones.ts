@@ -16,6 +16,8 @@ export interface CreateZoneCommand {
   name: string;
   /** Zona padre; `null` para una zona raíz. */
   parentZoneId: string | null;
+  /** Teléfono de atención al cliente de la zona; `null` si no se configura. */
+  supportPhone?: string | null;
 }
 
 export class CreateZoneHandler {
@@ -39,6 +41,7 @@ export class CreateZoneHandler {
       parentZoneId: cmd.parentZoneId,
       path,
       name: cmd.name.trim(),
+      supportPhone: cmd.supportPhone ?? null,
     });
     return { id, path };
   }
@@ -48,17 +51,22 @@ export interface UpdateZoneCommand {
   actor: ActorContext;
   zoneId: string;
   name: string;
+  /** `undefined` conserva el teléfono actual; `null`/string lo actualiza. */
+  supportPhone?: string | null;
 }
 
 export class UpdateZoneHandler {
   constructor(private readonly zones: ZoneStore) {}
 
   async execute(cmd: UpdateZoneCommand): Promise<ZoneRecord> {
-    // Solo se renombra: el path es estable para no invalidar las asignaciones existentes.
+    // Solo se renombra y/o ajusta el teléfono de atención: el path es estable para no invalidar
+    // las asignaciones existentes.
     const updated = await this.zones.update({
       tenantId: cmd.actor.tenantId,
       zoneId: cmd.zoneId,
       name: cmd.name.trim(),
+      // Solo se pasa cuando viene en el comando (undefined ⇒ conserva el valor actual).
+      ...(cmd.supportPhone !== undefined ? { supportPhone: cmd.supportPhone } : {}),
     });
     if (!updated) throw new NotFoundError("La zona no existe");
     return updated;

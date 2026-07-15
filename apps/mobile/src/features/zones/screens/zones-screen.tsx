@@ -99,6 +99,7 @@ function CreateZoneModal({
   const create = useCreateZone();
   const [name, setName] = useState("");
   const [parentZoneId, setParentZoneId] = useState<string>("");
+  const [supportPhone, setSupportPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const ROOT = "__root__";
@@ -112,6 +113,7 @@ function CreateZoneModal({
     const parsed = createZoneInput.safeParse({
       name: name.trim(),
       parentZoneId: parentZoneId && parentZoneId !== ROOT ? parentZoneId : null,
+      supportPhone: supportPhone.trim() || null,
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? t("errors.validation"));
@@ -121,6 +123,7 @@ function CreateZoneModal({
       onSuccess: () => {
         setName("");
         setParentZoneId("");
+        setSupportPhone("");
         onClose();
       },
       onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
@@ -140,6 +143,15 @@ function CreateZoneModal({
             options={parentOptions}
             onChange={setParentZoneId}
             title={t("zones.new.parent")}
+          />
+        </Field>
+        <Field label={t("zones.support.label")} hint={t("zones.support.hint")}>
+          <Input
+            value={supportPhone}
+            onChangeText={setSupportPhone}
+            keyboardType="phone-pad"
+            autoCapitalize="none"
+            placeholder={t("zones.support.placeholder")}
           />
         </Field>
         <Button label={t("zones.new.submit")} loading={create.isPending} block onPress={submit} />

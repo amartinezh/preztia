@@ -67,3 +67,23 @@ export interface PendingDocumentReminder {
     applicant: string;
   }): Promise<string | null>;
 }
+
+/** Contexto de un solicitante que YA se comprometió (aceptó la oferta o tiene el crédito otorgado). */
+export interface CommittedApplicantContext {
+  /** Teléfono de atención de la zona del canal para ofrecerlo ante inconvenientes (null si no hay). */
+  readonly supportPhone: string | null;
+}
+
+/**
+ * Puerto: indica si el solicitante ya se comprometió con un crédito (aceptó la oferta o su expediente
+ * quedó APROBADO). Sirve para que el asistente de conocimiento NO le re-ofrezca iniciar una solicitud
+ * (sería ilógico ofrecerle "iniciar" a quien acaba de tomar un crédito). Devuelve `null` si el
+ * solicitante aún es un prospecto (sigue el flujo normal del asistente).
+ */
+export interface ApplicantJourneyReader {
+  committedContext(input: {
+    tenantId: string;
+    channelId: string;
+    applicantPhone: string;
+  }): Promise<CommittedApplicantContext | null>;
+}

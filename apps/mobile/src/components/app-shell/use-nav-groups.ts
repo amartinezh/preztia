@@ -3,6 +3,7 @@ import type { Href } from "expo-router";
 import { can } from "@/core/auth/authorization";
 import { useSession } from "@/core/auth/session";
 import { useT } from "@/core/i18n";
+import { hasVisibleSettingsSections } from "@/features/settings/hooks/use-permissions";
 
 export type NavGroup = {
   /** Nombre de la ruta (archivo en `(tabs)/`) que registra la pestaña. */
@@ -21,10 +22,13 @@ export function useNavGroups(): NavGroup[] {
   const { t } = useT();
 
   if (role === "SUPER_ADMIN") {
-    return [
+    const groups: NavGroup[] = [
       { name: "tenants", href: "/tenants" as Href, label: t("tenants.tab") },
-      { name: "settings", href: "/settings" as Href, label: t("nav.settings") },
     ];
+    if (hasVisibleSettingsSections(role)) {
+      groups.push({ name: "settings", href: "/settings" as Href, label: t("nav.settings") });
+    }
+    return groups;
   }
 
   const groups: NavGroup[] = [];
@@ -52,7 +56,11 @@ export function useNavGroups(): NavGroup[] {
   ) {
     groups.push({ name: "cuentas", href: "/cuentas" as Href, label: t("nav.cuentas") });
   }
-  groups.push({ name: "settings", href: "/settings" as Href, label: t("nav.settings") });
+  // Ajustes solo se ofrece si el rol puede ver al menos una sección; si no (COLLECTOR),
+  // la pestaña sería un callejón sin salida ("No tienes acceso a la configuración").
+  if (hasVisibleSettingsSections(role)) {
+    groups.push({ name: "settings", href: "/settings" as Href, label: t("nav.settings") });
+  }
 
   return groups;
 }

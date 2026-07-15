@@ -214,6 +214,13 @@ export const offerPlansOutput = z.object({
   planOfferStatus,
 });
 
+// Sub-estado vigente de la oferta: lectura liviana pensada para el sondeo en vivo del expediente
+// (reflejar la respuesta del cliente por WhatsApp sin recargar la pantalla).
+export const planOfferStatusOutput = z.object({
+  status: planOfferStatus,
+});
+export type PlanOfferStatusOutput = z.infer<typeof planOfferStatusOutput>;
+
 // ── Decisiones del coordinador ──────────────────────────────────────────────
 // Aprobar reusa los términos del crédito (fuente única), añade el motivo de la decisión y la
 // caja/cuenta de la que sale el dinero: el otorgamiento debita ese saldo de forma atómica
@@ -288,6 +295,14 @@ export const creditApplicationReviewContract = c.router({
     headers: tenantHeaders,
     responses: { 200: conversationOutput },
     summary: "Transcript de la conversación con el cliente del expediente",
+  },
+  getPlanOfferStatus: {
+    method: "GET",
+    path: "/applications/:id/plan-offer",
+    pathParams: idParam,
+    headers: tenantHeaders,
+    responses: { 200: planOfferStatusOutput },
+    summary: "Sub-estado vigente de la oferta de plan (lectura liviana para sondeo en vivo de la respuesta del cliente)",
   },
   offerPlans: {
     method: "POST",

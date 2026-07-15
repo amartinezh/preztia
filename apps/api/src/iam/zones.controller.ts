@@ -82,6 +82,7 @@ export class ZonesController {
       actor: actorFrom(session),
       name: dto.name,
       parentZoneId: dto.parentZoneId,
+      supportPhone: dto.supportPhone,
     });
   }
 
@@ -99,6 +100,10 @@ export class ZonesController {
       actor: actorFrom(session),
       zoneId: uuid.parse(id),
       name: dto.name,
+      // Ausente en el body ⇒ no se toca; presente (incluido null) ⇒ se actualiza.
+      ...(dto.supportPhone !== undefined
+        ? { supportPhone: dto.supportPhone }
+        : {}),
     });
   }
 

@@ -51,7 +51,8 @@ export class PlanOfferWhatsappNotifier implements PlanOfferNotifier {
     );
     const total = input.schedule.reduce((acc, i) => acc + i.amountDueMinor, 0);
     const body = [
-      `${input.plan.name}. Tu crédito quedaría así:`,
+      `¡Buenas noticias! 🎉 Luego de estudiar tu solicitud, tenemos un crédito de ${formatMoney(input.principalMinor, input.currency)} para ofrecerte.`,
+      `Tu plan de pago (${input.plan.name}) quedaría así:`,
       ...rows,
       `Total a pagar: ${formatMoney(total, input.currency)} en ${input.plan.installmentsCount} cuotas (${FREQUENCY_LABEL[input.plan.frequency]}).`,
       '¿Aceptás tomar el crédito? Respondé SÍ o NO.',
