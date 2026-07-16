@@ -58,6 +58,20 @@
   var marketSnapshot = null;
   var lastTapeJson = '';
 
+  // Se crea ANTES del arranque: observeReveals() lo usa de inmediato (con `var` más abajo
+  // estaría aún undefined y el TypeError abortaría todo el script).
+  var revealObserver = new IntersectionObserver(
+    function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    },
+    { threshold: 0.08 }
+  );
+
   /* ===== Arranque ===== */
 
   ['nav-login', 'band-login', 'subscriber-link'].forEach(function (id) {
@@ -494,18 +508,6 @@
   }
 
   /* ===== Utilidades ===== */
-
-  var revealObserver = new IntersectionObserver(
-    function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('in');
-          revealObserver.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.08 }
-  );
 
   function observeReveals() {
     document.querySelectorAll('.reveal').forEach(function (node) {
