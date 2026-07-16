@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import {
@@ -18,11 +18,17 @@ import { decryptOptionalSecret } from '../../shared/secret-cipher';
  */
 @Injectable()
 export class TenantConfigDrizzleRepository implements TenantAssistantConfigRepository {
+  private readonly logger = new Logger('WhatsApp:Assistant');
+
   async findByChannelId(
     channelId: string,
   ): Promise<TenantAssistantConfig | null> {
     const tenantId = await resolveTenantByWhatsappPhone(channelId);
-    if (!tenantId) return null;
+    if (!tenantId) {
+      // El número no está mapeado a ningún tenant/zona: el asistente no responderá.
+      this.logger.warn(`Canal ${channelId} sin tenant asociado (whatsapp_channel)`);
+      return null;
+    }
 
     return withTenantTxFor(tenantId, async (tx) => {
       const [row] = await tx
@@ -31,13 +37,23 @@ export class TenantConfigDrizzleRepository implements TenantAssistantConfigRepos
         .where(eq(schema.tenantConfig.tenantId, tenantId));
       if (!row) return null;
 
+      const aiApiKey = decryptOptionalSecret(row.aiApiKey);
+      // El asistente calla si falta la credencial de IA o la base de conocimiento. Sin este
+      // aviso el mensaje entrante moría en silencio (se recibía y no se respondía). Se avisa
+      // hasta que se configure en Ajustes → WhatsApp/IA (PUT /tenant-config/assistant).
+      if (!aiApiKey || row.knowledgeBase.trim() === '') {
+        this.logger.warn(
+          `Asistente sin configurar para el tenant ${tenantId}: ${!aiApiKey ? 'falta API key de IA' : 'base de conocimiento vacía'}. No se responderá hasta configurarlo en Ajustes → WhatsApp/IA.`,
+        );
+      }
+
       return {
         tenantId: row.tenantId,
         knowledgeBase: row.knowledgeBase,
         aiProvider: row.aiProvider,
         // La credencial va CIFRADA en reposo (AES-256-GCM): se descifra al leerla,
         // igual que en el OCR de documentos y el clasificador de pagos.
-        aiApiKey: decryptOptionalSecret(row.aiApiKey),
+        aiApiKey,
       };
     });
   }
