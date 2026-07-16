@@ -82,6 +82,7 @@ services:
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./deploy/landing:/srv/landing:ro
+      - ./deploy/app:/srv/app:ro # build web de Expo (apps/mobile → expo export -p web)
       - caddy_data:/data # certificados Let's Encrypt (persistentes)
       - caddy_config:/config
     depends_on:

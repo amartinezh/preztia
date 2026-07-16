@@ -30,3 +30,20 @@ api.{$DOMAIN} {
 	encode zstd gzip
 	reverse_proxy api:3010
 }
+
+# ---- App web (export estático de Expo Router, output: "static") ----
+# Sirve el build de apps/mobile (expo export -p web) copiado a /srv/app. Expo Router genera un
+# .html por ruta; el fallback a /index.html cubre las rutas resueltas en el cliente.
+app.{$DOMAIN} {
+	encode zstd gzip
+	root * /srv/app
+	try_files {path} {path}.html {path}/ /index.html
+	file_server
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
