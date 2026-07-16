@@ -8,23 +8,41 @@ interface FeedSource {
   readonly url: string;
 }
 
+/** Titular del sector con su sección editorial (la etiqueta del feed que lo trajo). */
+export interface SectorNewsItem extends NewsItem {
+  readonly topic: string;
+}
+
 /** Lo que la landing consume: titulares del sector + changelog propio + marca de tiempo. */
 export interface NewsSnapshot {
   readonly updatedAt: string | null;
-  readonly sector: readonly NewsItem[];
+  readonly sector: readonly SectorNewsItem[];
   readonly platform: readonly ChangelogEntry[];
 }
 
-// Feeds por defecto (Brasil). Se usa Google News RSS: robusto, pensado para consumirse y
-// devuelve la fuente atribuida en cada ítem. Se pueden reemplazar con NEWS_FEEDS.
+// Feeds por defecto: secciones editoriales de la portada. Se usa Google News RSS (robusto,
+// pensado para consumirse y con la fuente atribuida en cada ítem) mezclando el mercado
+// hispano (es-419) con el brasileño (PIX). Se pueden reemplazar con NEWS_FEEDS.
 const DEFAULT_FEEDS: readonly FeedSource[] = [
   {
-    label: 'Fintech Brasil',
-    url: 'https://news.google.com/rss/search?q=fintech+OR+cr%C3%A9dito+brasil&hl=pt-BR&gl=BR&ceid=BR:pt-419',
+    label: 'Economía',
+    url: 'https://news.google.com/rss/search?q=econom%C3%ADa+colombia&hl=es-419&gl=CO&ceid=CO:es-419',
   },
   {
-    label: 'Economía',
-    url: 'https://news.google.com/rss/search?q=economia+brasil&hl=pt-BR&gl=BR&ceid=BR:pt-419',
+    label: 'Finanzas y crédito',
+    url: 'https://news.google.com/rss/search?q=cr%C3%A9dito+OR+banca+OR+tasas+inter%C3%A9s&hl=es-419&gl=CO&ceid=CO:es-419',
+  },
+  {
+    label: 'Mercados',
+    url: 'https://news.google.com/rss/search?q=d%C3%B3lar+OR+bolsa+OR+mercados&hl=es-419&gl=CO&ceid=CO:es-419',
+  },
+  {
+    label: 'Criptomonedas',
+    url: 'https://news.google.com/rss/search?q=bitcoin+OR+criptomonedas&hl=es-419&gl=CO&ceid=CO:es-419',
+  },
+  {
+    label: 'Fintech',
+    url: 'https://news.google.com/rss/search?q=fintech+latinoam%C3%A9rica+OR+colombia&hl=es-419&gl=CO&ceid=CO:es-419',
   },
   {
     label: 'PIX y pagos',
@@ -32,13 +50,16 @@ const DEFAULT_FEEDS: readonly FeedSource[] = [
   },
 ];
 
-const MAX_ITEMS = toPositiveInt(process.env.NEWS_MAX_ITEMS, 12);
+const MAX_ITEMS = toPositiveInt(process.env.NEWS_MAX_ITEMS, 48);
+const MAX_ITEMS_PER_TOPIC = toPositiveInt(process.env.NEWS_MAX_PER_TOPIC, 8);
 const FETCH_TIMEOUT_MS = toPositiveInt(process.env.NEWS_FETCH_TIMEOUT_MS, 8000);
 
 /**
- * Agregador del "pulso del sector". Mantiene un snapshot EN MEMORIA (una lectura por día basta):
- * el cron lo refresca y el controlador lo sirve. Es resiliente por diseño — si un feed cae, sigue
- * con los demás; si TODOS caen, conserva el último snapshot bueno (degradación elegante).
+ * Agregador del "pulso del sector". Mantiene un snapshot EN MEMORIA: el cron lo refresca y el
+ * controlador lo sirve. Es resiliente por diseño — si un feed cae, sigue con los demás; si
+ * TODOS caen, conserva el último snapshot bueno (degradación elegante). La selección se
+ * balancea por sección (tope por topic) para que ninguna sección de la portada quede vacía
+ * porque otra publica más rápido.
  */
 @Injectable()
 export class NewsService implements OnModuleInit {
@@ -77,7 +98,7 @@ export class NewsService implements OnModuleInit {
       return;
     }
 
-    const sector = dedupeByLink(items).sort(byNewest).slice(0, MAX_ITEMS);
+    const sector = selectBalanced(dedupeByLink(items));
     this.snapshot = {
       updatedAt: new Date().toISOString(),
       sector,
@@ -88,7 +109,7 @@ export class NewsService implements OnModuleInit {
     );
   }
 
-  private async loadFeed(feed: FeedSource): Promise<readonly NewsItem[]> {
+  private async loadFeed(feed: FeedSource): Promise<readonly SectorNewsItem[]> {
     try {
       const res = await fetch(feed.url, {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -102,7 +123,10 @@ export class NewsService implements OnModuleInit {
         this.logger.warn(`Feed "${feed.label}" respondió ${res.status}`);
         return [];
       }
-      return parseFeed(await res.text(), feed.label);
+      return parseFeed(await res.text(), feed.label).map((item) => ({
+        ...item,
+        topic: feed.label,
+      }));
     } catch (err) {
       this.logger.warn(
         `Feed "${feed.label}" no disponible: ${err instanceof Error ? err.message : String(err)}`,
@@ -129,9 +153,24 @@ function parseFeedsEnv(raw: string | undefined): readonly FeedSource[] {
   return feeds.length ? feeds : DEFAULT_FEEDS;
 }
 
-function dedupeByLink(items: readonly NewsItem[]): NewsItem[] {
+/**
+ * Selección balanceada: lo más nuevo de CADA sección (tope por topic) y luego un orden global
+ * por fecha, con tope total. Invariante: ningún topic aporta más de MAX_ITEMS_PER_TOPIC ítems.
+ */
+function selectBalanced(items: readonly SectorNewsItem[]): SectorNewsItem[] {
+  const byTopic = new Map<string, SectorNewsItem[]>();
+  for (const item of [...items].sort(byNewest)) {
+    const bucket = byTopic.get(item.topic) ?? [];
+    if (bucket.length >= MAX_ITEMS_PER_TOPIC) continue;
+    bucket.push(item);
+    byTopic.set(item.topic, bucket);
+  }
+  return [...byTopic.values()].flat().sort(byNewest).slice(0, MAX_ITEMS);
+}
+
+function dedupeByLink(items: readonly SectorNewsItem[]): SectorNewsItem[] {
   const seen = new Set<string>();
-  const unique: NewsItem[] = [];
+  const unique: SectorNewsItem[] = [];
   for (const item of items) {
     if (seen.has(item.link)) continue;
     seen.add(item.link);

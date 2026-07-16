@@ -3,70 +3,145 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Preztia — Sistema operativo de préstamos y cobranza</title>
+    <title>Preztia — Pulso financiero: noticias, indicadores y crédito</title>
     <meta
       name="description"
-      content="Preztia es la plataforma multi-tenant para otorgar crédito y cobrar por ruta: originación y cobranza por WhatsApp con IA, pagos PIX conciliados, antifraude documental y auditoría del dinero."
+      content="Centro de noticias financieras en vivo: titulares de economía, mercados, cripto y pagos con indicadores actualizados (TRM, dólar, SELIC, bitcoin). Preztia, el sistema operativo de préstamos y cobranza."
     />
     <meta name="theme-color" content="#0b0f1a" />
-    <meta property="og:title" content="Preztia — Sistema operativo de préstamos y cobranza" />
+    <meta property="og:title" content="Preztia — Pulso financiero" />
     <meta
       property="og:description"
-      content="Originación y cobranza por WhatsApp con IA, PIX conciliado, antifraude documental y aislamiento multi-tenant por RLS."
+      content="Noticias de economía, mercados y pagos con indicadores en vivo, más la plataforma multi-tenant de préstamos y cobranza."
     />
     <meta property="og:type" content="website" />
-    <link rel="preconnect" href="https://news.google.com" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <!-- Barra de estado "vivo": señal honesta de frescura (sin métricas inventadas). -->
-    <div class="statusbar" role="status" aria-live="polite">
-      <span class="dot" aria-hidden="true"></span>
-      <span>Plataforma operativa</span>
-      <span class="sep">·</span>
-      <span id="live-clock">--:--:--</span>
-      <span class="sep">·</span>
-      <span id="live-updated">Pulso del sector: cargando…</span>
+    <!-- CINTA DE INDICADORES: mercado en movimiento, estilo portal financiero. -->
+    <div class="tape" id="tape" aria-label="Indicadores de mercado en vivo">
+      <span class="tape-badge"><span class="dot" aria-hidden="true"></span> EN DIRECTO</span>
+      <div class="tape-viewport">
+        <div class="tape-track" id="tape-track">
+          <span class="tape-loading">Cargando indicadores de mercado…</span>
+        </div>
+      </div>
     </div>
 
-    <header class="nav">
+    <!-- BARRA SUPERIOR: fecha editorial + estado vivo. -->
+    <div class="topbar" role="status" aria-live="polite">
+      <span class="topbar-date" id="today">—</span>
+      <span class="topbar-status">
+        <span class="dot" aria-hidden="true"></span>
+        Plataforma operativa · <span id="live-clock">--:--:--</span>
+      </span>
+      <span class="topbar-updated" id="live-updated">Pulso del sector: cargando…</span>
+    </div>
+
+    <!-- CABECERA -->
+    <header class="mast">
       <a class="brand" href="/">
-        <span class="brand-mark">◭</span> Preztia
+        <span class="brand-mark">◭</span>
+        <span class="brand-name">Preztia</span>
+        <span class="brand-tag">Pulso financiero</span>
       </a>
-      <nav class="nav-links">
-        <a href="#producto">Producto</a>
-        <a href="#pulso">Pulso del sector</a>
-        <a href="#como">Cómo funciona</a>
-        <a class="btn btn-ghost" id="nav-login" href="#">Ingresar</a>
+      <nav class="mast-nav">
+        <a href="#portada">Portada</a>
+        <a href="#indicadores">Indicadores</a>
+        <a href="#secciones">Secciones</a>
+        <a href="#sabias">Datos curiosos</a>
+        <a href="#plataforma">Plataforma</a>
       </nav>
+      <div class="mast-actions">
+        <!-- Acceso de suscriptores: entra directo al menú de la app web (app.<dominio>). -->
+        <a
+          class="avatar"
+          id="subscriber-link"
+          href="#"
+          title="Portal de suscriptores — entrar a la plataforma"
+          aria-label="Portal de suscriptores"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="8" r="4"></circle>
+            <path d="M4 20c1.8-3.4 4.6-5 8-5s6.2 1.6 8 5"></path>
+          </svg>
+        </a>
+        <a class="btn btn-primary" id="nav-login" href="#">Ingresar</a>
+      </div>
     </header>
 
-    <main>
-      <!-- HERO -->
-      <section class="hero">
+    <!-- TEMAS DEL DÍA -->
+    <div class="topics">
+      <span class="topics-label">Temas de conversación <span aria-hidden="true">›</span></span>
+      <div class="topics-chips" id="topics-chips">
+        <span class="chip chip-skeleton"></span>
+        <span class="chip chip-skeleton"></span>
+        <span class="chip chip-skeleton"></span>
+        <span class="chip chip-skeleton"></span>
+      </div>
+    </div>
+
+    <main id="portada">
+      <!-- PORTADA: nota principal + titulares + carril de indicadores y curiosidades. -->
+      <section class="front reveal">
+        <article class="lead" id="lead-story" aria-busy="true">
+          <div class="skeleton sk-kicker"></div>
+          <div class="skeleton sk-title"></div>
+          <div class="skeleton sk-title short"></div>
+          <div class="skeleton sk-meta"></div>
+        </article>
+
+        <div class="front-list" id="front-list" aria-busy="true">
+          <div class="skeleton sk-row"></div>
+          <div class="skeleton sk-row"></div>
+          <div class="skeleton sk-row"></div>
+          <div class="skeleton sk-row"></div>
+          <div class="skeleton sk-row"></div>
+        </div>
+
+        <aside class="rail">
+          <div class="panel" id="indicadores">
+            <div class="panel-head">
+              <h3>Indicadores</h3>
+              <span class="pill" id="market-updated">—</span>
+            </div>
+            <div class="ind-hero" id="ind-hero">
+              <div class="skeleton sk-ind"></div>
+            </div>
+            <ul class="ind-list" id="ind-list"></ul>
+          </div>
+
+          <div class="panel panel-fact" id="sabias">
+            <div class="panel-head">
+              <h3>¿Sabías que…?</h3>
+              <span class="pill pill-alt" id="fact-count">—</span>
+            </div>
+            <p class="fact" id="fact-text">Cargando datos curiosos del mundo del dinero…</p>
+            <div class="fact-bar"><span id="fact-progress"></span></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Novedades Preztia</h3>
+              <span class="pill pill-alt">plataforma</span>
+            </div>
+            <ol id="changelog-list" class="timeline"></ol>
+          </div>
+        </aside>
+      </section>
+
+      <!-- SECCIONES POR TEMA (generadas con los titulares del pulso). -->
+      <div id="secciones"></div>
+
+      <!-- PLATAFORMA -->
+      <section id="plataforma" class="platform reveal">
         <p class="eyebrow">Sistema operativo de crédito · multi-tenant</p>
-        <h1>Presta y cobra por ruta,<br /><span class="grad">sin perder el control del dinero.</span></h1>
-        <p class="lede">
+        <h2 class="platform-title">Presta y cobra por ruta, <span class="grad">sin perder el control del dinero.</span></h2>
+        <p class="platform-lede">
           Preztia orquesta todo el ciclo: un solicitante escribe por WhatsApp, una IA lo atiende y
           abre la solicitud, corre el antifraude documental, otorga el crédito con su calendario y
           concilia cada pago PIX. Cada movimiento queda auditado y cada empresa, aislada.
         </p>
-        <div class="hero-cta">
-          <a class="btn btn-primary" id="hero-login" href="#">Entrar a la plataforma</a>
-          <a class="btn btn-ghost" href="#pulso">Ver el pulso del sector ↓</a>
-        </div>
-        <ul class="trust">
-          <li>🔒 Aislamiento por RLS</li>
-          <li>⚡ PIX conciliado</li>
-          <li>🛡️ Antifraude KYC</li>
-          <li>🧾 Auditoría append-only</li>
-        </ul>
-      </section>
-
-      <!-- DIFERENCIADORES -->
-      <section id="producto" class="section">
-        <h2 class="section-title">Una plataforma, todo el ciclo</h2>
-        <p class="section-sub">Capacidades reales, ya en producción.</p>
         <div class="grid">
           <article class="card">
             <div class="card-ico">🏦</div>
@@ -99,59 +174,22 @@
             <p>Todo abono y cambio de estado en bitácora append-only. Idempotencia sin doble cobro.</p>
           </article>
         </div>
-      </section>
-
-      <!-- PULSO DEL SECTOR -->
-      <section id="pulso" class="section">
-        <h2 class="section-title">Pulso del sector</h2>
-        <p class="section-sub">
-          Titulares de economía, crédito y pagos, actualizados a diario · atribuidos a su fuente.
-        </p>
-        <div class="pulse">
-          <div class="pulse-news">
-            <div class="pulse-head">
-              <h3>Titulares de hoy</h3>
-              <span class="pill" id="news-updated">—</span>
-            </div>
-            <div id="news-list" class="news-list">
-              <div class="news-skeleton"></div>
-              <div class="news-skeleton"></div>
-              <div class="news-skeleton"></div>
-            </div>
-          </div>
-          <aside class="pulse-changelog">
-            <div class="pulse-head">
-              <h3>Novedades de la plataforma</h3>
-              <span class="pill pill-alt">Preztia</span>
-            </div>
-            <ol id="changelog-list" class="timeline"></ol>
-          </aside>
-        </div>
-      </section>
-
-      <!-- CÓMO FUNCIONA -->
-      <section id="como" class="section">
-        <h2 class="section-title">Del WhatsApp al abono conciliado</h2>
-        <ol class="steps">
-          <li><span>1</span><div><b>Solicita</b><p>El cliente escribe por WhatsApp; la IA abre la solicitud.</p></div></li>
-          <li><span>2</span><div><b>Verifica</b><p>KYC + antifraude documental con fuentes oficiales.</p></div></li>
-          <li><span>3</span><div><b>Otorga</b><p>Crédito con calendario de cuotas y su cartera.</p></div></li>
-          <li><span>4</span><div><b>Cobra</b><p>Recordatorios por WhatsApp y ruta de cobro optimizada.</p></div></li>
-          <li><span>5</span><div><b>Concilia</b><p>Pago PIX verificado, abonado y cuadrado en caja.</p></div></li>
-        </ol>
         <div class="cta-band">
           <div>
             <h3>¿Listo para operar tu cartera con orden?</h3>
             <p>Entra a la plataforma y empieza a otorgar y cobrar con trazabilidad total.</p>
           </div>
-          <a class="btn btn-primary" id="band-login" href="#">Ingresar</a>
+          <a class="btn btn-primary" id="band-login" href="#">Entrar a la plataforma</a>
         </div>
       </section>
     </main>
 
     <footer class="footer">
       <div class="brand"><span class="brand-mark">◭</span> Preztia</div>
-      <p>Plataforma multi-tenant de préstamos y cobranza. Dinero en unidades menores, auditado y aislado.</p>
+      <p>
+        Plataforma multi-tenant de préstamos y cobranza. Los titulares pertenecen a sus medios y
+        se atribuyen a su fuente; los indicadores provienen de fuentes públicas oficiales.
+      </p>
       <p class="muted">© <span id="year"></span> Preztia · Todos los derechos reservados.</p>
     </footer>
 
