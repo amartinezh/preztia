@@ -22,16 +22,17 @@
   var FRONT_LIST_COUNT = 5; //       titulares junto a la nota principal
   var SECTION_ITEMS = 6; //          titulares por sección temática
 
-  // Colores editoriales por sección (estilo kicker de diario); paleta de reserva para temas nuevos.
+  // Colores editoriales por sección (estilo kicker de diario, con contraste sobre fondo blanco);
+  // paleta de reserva para temas nuevos.
   var TOPIC_COLORS = {
-    'Economía': '#33e6b3',
-    'Finanzas y crédito': '#5b8cff',
-    'Mercados': '#b78bff',
-    'Criptomonedas': '#ffb054',
-    'Fintech': '#4dd4e8',
-    'PIX y pagos': '#ff7ab0',
+    'Economía': '#0e9f6e',
+    'Finanzas y crédito': '#2563eb',
+    'Mercados': '#7c3aed',
+    'Criptomonedas': '#d97706',
+    'Fintech': '#0891b2',
+    'PIX y pagos': '#db2777',
   };
-  var FALLBACK_COLORS = ['#33e6b3', '#5b8cff', '#b78bff', '#ffb054', '#4dd4e8', '#ff7ab0'];
+  var FALLBACK_COLORS = ['#0e9f6e', '#2563eb', '#7c3aed', '#d97706', '#0891b2', '#db2777'];
 
   // Datos curiosos del mundo del dinero: contenido propio, atemporal y verificable.
   var FACTS = [
@@ -409,7 +410,7 @@
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.setAttribute('aria-hidden', 'true');
 
-    var color = isDown ? '#ff6b7a' : '#33e6b3';
+    var color = isDown ? '#d92d3f' : '#0e9f6e';
     var gradId = 'sparkfill-' + Math.random().toString(36).slice(2, 8);
     var defs = document.createElementNS(NS, 'defs');
     var grad = document.createElementNS(NS, 'linearGradient');

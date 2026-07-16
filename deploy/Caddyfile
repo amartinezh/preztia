@@ -16,6 +16,11 @@
 	root * /srv/landing
 	file_server
 
+	# El documento HTML se revalida siempre (los CSS/JS van versionados con ?v=): un deploy
+	# de la landing se ve al instante, sin quedar servida una mezcla de HTML nuevo + CSS viejo.
+	@doc path / /index.html
+	header @doc Cache-Control "no-cache"
+
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"

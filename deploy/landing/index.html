@@ -8,14 +8,15 @@
       name="description"
       content="Centro de noticias financieras en vivo: titulares de economía, mercados, cripto y pagos con indicadores actualizados (TRM, dólar, SELIC, bitcoin). Preztia, el sistema operativo de préstamos y cobranza."
     />
-    <meta name="theme-color" content="#0b0f1a" />
+    <meta name="theme-color" content="#ffffff" />
     <meta property="og:title" content="Preztia — Pulso financiero" />
     <meta
       property="og:description"
       content="Noticias de economía, mercados y pagos con indicadores en vivo, más la plataforma multi-tenant de préstamos y cobranza."
     />
     <meta property="og:type" content="website" />
-    <link rel="stylesheet" href="./styles.css" />
+    <!-- ?v= rompe la caché del navegador en cada rediseño; subir el número al cambiar CSS/JS. -->
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
     <!-- CINTA DE INDICADORES: mercado en movimiento, estilo portal financiero. -->
@@ -193,6 +194,6 @@
       <p class="muted">© <span id="year"></span> Preztia · Todos los derechos reservados.</p>
     </footer>
 
-    <script src="./app.js" defer></script>
+    <script src="./app.js?v=3" defer></script>
   </body>
 </html>
