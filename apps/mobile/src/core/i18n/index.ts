@@ -246,14 +246,30 @@ const es = {
     "Vincula un número de WhatsApp a esta zona y configura sus credenciales de Meta. Los secretos se guardan cifrados y nunca se muestran; deja un campo vacío para conservar el valor actual.",
   "zonesWa.empty": "Esta zona no tiene ningún número de WhatsApp.",
   "zonesWa.number": "Número (phone_number_id)",
+  "zonesWa.number.hint":
+    "Identificador del número en Meta (NO es el teléfono). Cópialo en developers.facebook.com → tu app → WhatsApp → Configuración de la API → “Identificador del número de teléfono”.",
   "zonesWa.accessToken": "Access token",
+  "zonesWa.accessToken.hint":
+    "Token con el que la plataforma responde mensajes y descarga adjuntos. Genera uno permanente en Meta: Configuración del negocio → Usuarios del sistema → Generar token (permisos whatsapp_business_messaging y whatsapp_business_management).",
   "zonesWa.appSecret": "App secret",
-  "zonesWa.verifyToken": "Verify token",
+  "zonesWa.appSecret.hint":
+    "Verifica que los mensajes entrantes vengan realmente de Meta (firma del webhook). Está en developers.facebook.com → tu app → Configuración de la app → Básica → “Clave secreta de la app”.",
+  "zonesWa.verifyToken": "Verify token (clave del webhook en Meta)",
+  "zonesWa.verifyToken.hint":
+    "Clave que TÚ inventas: escribe aquí una palabra secreta y pon LA MISMA en Meta como “Token de verificación” al configurar el webhook. Sirve solo para el enlace inicial entre Meta y la plataforma.",
   "zonesWa.graphVersion": "Versión de la Graph API (ej. v21.0)",
+  "zonesWa.graphVersion.hint": "Opcional. Vacío usa v21.0.",
   "zonesWa.add": "Añadir número a esta zona",
   "zonesWa.save": "Guardar credenciales",
   "zonesWa.configured": "Configurado",
   "zonesWa.unset": "Sin configurar",
+  // Conexión del webhook con Meta (URL de devolución de llamada)
+  "zonesWa.webhook.title": "Conexión del webhook en Meta",
+  "zonesWa.webhook.hint":
+    "Para recibir mensajes, en developers.facebook.com → tu app → WhatsApp → Configuración → Webhook pega esta “URL de devolución de llamada” (Callback URL), escribe tu Verify token y suscríbete al campo “messages”.",
+  "zonesWa.webhook.copy": "Copiar URL del webhook",
+  "zonesWa.webhook.copied": "URL copiada. Pégala en Meta como “URL de devolución de llamada”.",
+  "zonesWa.webhook.copyManual": "No se pudo copiar automáticamente: selecciona la URL y cópiala manualmente.",
   "zonesWa.shareHint":
     "Para compartir un número entre varias zonas, vincúlalo a la zona padre que las cubre: los mensajes se atribuyen a esa zona y los coordinadores de sus sub-zonas los ven.",
   // IAM — cobradores y clientes

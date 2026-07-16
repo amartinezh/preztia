@@ -22,13 +22,10 @@ interface MediaUrlResponse {
 @Injectable()
 export class WhatsappMediaDownloader implements MediaDownloader {
   async download(media: MediaRef, channelId: string): Promise<DownloadedMedia> {
-    // Credenciales por número (BD, cifradas). Fallback a `.env` para migrar sin downtime.
+    // Credenciales por número (BD, cifradas): la única fuente es la pantalla "WhatsApp de la zona".
     const creds = await resolveWhatsappCredentialsByPhone(channelId);
-    const token = this.requireToken(creds?.accessToken ?? null);
-    const version =
-      creds?.graphVersion ??
-      process.env.WHATSAPP_GRAPH_VERSION ??
-      DEFAULT_GRAPH_VERSION;
+    const token = this.requireToken(channelId, creds?.accessToken ?? null);
+    const version = creds?.graphVersion ?? DEFAULT_GRAPH_VERSION;
 
     const metaRes = await fetch(
       `https://graph.facebook.com/${version}/${media.mediaId}`,
@@ -61,12 +58,11 @@ export class WhatsappMediaDownloader implements MediaDownloader {
     };
   }
 
-  private requireToken(channelToken: string | null): string {
-    const token = channelToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
-    if (!token)
+  private requireToken(channelId: string, channelToken: string | null): string {
+    if (!channelToken)
       throw new Error(
-        'WHATSAPP_ACCESS_TOKEN no configurado: no se puede descargar el media',
+        `Canal ${channelId} sin access token configurado: no se puede descargar el media`,
       );
-    return token;
+    return channelToken;
   }
 }

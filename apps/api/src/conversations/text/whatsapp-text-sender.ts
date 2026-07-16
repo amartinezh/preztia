@@ -10,21 +10,18 @@ export class WhatsappTextSender implements OutboundTextSender {
   private readonly logger = new Logger('WhatsApp:Send');
 
   async sendText(to: OutboundRecipient, body: string): Promise<void> {
-    // Credenciales por número (BD, cifradas). Fallback a `.env` para migrar sin downtime.
+    // Credenciales por número (BD, cifradas): la única fuente es la pantalla "WhatsApp de la zona".
     const creds = await resolveWhatsappCredentialsByPhone(to.channelId);
-    const token = creds?.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
+    const token = creds?.accessToken;
     if (!token) {
-      // En desarrollo, sin token, dejamos ver la respuesta en consola sin enviarla.
+      // Sin token del canal la respuesta no se puede enviar; queda trazada en consola.
       this.logger.warn(
-        `WHATSAPP_ACCESS_TOKEN no configurado; respuesta NO enviada a ${to.recipient}: ${body}`,
+        `Canal ${to.channelId} sin access token configurado; respuesta NO enviada a ${to.recipient}: ${body}`,
       );
       return;
     }
 
-    const version =
-      creds?.graphVersion ??
-      process.env.WHATSAPP_GRAPH_VERSION ??
-      DEFAULT_GRAPH_VERSION;
+    const version = creds?.graphVersion ?? DEFAULT_GRAPH_VERSION;
     const url = `https://graph.facebook.com/${version}/${to.channelId}/messages`;
 
     const res = await fetch(url, {

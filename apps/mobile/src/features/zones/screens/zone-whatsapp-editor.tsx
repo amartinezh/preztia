@@ -14,6 +14,7 @@ import {
   Text,
 } from "@preztiaos/ui";
 
+import { env } from "@/core/env";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import {
@@ -44,6 +45,26 @@ function nonEmptyCredentials(d: CredDraft): UpdateChannelInput {
     ...(d.verifyToken.trim() ? { verifyToken: d.verifyToken.trim() } : {}),
     ...(d.graphVersion.trim() ? { graphVersion: d.graphVersion.trim() } : {}),
   };
+}
+
+/**
+ * Copia al portapapeles cuando la plataforma lo permite (web). Devuelve false si no hay
+ * portapapeles disponible (nativo sin permiso): la URL queda seleccionable para copiar a mano.
+ * Acceso vía globalThis para no depender de los tipos del DOM en el typecheck de React Native.
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  const nav = (
+    globalThis as {
+      navigator?: { clipboard?: { writeText(value: string): Promise<void> } };
+    }
+  ).navigator;
+  if (!nav?.clipboard) return false;
+  try {
+    await nav.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -88,6 +109,8 @@ export function ZoneWhatsappEditor({
         ))}
 
         <AddChannelCard zoneId={zone.id} />
+
+        <WebhookSetupCard />
 
         <Text variant="caption" tone="muted">
           {t("zonesWa.shareHint")}
@@ -137,6 +160,42 @@ function ZoneSupportPhoneCard({ zone }: { zone: ZoneNode }) {
         />
       </Field>
       <Button label={t("zones.support.save")} loading={update.isPending} block onPress={save} />
+    </Stack>
+  );
+}
+
+/**
+ * Conexión del webhook en Meta: muestra la URL exacta de devolución de llamada (derivada del host
+ * del API en runtime, sin hardcodear dominios) y la copia al portapapeles. Esta URL + el Verify
+ * token del canal son lo que Meta pide para enlazar los dos sistemas y empezar a recibir mensajes.
+ */
+function WebhookSetupCard() {
+  const { t } = useT();
+  const [feedback, setFeedback] = useState<"copied" | "manual" | null>(null);
+  const webhookUrl = `${env.apiUrl}/webhooks/whatsapp`;
+
+  const copy = async () => {
+    setFeedback((await copyToClipboard(webhookUrl)) ? "copied" : "manual");
+  };
+
+  return (
+    <Stack gap="sm" className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+      <Text variant="subtitle">{t("zonesWa.webhook.title")}</Text>
+      <Text variant="caption" tone="muted">
+        {t("zonesWa.webhook.hint")}
+      </Text>
+      <Text
+        variant="code"
+        selectable
+        className="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-900"
+      >
+        {webhookUrl}
+      </Text>
+      {feedback === "copied" ? <Banner tone="success" title={t("zonesWa.webhook.copied")} /> : null}
+      {feedback === "manual" ? (
+        <Banner tone="warning" title={t("zonesWa.webhook.copyManual")} />
+      ) : null}
+      <Button label={t("zonesWa.webhook.copy")} variant="ghost" block onPress={() => void copy()} />
     </Stack>
   );
 }
@@ -201,7 +260,7 @@ function ChannelCredentialsCard({ channel }: { channel: WhatsappChannel }) {
       {saved ? <Banner tone="success" title={t("assistant.saved")} /> : null}
 
       <CredentialStatus label={t("zonesWa.accessToken")} has={channel.hasAccessToken} />
-      <Field label={t("zonesWa.accessToken")}>
+      <Field label={t("zonesWa.accessToken")} hint={t("zonesWa.accessToken.hint")}>
         <Input
           value={draft.accessToken}
           onChangeText={(v) => set({ accessToken: v })}
@@ -212,7 +271,7 @@ function ChannelCredentialsCard({ channel }: { channel: WhatsappChannel }) {
       </Field>
 
       <CredentialStatus label={t("zonesWa.appSecret")} has={channel.hasAppSecret} />
-      <Field label={t("zonesWa.appSecret")}>
+      <Field label={t("zonesWa.appSecret")} hint={t("zonesWa.appSecret.hint")}>
         <Input
           value={draft.appSecret}
           onChangeText={(v) => set({ appSecret: v })}
@@ -223,7 +282,7 @@ function ChannelCredentialsCard({ channel }: { channel: WhatsappChannel }) {
       </Field>
 
       <CredentialStatus label={t("zonesWa.verifyToken")} has={channel.hasVerifyToken} />
-      <Field label={t("zonesWa.verifyToken")}>
+      <Field label={t("zonesWa.verifyToken")} hint={t("zonesWa.verifyToken.hint")}>
         <Input
           value={draft.verifyToken}
           onChangeText={(v) => set({ verifyToken: v })}
@@ -233,7 +292,7 @@ function ChannelCredentialsCard({ channel }: { channel: WhatsappChannel }) {
         />
       </Field>
 
-      <Field label={t("zonesWa.graphVersion")}>
+      <Field label={t("zonesWa.graphVersion")} hint={t("zonesWa.graphVersion.hint")}>
         <Input
           value={draft.graphVersion}
           onChangeText={(v) => set({ graphVersion: v })}
@@ -279,10 +338,10 @@ function AddChannelCard({ zoneId }: { zoneId: string }) {
     <Stack gap="sm" className="rounded-xl border border-dashed border-zinc-300 p-3 dark:border-zinc-700">
       <Text variant="subtitle">{t("zonesWa.add")}</Text>
       {error ? <Banner tone="danger" title={error} /> : null}
-      <Field label={t("zonesWa.number")}>
+      <Field label={t("zonesWa.number")} hint={t("zonesWa.number.hint")}>
         <Input value={phoneNumberId} onChangeText={setPhoneNumberId} autoCapitalize="none" />
       </Field>
-      <Field label={t("zonesWa.accessToken")}>
+      <Field label={t("zonesWa.accessToken")} hint={t("zonesWa.accessToken.hint")}>
         <Input
           value={draft.accessToken}
           onChangeText={(v) => set({ accessToken: v })}
@@ -290,7 +349,7 @@ function AddChannelCard({ zoneId }: { zoneId: string }) {
           autoCapitalize="none"
         />
       </Field>
-      <Field label={t("zonesWa.appSecret")}>
+      <Field label={t("zonesWa.appSecret")} hint={t("zonesWa.appSecret.hint")}>
         <Input
           value={draft.appSecret}
           onChangeText={(v) => set({ appSecret: v })}
@@ -298,7 +357,7 @@ function AddChannelCard({ zoneId }: { zoneId: string }) {
           autoCapitalize="none"
         />
       </Field>
-      <Field label={t("zonesWa.verifyToken")}>
+      <Field label={t("zonesWa.verifyToken")} hint={t("zonesWa.verifyToken.hint")}>
         <Input
           value={draft.verifyToken}
           onChangeText={(v) => set({ verifyToken: v })}
@@ -306,7 +365,7 @@ function AddChannelCard({ zoneId }: { zoneId: string }) {
           autoCapitalize="none"
         />
       </Field>
-      <Field label={t("zonesWa.graphVersion")}>
+      <Field label={t("zonesWa.graphVersion")} hint={t("zonesWa.graphVersion.hint")}>
         <Input
           value={draft.graphVersion}
           onChangeText={(v) => set({ graphVersion: v })}

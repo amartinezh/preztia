@@ -35,6 +35,11 @@ cada uno descarta una capa del camino. Marca ✅/❌ en la columna _Resultado_ a
 - Variables (`.env` en la raíz): `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`,
   `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_GRAPH_VERSION`.
 
+> ⚠️ **Vigencia (2026-07-16):** las variables `WHATSAPP_*` del `.env` YA NO EXISTEN. Las
+> credenciales de Meta se configuran **por zona** en la app (Zonas → WhatsApp de la zona) y viven
+> cifradas en la tabla `whatsapp_channel`; la pantalla además muestra la URL exacta del webhook
+> para pegar en Meta. Lo que sigue abajo es el registro histórico de cuando se usaba `.env`.
+
 ---
 
 ## 1. ¿El API está arriba y escuchando?

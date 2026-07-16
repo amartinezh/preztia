@@ -53,12 +53,10 @@ export class WhatsappWebhookController {
 
   /**
    * El verify token del handshake se acepta si coincide con el de algún canal (comparado por hash
-   * SHA-256) o con la variable de entorno (fallback). El handshake no trae phone_number_id, por eso
-   * se comprueba contra el conjunto de canales configurados.
+   * SHA-256). La única fuente es la BD (pantalla "WhatsApp de la zona"); el handshake no trae
+   * phone_number_id, por eso se comprueba contra el conjunto de canales configurados.
    */
   private async tokenAccepted(token: string): Promise<boolean> {
-    const envToken = process.env.WHATSAPP_VERIFY_TOKEN;
-    if (envToken && token === envToken) return true;
     const hash = createHash('sha256').update(token).digest('hex');
     return whatsappVerifyTokenHashExists(hash);
   }
@@ -105,8 +103,8 @@ export class WhatsappWebhookController {
 
   /**
    * Rechaza el evento si la firma HMAC no coincide con el App Secret. El secreto se resuelve por el
-   * `phone_number_id` del canal (BD, cifrado) y cae a la variable de entorno (migración sin
-   * downtime). Extraer el número del cuerpo aún-no-verificado solo sirve para ELEGIR el secreto: no
+   * `phone_number_id` del canal (BD, cifrado; se configura en la pantalla "WhatsApp de la zona").
+   * Extraer el número del cuerpo aún-no-verificado solo sirve para ELEGIR el secreto: no
    * se actúa sobre el contenido hasta validar la firma.
    */
   private async assertAuthentic(
@@ -117,11 +115,13 @@ export class WhatsappWebhookController {
     const creds = phoneNumberId
       ? await resolveWhatsappCredentialsByPhone(phoneNumberId)
       : null;
-    const appSecret = creds?.appSecret ?? process.env.WHATSAPP_APP_SECRET;
+    const appSecret = creds?.appSecret;
     if (!appSecret) {
-      // Sin secreto configurado solo tiene sentido en desarrollo local.
+      // Canal sin App Secret: se acepta con aviso para no perder mensajes durante la
+      // configuración inicial, pero SIN verificación de autenticidad. Configúralo en la
+      // pantalla "WhatsApp de la zona" cuanto antes.
       this.logger.warn(
-        'WHATSAPP_APP_SECRET no configurado: se omite la verificación de firma',
+        `Canal ${phoneNumberId ?? 'desconocido'} sin App Secret configurado: se omite la verificación de firma`,
       );
       return;
     }
