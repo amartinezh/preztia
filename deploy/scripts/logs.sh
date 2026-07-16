@@ -54,13 +54,23 @@ fi
 #   3. ¿Se registró y respondió?            → transcript IN/OUT en conversation_message
 if [ "$ONLY_WA" = 1 ]; then
   title "1 · LLEGADA — hits a /webhooks/whatsapp según Caddy (últimas ${SINCE})"
+  # `|| true`: sin coincidencias el pipeline sale != 0 y, dentro de la asignación,
+  # `set -e` mataría el script antes de las secciones 2 y 3.
   HITS="$("${COMPOSE[@]}" logs -t --since "$SINCE" caddy 2>&1 \
     | grep -F '"uri":"/webhooks/whatsapp' \
     | sed -E 's/^[^|]*\| ([0-9T:.-]+Z?).*"method":"([A-Z]+)".*"status":([0-9]+).*/  \1  \2 → HTTP \3/' \
-    | tail -n "$LINES")"
-  if [ -n "$HITS" ]; then echo "$HITS"; else
-    echo "  (ni un hit → Meta NO está llamando: ¿app publicada/en producción?"
-    echo "   ¿webhook verificado y campo 'messages' suscrito? ¿URL correcta?)"
+    | tail -n "$LINES" || true)"
+  # ¿Hay ALGÚN access log ("handled request")? Distingue "webhook no llega" de "access log
+  # no habilitado" (Caddy emite JSON operativo aunque no tenga la directiva `log`).
+  ACCESS="$("${COMPOSE[@]}" logs --since "$SINCE" caddy 2>&1 | grep -cF 'handled request' || true)"
+  if [ -n "$HITS" ]; then
+    echo "$HITS"
+  elif [ "${ACCESS:-0}" = "0" ]; then
+    echo "  (Caddy sin access log → despliega el Caddyfile con 'log' y reinicia caddy:"
+    echo "   docker compose -f docker-compose.prod.yml restart caddy — o no hubo tráfico)"
+  else
+    echo "  (hay tráfico pero NINGÚN hit al webhook → Meta NO está llamando:"
+    echo "   ¿app publicada/en producción? ¿'messages' suscrito? ¿URL correcta?)"
   fi
 
   title "2 · PIPELINE — logs de la API (WhatsApp/Conversations) (últimas ${SINCE})"
