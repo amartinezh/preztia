@@ -33,6 +33,9 @@
 # ---- API ----
 api.{$DOMAIN} {
 	encode zstd gzip
+	# Access log (JSON a stdout): permite verificar si una petición LLEGÓ y con qué status
+	# (p. ej. los POST de Meta a /webhooks/whatsapp) sin depender de que la API loguee.
+	log
 	reverse_proxy api:3010
 }
 

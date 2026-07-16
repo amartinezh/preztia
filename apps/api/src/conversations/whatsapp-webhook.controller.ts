@@ -85,6 +85,13 @@ export class WhatsappWebhookController {
     }
 
     const messages = toInboundMessages(parsed.data);
+    // Traza de llegada (sin PII: solo el canal y el tipo). Hace visible en los logs que el
+    // webhook SÍ llegó, aun cuando todo el procesamiento posterior sea exitoso y silencioso.
+    if (messages.length > 0) {
+      this.logger.log(
+        `Webhook: ${messages.length} mensaje(s) [${messages.map((m) => m.kind).join(', ')}] en canal ${messages[0].channelId}`,
+      );
+    }
     for (const message of messages) {
       try {
         await this.process.execute(message);
