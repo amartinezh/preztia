@@ -17,6 +17,17 @@ describe("normalizeHttpError", () => {
     expect(err.correlationId).toBe("corr-1");
   });
 
+  it("prefiere el mensaje específico cuando el código de dominio es conocido", () => {
+    expect(normalizeHttpError(409, { code: "NO_DEFAULT_PLAN" }).messageKey).toBe(
+      "errors.plans.noDefault",
+    );
+    expect(normalizeHttpError(409, { code: "NO_ACTIVE_PLANS" }).messageKey).toBe(
+      "errors.plans.noActive",
+    );
+    // Un código desconocido cae al genérico por status.
+    expect(normalizeHttpError(409, { code: "OTRO" }).messageKey).toBe("errors.conflict");
+  });
+
   it("distingue timeout de red caída", () => {
     expect(networkError(true).messageKey).toBe("errors.timeout");
     expect(networkError(false).messageKey).toBe("errors.network");

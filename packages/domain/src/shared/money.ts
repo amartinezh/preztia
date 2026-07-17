@@ -1,4 +1,9 @@
-export class DomainError extends Error {}
+export class DomainError extends Error {
+  /** Código estable opcional para que los clientes muestren un mensaje accionable (no solo el status). */
+  constructor(message?: string, readonly code?: string) {
+    super(message);
+  }
+}
 
 /** El recurso de dominio no existe (se traduce a HTTP 404 en la frontera). */
 export class NotFoundError extends DomainError {}

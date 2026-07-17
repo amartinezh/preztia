@@ -706,6 +706,10 @@ const es = {
   "errors.validation": "Revisa los datos ingresados.",
   "errors.server": "Error del servidor. Intenta más tarde.",
   "errors.unknown": "Ocurrió un error inesperado.",
+  "errors.plans.noActive":
+    "No hay planes de pago activos para ofertar. Actívalos o crea uno en Ajustes → Planes de pago.",
+  "errors.plans.noDefault":
+    "No hay planes de pago configurados. Crea uno en Ajustes → Planes de pago para poder ofertar.",
 } as const;
 
 export type MessageKey = keyof typeof es;

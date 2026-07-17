@@ -25,7 +25,12 @@ export class DomainExceptionFilter implements ExceptionFilter {
       .switchToHttp()
       .getResponse<Response>()
       .status(status)
-      .json({ statusCode: status, message: error.message });
+      .json({
+        statusCode: status,
+        message: error.message,
+        // Código estable del dominio (si lo hay): el cliente lo traduce a un mensaje accionable.
+        ...(error.code ? { code: error.code } : {}),
+      });
   }
 }
 

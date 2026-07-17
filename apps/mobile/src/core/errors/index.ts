@@ -16,7 +16,16 @@ export type ErrorMessageKey =
   | "errors.conflict"
   | "errors.validation"
   | "errors.server"
-  | "errors.unknown";
+  | "errors.unknown"
+  | "errors.plans.noActive"
+  | "errors.plans.noDefault";
+
+// Códigos de dominio del backend con mensaje accionable propio: más específico que el
+// genérico por status (ej. un 409 por falta de planes dice DÓNDE configurarlos).
+const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
+  NO_ACTIVE_PLANS: "errors.plans.noActive",
+  NO_DEFAULT_PLAN: "errors.plans.noDefault",
+};
 
 export class ApiError extends Error {
   readonly status: number;
@@ -62,9 +71,10 @@ export function normalizeHttpError(
 ): ApiError {
   const domainCode = typeof body?.code === "string" ? body.code : undefined;
   const serverMessage = typeof body?.message === "string" ? body.message : undefined;
+  const domainKey = domainCode ? DOMAIN_CODE_KEYS[domainCode] : undefined;
   return new ApiError({
     status,
-    messageKey: keyForStatus(status),
+    messageKey: domainKey ?? keyForStatus(status),
     domainCode,
     correlationId,
     message: serverMessage,

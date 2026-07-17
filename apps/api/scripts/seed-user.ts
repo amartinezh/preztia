@@ -15,6 +15,7 @@ import { hashPassword } from '../src/auth/password';
  * + cartera para poder ingresar y verificar con TODOS los roles:
  *
  *   1. Tenant "Preztia tenant" (+ tenant_config con canal de WhatsApp de prueba)
+ *   1c. Plan de pago por defecto (20 cuotas diarias · 20%)
  *   2. SUPER_ADMIN (plano de control, sin tenant)
  *   3. ADMIN del tenant
  *   4. Árbol de zonas (Antioquia → Medellín)
@@ -71,6 +72,7 @@ async function main() {
     collector: randomUUID(),
     zoneChild: randomUUID(),
     credit: randomUUID(),
+    paymentPlan: randomUUID(),
   };
 
   const [superHash, adminHash, coordHash, collectorHash] = await Promise.all([
@@ -118,6 +120,19 @@ async function main() {
         sortOrder: 3,
       },
     ]);
+
+    // 1c) Plan de pago por defecto: sin él, "Ofertar planes" responde 409 (NO_DEFAULT_PLAN).
+    //     Gota a gota típico: 20 cuotas diarias al 20% (interés en base-mil: 200 = 20%).
+    await tx.insert(schema.paymentPlan).values({
+      id: ids.paymentPlan,
+      tenantId: TENANT_ID,
+      name: '20 días · 20%',
+      installmentsCount: 20,
+      frequency: 'DAILY',
+      interestPct: 200,
+      isActive: true,
+      isDefault: true,
+    });
 
     // 2-3) Usuarios: SUPER_ADMIN (sin tenant) y ADMIN (del tenant).
     await tx.insert(schema.appUser).values([
@@ -237,6 +252,7 @@ async function main() {
   console.log('\nDatos de verificación:');
   console.log(`  Zonas: antioquia (raíz) → antioquia.medellin`);
   console.log(`  Crédito ACTIVO de 90000 (${CURRENCY}) con 3 cuotas; deudor ${BORROWER_ID}`);
+  console.log('  Plan de pago por defecto: "20 días · 20%" (20 cuotas diarias, 20% de interés)');
   console.log('\nNota: el SUPER_ADMIN NO envía x-tenant-id; los demás roles usan el x-tenant-id de arriba.\n');
 }
 

@@ -137,7 +137,9 @@ export class OfferPlansHandler {
     offerExpiresAt: Date,
   ): Promise<OfferPlansResult> {
     const active = await this.plans.listActive(cmd.tenantId);
-    if (active.length === 0) throw new ConflictError("No hay planes activos para ofertar");
+    if (active.length === 0) {
+      throw new ConflictError("No hay planes activos para ofertar", "NO_ACTIVE_PLANS");
+    }
 
     assertOfferTransition(snapshot.planOffer, "OFFER", "AWAITING_SELECTION");
     await this.store.markOffered({
@@ -165,7 +167,7 @@ export class OfferPlansHandler {
     now: Date,
   ): Promise<OfferPlansResult> {
     const plan = await this.plans.findDefault(cmd.tenantId);
-    if (!plan) throw new ConflictError("No hay plan por defecto configurado");
+    if (!plan) throw new ConflictError("No hay plan por defecto configurado", "NO_DEFAULT_PLAN");
 
     const schedule = projectPlanSchedule({
       principalMinor: cmd.principalMinor,
