@@ -16,7 +16,7 @@
     />
     <meta property="og:type" content="website" />
     <!-- ?v= rompe la caché del navegador en cada rediseño; subir el número al cambiar CSS/JS. -->
-    <link rel="stylesheet" href="./styles.css?v=4" />
+    <link rel="stylesheet" href="./styles.css?v=5" />
   </head>
   <body>
     <!-- CINTA DE INDICADORES: mercado en movimiento, estilo portal financiero. -->
@@ -85,12 +85,16 @@
     <main id="portada">
       <!-- PORTADA: nota principal + titulares + carril de indicadores y curiosidades. -->
       <section class="front reveal">
-        <article class="lead" id="lead-story" aria-busy="true">
-          <div class="skeleton sk-kicker"></div>
-          <div class="skeleton sk-title"></div>
-          <div class="skeleton sk-title short"></div>
-          <div class="skeleton sk-meta"></div>
-        </article>
+        <div class="lead-col">
+          <article class="lead" id="lead-story" aria-busy="true">
+            <div class="skeleton sk-kicker"></div>
+            <div class="skeleton sk-title"></div>
+            <div class="skeleton sk-title short"></div>
+            <div class="skeleton sk-meta"></div>
+          </article>
+          <!-- Titulares secundarios: llenan la columna principal para equilibrarla con el resto. -->
+          <div class="lead-more" id="lead-more" aria-hidden="true"></div>
+        </div>
 
         <div class="front-list" id="front-list" aria-busy="true">
           <div class="skeleton sk-row"></div>
@@ -194,6 +198,6 @@
       <p class="muted">© <span id="year"></span> Preztia · Todos los derechos reservados.</p>
     </footer>
 
-    <script src="./app.js?v=4" defer></script>
+    <script src="./app.js?v=5" defer></script>
   </body>
 </html>

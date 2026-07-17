@@ -150,6 +150,19 @@ a:hover .lead-title { color: var(--brand); }
 .n-source { color: var(--brand); font-weight: 600; }
 .lead-cta { margin-top: 18px; display: inline-block; font-size: 14px; font-weight: 600; color: var(--brand-2); }
 
+/* Columna principal: nota grande + titulares secundarios que la equilibran con el resto. */
+.lead-col { display: flex; flex-direction: column; }
+.lead-more { margin-top: 22px; display: flex; flex-direction: column; }
+.lead-more-item {
+  display: block; padding: 16px 2px; border-top: 1px solid var(--line); transition: background .15s;
+}
+.lead-more-item:hover { background: var(--bg-soft); }
+.lead-more-item .kicker { display: block; margin-bottom: 4px; }
+.lead-more-item .n-title {
+  font-family: var(--serif); font-weight: 700; font-size: 18px; line-height: 1.28; color: var(--ink); transition: color .15s;
+}
+.lead-more-item:hover .n-title { color: var(--brand); }
+
 .front-list { display: flex; flex-direction: column; }
 .front-item { display: block; padding: 14px 2px; border-bottom: 1px solid var(--line); transition: background .15s; }
 .front-item:first-child { padding-top: 2px; }

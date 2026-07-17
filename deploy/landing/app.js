@@ -19,6 +19,7 @@
   var REFRESH_MS = 5 * 60 * 1000; // re-consulta del API
   var RELTIME_MS = 60 * 1000; //     "hace X min" al día
   var FACT_MS = 10 * 1000; //        rotación de curiosidades
+  var LEAD_SECONDARY_COUNT = 4; //   titulares secundarios bajo la nota principal (columna 1)
   var FRONT_LIST_COUNT = 5; //       titulares junto a la nota principal
   var SECTION_ITEMS = 6; //          titulares por sección temática
 
@@ -146,14 +147,17 @@
     }
 
     var lead = items[0];
-    var frontItems = items.slice(1, 1 + FRONT_LIST_COUNT);
+    var leadMore = items.slice(1, 1 + LEAD_SECONDARY_COUNT);
+    var frontStart = 1 + LEAD_SECONDARY_COUNT;
+    var frontItems = items.slice(frontStart, frontStart + FRONT_LIST_COUNT);
     var usedLinks = {};
     usedLinks[lead.link] = true;
-    frontItems.forEach(function (it) {
+    leadMore.concat(frontItems).forEach(function (it) {
       usedLinks[it.link] = true;
     });
 
     renderLead(lead);
+    renderLeadMore(leadMore);
     renderFrontList(frontItems);
     renderSections(items, usedLinks);
     renderTopics(items);
@@ -190,6 +194,24 @@
     lead.appendChild(kicker);
     lead.appendChild(a);
     lead.appendChild(meta);
+  }
+
+  function renderLeadMore(items) {
+    var box = document.getElementById('lead-more');
+    box.innerHTML = '';
+    box.removeAttribute('aria-hidden');
+    items.forEach(function (item) {
+      var a = document.createElement('a');
+      a.className = 'lead-more-item';
+      a.href = item.link;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.style.setProperty('--kick', topicColor(item.topic));
+      a.appendChild(el('span', 'kicker', item.topic || ''));
+      a.appendChild(el('div', 'n-title', item.title));
+      a.appendChild(buildMeta(item));
+      box.appendChild(a);
+    });
   }
 
   function renderFrontList(items) {
@@ -291,6 +313,7 @@
     lead.innerHTML = '';
     lead.removeAttribute('aria-busy');
     lead.appendChild(el('div', 'news-empty', msg));
+    document.getElementById('lead-more').innerHTML = '';
     var list = document.getElementById('front-list');
     list.innerHTML = '';
     list.removeAttribute('aria-busy');
