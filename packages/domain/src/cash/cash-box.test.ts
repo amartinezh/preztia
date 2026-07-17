@@ -3,6 +3,7 @@ import { DomainError } from "../shared/money";
 import {
   assertCanPost,
   boxBalanceMinor,
+  buildAdjustment,
   buildTransfer,
   type CashBoxType,
   type LedgerEntry,
@@ -126,5 +127,44 @@ describe("buildTransfer", () => {
   it("rechaza montos no positivos", () => {
     expect(() => buildTransfer({ amountMinor: 0, reason: null })).toThrow(DomainError);
     expect(() => buildTransfer({ amountMinor: -10, reason: null })).toThrow(DomainError);
+  });
+});
+
+describe("buildAdjustment", () => {
+  const reason = "Arqueo: billete deteriorado repuesto";
+
+  it("un sobrante produce un ingreso por la diferencia exacta", () => {
+    const posted = buildAdjustment({ systemMinor: 0, targetMinor: 400000, reason });
+    expect(posted).toEqual({ direction: "IN", kind: "ADJUSTMENT", amountMinor: 400000, reason });
+  });
+
+  it("un faltante produce una salida por la diferencia exacta", () => {
+    const posted = buildAdjustment({ systemMinor: 500000, targetMinor: 480000, reason });
+    expect(posted).toEqual({ direction: "OUT", kind: "ADJUSTMENT", amountMinor: 20000, reason });
+  });
+
+  it("ajustar al valor real deja el saldo exactamente en ese valor (invariante)", () => {
+    const systemMinor = 730000;
+    const targetMinor = 650000;
+    const posted = buildAdjustment({ systemMinor, targetMinor, reason });
+    const applied = systemMinor + (posted.direction === "IN" ? posted.amountMinor : -posted.amountMinor);
+    expect(applied).toBe(targetMinor);
+  });
+
+  it("sin descuadre no hay nada que ajustar (409)", () => {
+    expect(() => buildAdjustment({ systemMinor: 100, targetMinor: 100, reason })).toThrow(
+      /descuadre/i,
+    );
+  });
+
+  it("exige motivo siempre, incluso en cajas bancarias", () => {
+    expect(() => buildAdjustment({ systemMinor: 0, targetMinor: 100, reason: null })).toThrow(/motivo/i);
+    expect(() => buildAdjustment({ systemMinor: 0, targetMinor: 100, reason: "  " })).toThrow(/motivo/i);
+  });
+
+  it("rechaza valores no enteros o un valor real negativo", () => {
+    expect(() => buildAdjustment({ systemMinor: 0.5, targetMinor: 100, reason })).toThrow(DomainError);
+    expect(() => buildAdjustment({ systemMinor: 0, targetMinor: 100.5, reason })).toThrow(DomainError);
+    expect(() => buildAdjustment({ systemMinor: 0, targetMinor: -1, reason })).toThrow(DomainError);
   });
 });

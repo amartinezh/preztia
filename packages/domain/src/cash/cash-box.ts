@@ -2,7 +2,7 @@
 // movimiento de dinero entre cajas, sin I/O ni framework. El saldo de una caja es la
 // suma firmada de sus asientos; nunca un campo almacenado.
 
-import { DomainError } from "../shared/money";
+import { ConflictError, DomainError } from "../shared/money";
 
 export type CashBoxType = "CASH" | "BANK" | "TRANSIT";
 export type CashTxDirection = "IN" | "OUT";
@@ -105,6 +105,45 @@ export function buildTransfer(intent: TransferIntent): {
   return {
     out: { direction: "OUT", kind: "TRANSFER", amountMinor: intent.amountMinor, reason: intent.reason },
     in: { direction: "IN", kind: "TRANSFER", amountMinor: intent.amountMinor, reason: intent.reason },
+  };
+}
+
+/** Intención de AJUSTE manual: llevar el saldo del sistema al valor real verificado en un arqueo. */
+export interface AdjustmentIntent {
+  /** Saldo derivado (Σ asientos) al momento del arqueo. */
+  readonly systemMinor: number;
+  /** Valor real verificado (conteo físico / saldo del banco), no negativo. */
+  readonly targetMinor: number;
+  readonly reason: string | null;
+}
+
+/**
+ * Construye el asiento ADJUSTMENT que sella un descuadre: exactamente la diferencia entre el
+ * valor real y el saldo del sistema (sobrante → IN; faltante → OUT). El historial nunca se
+ * edita: se corrige con un asiento más. Invariantes:
+ *  - el valor real es un entero no negativo (una salida nunca deja saldo negativo).
+ *  - el motivo es SIEMPRE obligatorio (todo ajuste exige justificación, en cualquier caja).
+ *  - sin descuadre no hay nada que ajustar (ConflictError → 409).
+ */
+export function buildAdjustment(intent: AdjustmentIntent): PostingIntent {
+  if (!Number.isInteger(intent.systemMinor)) {
+    throw new DomainError("El saldo del sistema debe ser un entero en unidades menores");
+  }
+  if (!Number.isInteger(intent.targetMinor) || intent.targetMinor < 0) {
+    throw new DomainError("El valor real debe ser un entero no negativo en unidades menores");
+  }
+  if (!hasText(intent.reason)) {
+    throw new DomainError("El ajuste exige un motivo/justificación");
+  }
+  const differenceMinor = intent.targetMinor - intent.systemMinor;
+  if (differenceMinor === 0) {
+    throw new ConflictError("No hay descuadre que ajustar", "NO_DISCREPANCY");
+  }
+  return {
+    direction: differenceMinor > 0 ? "IN" : "OUT",
+    kind: "ADJUSTMENT",
+    amountMinor: Math.abs(differenceMinor),
+    reason: intent.reason,
   };
 }
 

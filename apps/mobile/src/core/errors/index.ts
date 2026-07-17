@@ -18,13 +18,19 @@ export type ErrorMessageKey =
   | "errors.server"
   | "errors.unknown"
   | "errors.plans.noActive"
-  | "errors.plans.noDefault";
+  | "errors.plans.noDefault"
+  | "errors.cash.staleCount"
+  | "errors.cash.countAdjusted"
+  | "errors.cash.noDiscrepancy";
 
 // Códigos de dominio del backend con mensaje accionable propio: más específico que el
 // genérico por status (ej. un 409 por falta de planes dice DÓNDE configurarlos).
 const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
   NO_ACTIVE_PLANS: "errors.plans.noActive",
   NO_DEFAULT_PLAN: "errors.plans.noDefault",
+  STALE_COUNT: "errors.cash.staleCount",
+  COUNT_ALREADY_ADJUSTED: "errors.cash.countAdjusted",
+  NO_DISCREPANCY: "errors.cash.noDiscrepancy",
 };
 
 export class ApiError extends Error {

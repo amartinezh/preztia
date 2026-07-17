@@ -294,6 +294,14 @@ export const cashCountInput = z.object({
   notes: z.string().trim().max(280).optional(),
 });
 
+// Ajuste manual de saldo: sella el descuadre de un arqueo como asiento ADJUSTMENT. Referencia
+// el arqueo (evidencia verificada), nunca un monto libre; el motivo es obligatorio.
+export const adjustCashBalanceInput = z.object({
+  cashCountId: z.string().uuid(),
+  reason: z.string().trim().min(3).max(280),
+});
+export type AdjustCashBalanceInput = z.infer<typeof adjustCashBalanceInput>;
+
 export const cashCountResultView = z.object({
   id: z.string().uuid(),
   cashBoxId: z.string().uuid(),
@@ -455,6 +463,15 @@ export const cashBoxesContract = c.router({
     body: cashCountInput,
     responses: { 201: cashCountResultView },
     summary: "Registra un arqueo de caja y reporta el descuadre (ADMIN/COORDINATOR)",
+  },
+  adjustCashBalance: {
+    method: "POST",
+    path: "/cash/boxes/:id/adjust",
+    pathParams: idParam,
+    headers: tenantHeaders,
+    body: adjustCashBalanceInput,
+    responses: { 201: cashTransactionRow },
+    summary: "Ajusta el saldo de la caja al valor de un arqueo (ADMIN/COORDINATOR)",
   },
   syncBankBalance: {
     method: "POST",

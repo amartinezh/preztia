@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import {
+  adjustCashBalanceInput,
   cashCountInput,
   createCashBoxInput,
   listCashTransactionsQuery,
@@ -242,6 +243,27 @@ export class CashBoxController {
       countedMinor: dto.countedMinor,
       notes: dto.notes ?? null,
       performedBy: session.userId,
+    });
+  }
+
+  @Post('cash/boxes/:id/adjust')
+  @HttpCode(201)
+  @Idempotent()
+  async adjust(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+    @Body() body: unknown,
+  ) {
+    const tenant = requireTenant(tenantId);
+    const session = requireRole(auth, MANAGER_ROLES);
+    const dto = adjustCashBalanceInput.parse(body);
+    return this.boxes.adjustToCount({
+      tenantId: tenant,
+      cashBoxId: uuid.parse(id),
+      cashCountId: dto.cashCountId,
+      reason: dto.reason,
+      createdBy: session.userId,
     });
   }
 

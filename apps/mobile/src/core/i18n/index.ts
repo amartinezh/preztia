@@ -382,11 +382,17 @@ const es = {
   "cash.sync.difference": "Diferencia",
   "cash.arqueo.title": "Arqueo de caja",
   "cash.arqueo.counted": "Conteo físico",
+  "cash.arqueo.bankBalance": "Saldo real en el banco",
   "cash.arqueo.notes": "Notas",
   "cash.arqueo.submit": "Registrar arqueo",
   "cash.arqueo.system": "Saldo del sistema",
   "cash.arqueo.balanced": "Caja cuadrada",
   "cash.arqueo.difference": "Descuadre",
+  "cash.adjust.cta": "Ajustar saldo al arqueo",
+  "cash.adjust.hint":
+    "Registra un asiento de ajuste por el descuadre exacto. El historial no se edita: el ajuste queda en el libro de movimientos y en la auditoría.",
+  "cash.adjust.reason": "Motivo del ajuste",
+  "cash.adjust.done": "Saldo ajustado. El descuadre quedó sellado en el libro de movimientos.",
   "cash.withdraw.title": "Registrar retiro",
   "cash.withdraw.amount": "Valor",
   "cash.withdraw.reason": "Motivo",
@@ -710,6 +716,10 @@ const es = {
     "No hay planes de pago activos para ofertar. Actívalos o crea uno en Ajustes → Planes de pago.",
   "errors.plans.noDefault":
     "No hay planes de pago configurados. Crea uno en Ajustes → Planes de pago para poder ofertar.",
+  "errors.cash.staleCount":
+    "El saldo de la caja cambió después de este arqueo. Registra un arqueo nuevo y ajusta desde ahí.",
+  "errors.cash.countAdjusted": "Este arqueo ya fue ajustado. El saldo ya refleja la corrección.",
+  "errors.cash.noDiscrepancy": "La caja está cuadrada: no hay descuadre que ajustar.",
 } as const;
 
 export type MessageKey = keyof typeof es;

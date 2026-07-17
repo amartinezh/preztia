@@ -111,7 +111,12 @@ export function CashBoxesScreen() {
         ) : null}
       </Stack>
 
-      <CashCountModal box={arqueoBox} visible={arqueoBox !== null} onClose={() => setArqueoBox(null)} />
+      <CashCountModal
+        box={arqueoBox}
+        visible={arqueoBox !== null}
+        canAdjust={canManage}
+        onClose={() => setArqueoBox(null)}
+      />
     </Screen>
   );
 }

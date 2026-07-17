@@ -167,6 +167,22 @@ export function usePerformCashCount() {
   });
 }
 
+/** Ajusta el saldo de la caja al valor de un arqueo (asiento ADJUSTMENT con motivo). */
+export function useAdjustCashBalance() {
+  const invalidate = useInvalidateCash();
+  return useMutation({
+    mutationFn: async (input: { boxId: string; cashCountId: string; reason: string }) =>
+      unwrap(
+        await api.adjustCashBalance({
+          headers: tenantHeader(),
+          params: { id: input.boxId },
+          body: { cashCountId: input.cashCountId, reason: input.reason },
+        }),
+      ),
+    onSuccess: invalidate,
+  });
+}
+
 export function useSyncBankBalance() {
   const invalidate = useInvalidateCash();
   return useMutation({

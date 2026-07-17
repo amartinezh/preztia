@@ -8,7 +8,9 @@ import { randomUUID } from 'node:crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import {
+  ConflictError,
   assertCanPost,
+  buildAdjustment,
   buildTransfer,
   type CashBoxType,
   type CashTxDirection,
@@ -76,6 +78,15 @@ export interface PostingCommand {
   reason: string | null;
   createdBy: string;
   paymentId?: string | null;
+}
+
+/** Ajuste manual de saldo: sella el descuadre de un arqueo concreto (nunca un monto libre). */
+export interface AdjustCommand {
+  tenantId: string;
+  cashBoxId: string;
+  cashCountId: string;
+  reason: string;
+  createdBy: string;
 }
 
 export interface TransferCommand {
@@ -228,6 +239,76 @@ export class CashBoxDrizzleRepository {
           currency: box.currency,
           reason: cmd.reason,
           paymentId: cmd.paymentId ?? null,
+          createdBy: cmd.createdBy,
+        })
+        .returning();
+      return toTxView(row, box.name);
+    });
+  }
+
+  /**
+   * Ajusta el saldo de la caja al valor real verificado en un arqueo: postea el asiento
+   * ADJUSTMENT por el descuadre exacto. Guardas (los `DomainError` con código viajan al
+   * filtro global, que preserva el código para el cliente):
+   *  - el arqueo existe y es de esta caja;
+   *  - un arqueo se ajusta a lo sumo una vez (más el índice único en BD);
+   *  - el saldo no cambió después del arqueo (si cambió, el descuadre ya no es válido).
+   */
+  async adjustToCount(cmd: AdjustCommand): Promise<CashTransactionRow> {
+    return withTenantTxFor(cmd.tenantId, async (tx) => {
+      const box = await lockBox(tx, cmd.cashBoxId);
+      if (!box) throw new NotFoundException('Caja no encontrada');
+      if (!box.active) throw new ConflictException('La caja está inactiva');
+
+      const [count] = await tx
+        .select({
+          id: schema.cashCount.id,
+          cashBoxId: schema.cashCount.cashBoxId,
+          systemMinor: schema.cashCount.systemMinor,
+          countedMinor: schema.cashCount.countedMinor,
+        })
+        .from(schema.cashCount)
+        .where(eq(schema.cashCount.id, cmd.cashCountId))
+        .limit(1);
+      if (!count || count.cashBoxId !== box.id) {
+        throw new NotFoundException('Arqueo no encontrado para esta caja');
+      }
+
+      const [adjusted] = await tx
+        .select({ id: schema.cashTransaction.id })
+        .from(schema.cashTransaction)
+        .where(eq(schema.cashTransaction.cashCountId, count.id))
+        .limit(1);
+      if (adjusted) {
+        throw new ConflictError('Este arqueo ya fue ajustado', 'COUNT_ALREADY_ADJUSTED');
+      }
+
+      const currentBalanceMinor = await balanceOfBox(tx, box.id);
+      if (currentBalanceMinor !== count.systemMinor) {
+        throw new ConflictError(
+          'El saldo cambió después del arqueo; registra un arqueo nuevo',
+          'STALE_COUNT',
+        );
+      }
+
+      const intent = buildAdjustment({
+        systemMinor: count.systemMinor,
+        targetMinor: count.countedMinor,
+        reason: cmd.reason,
+      });
+      assertCanPost({ type: box.type, currentBalanceMinor, intent });
+
+      const [row] = await tx
+        .insert(schema.cashTransaction)
+        .values({
+          tenantId: cmd.tenantId,
+          cashBoxId: box.id,
+          direction: intent.direction,
+          kind: intent.kind,
+          amountMinor: intent.amountMinor,
+          currency: box.currency,
+          reason: intent.reason,
+          cashCountId: count.id,
           createdBy: cmd.createdBy,
         })
         .returning();

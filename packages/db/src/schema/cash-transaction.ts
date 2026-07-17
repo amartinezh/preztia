@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { cashBox } from "./cash-box";
+import { cashCount } from "./cash-count";
 import { payment } from "./payment";
 import { expense } from "./expense";
 import { credit } from "./credit";
@@ -59,6 +60,9 @@ export const cashTransaction = pgTable(
     expenseId: uuid("expense_id").references(() => expense.id),
     // Crédito que originó el egreso DISBURSEMENT (de qué caja/cuenta salió el préstamo).
     creditId: uuid("credit_id").references(() => credit.id),
+    // Arqueo que justifica un asiento ADJUSTMENT: el ajuste siempre nace de un descuadre
+    // verificado (evidencia), nunca de un monto libre.
+    cashCountId: uuid("cash_count_id").references(() => cashCount.id),
     // Las dos patas de una transferencia comparten transfer_group_id (Σ = 0).
     transferGroupId: uuid("transfer_group_id"),
     // Quién registró el asiento (app_user); sin FK, igual que actor_id de audit_log.
@@ -81,6 +85,10 @@ export const cashTransaction = pgTable(
     byExpenseIdx: uniqueIndex("cash_tx_expense_idx")
       .on(t.expenseId)
       .where(sql`expense_id is not null`),
+    // Un arqueo se ajusta a lo sumo UNA vez: idempotencia del ajuste (sin doble corrección).
+    byCountIdx: uniqueIndex("cash_tx_count_idx")
+      .on(t.cashCountId)
+      .where(sql`cash_count_id is not null`),
     positive: check("cash_tx_amount_positive_chk", sql`amount_minor > 0`),
   }),
 );
