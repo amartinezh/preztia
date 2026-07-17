@@ -33,7 +33,11 @@ ok "build en apps/mobile/dist ($(du -sh dist | cut -f1))"
 echo "── Subiendo a $DEPLOY_HOST:$REMOTE_DIR ──"
 # tar sobre ssh: funciona aunque el servidor no tenga rsync; --delete implícito
 # porque vaciamos el destino antes (los archivos de Expo van hasheados).
-ssh "$DEPLOY_HOST" "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR"
+#
+# ⚠ deploy/app está BIND-MOUNTED en el contenedor de Caddy (:/srv/app). Borrar y recrear el
+# directorio cambia su inodo y deja a Caddy apuntando al inodo viejo (ya borrado) → 404. Por eso
+# se vacía el CONTENIDO conservando el directorio (mismo inodo): Caddy sirve lo nuevo en vivo.
+ssh "$DEPLOY_HOST" "mkdir -p $REMOTE_DIR && find $REMOTE_DIR -mindepth 1 -delete"
 tar -czf - -C dist . | ssh "$DEPLOY_HOST" "tar -xzf - -C $REMOTE_DIR"
 ssh "$DEPLOY_HOST" "test -f $REMOTE_DIR/index.html" || fail "la subida no dejó index.html en el servidor"
 ok "app publicada (Caddy la sirve al instante, sin reinicios)"
