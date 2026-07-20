@@ -9,6 +9,7 @@ import { can } from "@/core/auth/authorization";
 import { useT } from "@/core/i18n";
 import { PaymentsList } from "@/features/payments/components/payments-list";
 import { CollectionSection } from "@/features/collections/components/collection-section";
+import { CollectionLogSection } from "@/features/collections/components/collection-log-section";
 import { useCreditPortfolio } from "../api/queries";
 
 type InstallmentStatus = "PENDING" | "PARTIALLY_PAID" | "PAID" | "OVERDUE";
@@ -56,6 +57,9 @@ export function CreditPortfolioScreen({ creditId }: { creditId: string }) {
         ) : null}
 
         {can(role, "application:review") ? <CollectionSection creditId={creditId} /> : null}
+
+        {/* Historial de visitas y observaciones del cobrador (revisor: admin/coordinador). */}
+        {can(role, "application:review") ? <CollectionLogSection creditId={creditId} /> : null}
 
         <Stack gap="sm">
           <Text variant="heading">{t("credit.portfolio.installments")}</Text>

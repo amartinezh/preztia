@@ -1,11 +1,17 @@
 import { Module } from '@nestjs/common';
 import {
+  AddCollectionObservationHandler,
   type CollectionAuditLog,
+  type CollectionNoteRepository,
+  type CollectionVisitAuditLog,
+  type CollectionVisitRepository,
   type DueCreditsReader,
+  MarkCollectionVisitedHandler,
   type OutboundTextSender,
   type ReminderIdempotencyStore,
   RunTenantCollectionRemindersHandler,
   SendCollectionReminderHandler,
+  type VisitOverdueReader,
 } from '@preztiaos/application';
 import { CollectionsController } from './collections.controller';
 import { DueCreditsRepository } from './due-credits.repository';
@@ -16,6 +22,11 @@ import { DueTenantsRepository } from './due-tenants.repository';
 import { ReminderIdempotencyRepository } from './reminder-idempotency.repository';
 import { CollectionAuditLogAdapter } from './collection-audit.log';
 import { CollectionReminderCron } from './collection-reminder.cron';
+import { VisitTargetsRepository } from './visit-targets.repository';
+import { CollectionNoteRepositoryAdapter } from './collection-note.repository';
+import { CollectionVisitRepositoryAdapter } from './collection-visit.repository';
+import { CollectionVisitAuditLogAdapter } from './collection-visit-audit.log';
+import { CollectionLogRepository } from './collection-log.repository';
 import { WhatsappTextSender } from '../conversations/text/whatsapp-text-sender';
 import { LoggingTextSender } from '../conversations/text/logging-text-sender';
 import { ConversationMessageLog } from '../conversations/conversation-message.log';
@@ -37,6 +48,36 @@ import { ConversationMessageLog } from '../conversations/conversation-message.lo
     OsrmRouteOptimizer,
     ReminderIdempotencyRepository,
     CollectionAuditLogAdapter,
+
+    // Visitas de cobro en campo (perfil del cobrador): read model + adaptadores append-only.
+    VisitTargetsRepository,
+    CollectionNoteRepositoryAdapter,
+    CollectionVisitRepositoryAdapter,
+    CollectionVisitAuditLogAdapter,
+    CollectionLogRepository,
+    {
+      provide: AddCollectionObservationHandler,
+      inject: [VisitTargetsRepository, CollectionNoteRepositoryAdapter],
+      useFactory: (
+        overdue: VisitOverdueReader,
+        notes: CollectionNoteRepository,
+      ) => new AddCollectionObservationHandler(overdue, notes),
+    },
+    {
+      provide: MarkCollectionVisitedHandler,
+      inject: [
+        VisitTargetsRepository,
+        CollectionNoteRepositoryAdapter,
+        CollectionVisitRepositoryAdapter,
+        CollectionVisitAuditLogAdapter,
+      ],
+      useFactory: (
+        overdue: VisitOverdueReader,
+        notes: CollectionNoteRepository,
+        visits: CollectionVisitRepository,
+        audit: CollectionVisitAuditLog,
+      ) => new MarkCollectionVisitedHandler(overdue, notes, visits, audit),
+    },
 
     // Envío saliente reutilizado: el adaptador real decorado para registrar el transcript.
     WhatsappTextSender,

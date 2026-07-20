@@ -29,6 +29,8 @@ const PURGE_ORDER: readonly string[] = [
   'installment', // → credit
   'cash_box',
   'expense',
+  'collection_note', // → credit, borrower
+  'collection_visit', // → credit, borrower
   'credit',
   // Solicitud de crédito: hijas antes que la solicitud.
   'credit_application_document', // → credit_application

@@ -18,6 +18,7 @@ export interface OperationalSettings {
   readonly planOfferTtlHours: number; // Vencimiento de la oferta de plan (horas; default 24)
   readonly allowAdminOverride: boolean; // Permitir crear crédito sin aceptación del cliente
   readonly autoConfirmSettlement: boolean; // Conciliar y abonar automáticamente los matches de settlement (default OFF)
+  readonly visitOverdueThreshold: number; // Cuotas vencidas para agendar visita del cobrador (y umbral "crítico" del mapa)
 }
 
 // Configuración del recordatorio de cobro por WhatsApp (Cron por tenant). La hora es LOCAL del
@@ -49,6 +50,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   planOfferTtlHours: 24,
   allowAdminOverride: true,
   autoConfirmSettlement: false,
+  visitOverdueThreshold: 3,
 };
 
 // Configuración por tenant. Una fila por empresa (tenant_id es la PK y la clave RLS).

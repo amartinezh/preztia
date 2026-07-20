@@ -32,6 +32,18 @@ export function useNavGroups(): NavGroup[] {
     return groups;
   }
 
+  // El COBRADOR tiene un perfil enfocado en salir a cobrar: Inicio, Visitas (su ruta de cobro:
+  // pendientes/visitados + mapa) y Clientes (sus clientes asignados + registro de abono). No ve la
+  // Cartera completa (navegar todos los créditos no es su tarea); el detalle del cobro y el abono
+  // se alcanzan desde Visitas.
+  if (role === "COLLECTOR") {
+    return [
+      { name: "index", href: "/" as Href, label: t("nav.inicio") },
+      { name: "visitas", href: "/visitas" as Href, label: t("visits.tab") },
+      { name: "cuentas", href: "/cuentas" as Href, label: t("nav.cuentas") },
+    ];
+  }
+
   const groups: NavGroup[] = [];
 
   // Panel de bienvenida: es la RUTA RAÍZ ("/" → index), por lo que es lo primero que se ve al

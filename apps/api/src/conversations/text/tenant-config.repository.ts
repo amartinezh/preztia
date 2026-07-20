@@ -26,7 +26,9 @@ export class TenantConfigDrizzleRepository implements TenantAssistantConfigRepos
     const tenantId = await resolveTenantByWhatsappPhone(channelId);
     if (!tenantId) {
       // El número no está mapeado a ningún tenant/zona: el asistente no responderá.
-      this.logger.warn(`Canal ${channelId} sin tenant asociado (whatsapp_channel)`);
+      this.logger.warn(
+        `Canal ${channelId} sin tenant asociado (whatsapp_channel)`,
+      );
       return null;
     }
 

@@ -117,6 +117,71 @@ export const criticalRouteOutput = z.object({
 });
 export type CriticalRouteOutput = z.infer<typeof criticalRouteOutput>;
 
+// ── Visitas de cobro en campo (perfil del COBRADOR) ─────────────────────────────────────────
+// El cobrador visita a los clientes cuyo crédito acumula ≥ `visitOverdueThreshold` cuotas vencidas
+// (config del admin). El listado se divide en Pendientes (por visitar) y Visitados (ya atendidos
+// en el ciclo de mora vigente). Al visitar deja observaciones textuales y marca la visita; el
+// cliente reaparece cuando la mora crece otro umbral respecto a la última visita (3 → 6 → 9 …).
+
+export const visitStatus = z.enum(["pending", "visited"]);
+export type VisitStatus = z.infer<typeof visitStatus>;
+
+export const visitTarget = z.object({
+  creditId: z.string().uuid(),
+  borrowerId: z.string().uuid(),
+  borrowerName: z.string(),
+  phone: z.string().nullable(),
+  // Coordenadas del cliente para ubicarlo en el mapa; null si aún no se han registrado.
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  overdueCount: z.number().int(),
+  daysOverdue: z.number().int(),
+  outstandingMinor: z.number().int(),
+  currency: z.string(),
+  zonePath: z.string().nullable(),
+  // Última visita (ISO) y si hay una observación NUEVA desde entonces (habilita "marcar visitado").
+  lastVisitAt: z.string().nullable(),
+  hasFreshObservation: z.boolean(),
+});
+export type VisitTarget = z.infer<typeof visitTarget>;
+
+export const listVisitTargetsQuery = z.object({ status: visitStatus });
+
+export const listVisitTargetsOutput = z.object({
+  // Umbral vigente (cuotas vencidas) del tenant con el que se arma el listado; informa la UI.
+  threshold: z.number().int(),
+  items: z.array(visitTarget),
+});
+export type ListVisitTargetsOutput = z.infer<typeof listVisitTargetsOutput>;
+
+// Bitácora unificada de un crédito, ordenada por fecha: una entrada por observación (NOTE) o por
+// visita marcada (VISIT). La consume el cobrador (en el detalle del cobro) y el admin (historial).
+export const collectionLogEntry = z.object({
+  kind: z.enum(["NOTE", "VISIT"]),
+  at: z.string(),
+  authorId: z.string().uuid(),
+  authorName: z.string().nullable(),
+  // Texto de la observación (kind=NOTE); null en las visitas.
+  body: z.string().nullable(),
+  // Cuotas vencidas registradas al marcar (kind=VISIT); null en las observaciones.
+  overdueCountAtVisit: z.number().int().nullable(),
+});
+export type CollectionLogEntry = z.infer<typeof collectionLogEntry>;
+
+export const listCollectionLogOutput = z.object({ items: z.array(collectionLogEntry) });
+export type ListCollectionLogOutput = z.infer<typeof listCollectionLogOutput>;
+
+export const addCollectionObservationInput = z.object({
+  body: z.string().trim().min(1).max(1000),
+});
+
+export const markCollectionVisitedOutput = z.object({
+  visitId: z.string().uuid(),
+  visitedAt: z.string(),
+  overdueCountAtVisit: z.number().int(),
+});
+export type MarkCollectionVisitedOutput = z.infer<typeof markCollectionVisitedOutput>;
+
 export const collectionsContract = c.router({
   getCreditCollection: {
     method: "GET",
@@ -157,5 +222,39 @@ export const collectionsContract = c.router({
     body: criticalRouteInput,
     responses: { 200: criticalRouteOutput },
     summary: "Genera la ruta de cobro óptima (OSRM) que visita a los clientes críticos desde el origen",
+  },
+  listCollectionVisits: {
+    method: "GET",
+    path: "/collections/visits",
+    headers: tenantHeaders,
+    query: listVisitTargetsQuery,
+    responses: { 200: listVisitTargetsOutput },
+    summary: "Clientes del cobrador por visitar (status=pending) o ya visitados (status=visited)",
+  },
+  listCollectionLog: {
+    method: "GET",
+    path: "/credits/:creditId/collection-log",
+    pathParams: z.object({ creditId: z.string().uuid() }),
+    headers: tenantHeaders,
+    responses: { 200: listCollectionLogOutput },
+    summary: "Bitácora de visitas y observaciones de un crédito, ordenada por fecha",
+  },
+  addCollectionObservation: {
+    method: "POST",
+    path: "/credits/:creditId/collection-notes",
+    pathParams: z.object({ creditId: z.string().uuid() }),
+    headers: tenantHeaders,
+    body: addCollectionObservationInput,
+    responses: { 201: z.object({ id: z.string().uuid() }) },
+    summary: "Agrega una observación de visita al crédito (cobrador)",
+  },
+  markCollectionVisited: {
+    method: "POST",
+    path: "/credits/:creditId/collection-visit",
+    pathParams: z.object({ creditId: z.string().uuid() }),
+    headers: tenantHeaders,
+    body: z.object({}),
+    responses: { 200: markCollectionVisitedOutput },
+    summary: "Marca el crédito como visitado (requiere una observación nueva); reagenda por ciclo de mora",
   },
 });

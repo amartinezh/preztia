@@ -4,7 +4,7 @@ import { schema } from '@preztiaos/db';
 import type { CriticalClient } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { zoneScopePredicate } from '../iam/zone-scope';
-import { criticalOverdueThreshold } from './critical-overdue-threshold';
+import { resolveOverdueThreshold } from './critical-overdue-threshold';
 import type { Session } from '../auth/require-role';
 
 const MILLIS_PER_DAY = 86_400_000;
@@ -17,16 +17,13 @@ const MILLIS_PER_DAY = 86_400_000;
  */
 @Injectable()
 export class CriticalClientsRepository {
-  /** Umbral vigente de cuotas vencidas para marcar a un cliente como crítico. */
-  threshold(): number {
-    return criticalOverdueThreshold();
-  }
-
-  async list(session: Session): Promise<CriticalClient[]> {
+  async list(
+    session: Session,
+  ): Promise<{ threshold: number; items: CriticalClient[] }> {
     const today = new Date().toISOString().slice(0, 10);
-    const threshold = this.threshold();
 
     return withTenantTxFor(session.tenantId, async (tx) => {
+      const threshold = await resolveOverdueThreshold(tx, session.tenantId);
       // Cuotas vencidas (no saldadas y con vencimiento anterior a hoy).
       const overdueFilter = sql`${schema.installment.paidMinor} < ${schema.installment.amountDueMinor} AND ${schema.installment.dueDate} < ${today}`;
       const overdueCount = sql<number>`COUNT(*) FILTER (WHERE ${overdueFilter})`;
@@ -67,7 +64,7 @@ export class CriticalClientsRepository {
         .groupBy(schema.credit.id, schema.borrower.id, schema.zone.id)
         .having(sql`COUNT(*) FILTER (WHERE ${overdueFilter}) >= ${threshold}`);
 
-      return rows
+      const items = rows
         .filter((r) => r.lat != null && r.lng != null)
         .map((r) => ({
           creditId: r.creditId,
@@ -79,6 +76,7 @@ export class CriticalClientsRepository {
           outstandingMinor: Number(r.totalDue) - Number(r.totalPaid),
           currency: r.currency,
         }));
+      return { threshold, items };
     });
   }
 }

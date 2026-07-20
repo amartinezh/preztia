@@ -118,6 +118,15 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
             onChangeText={(text) => set("planOfferTtlHours", Math.max(1, Math.round(Number(text) || 0)))}
           />
         </Field>
+        <Field label={t("config.visitThreshold")}>
+          <Input
+            keyboardType="numeric"
+            editable={canEdit}
+            value={String(form.visitOverdueThreshold)}
+            onChangeText={(text) => set("visitOverdueThreshold", Math.max(1, Math.round(Number(text) || 0)))}
+          />
+        </Field>
+        <Text variant="caption" tone="muted">{t("config.visitThresholdHint")}</Text>
         <Field label={t("config.commission")}>
           <Input
             keyboardType="numeric"

@@ -35,10 +35,19 @@ export interface OperationalSettings {
    * también entran a esa cola de revisión humana, independientemente de este toggle.
    */
   readonly autoConfirmSettlement: boolean;
+  /**
+   * Cuotas vencidas a partir de las cuales se agenda una visita del cobrador en campo. Tras
+   * visitar, el cliente reaparece cuando la mora crece otro umbral (3 → 6 → 9 …). También es el
+   * umbral con el que el mapa de cobro marca a un cliente como "crítico".
+   */
+  readonly visitOverdueThreshold: number;
 }
 
 /** Vencimiento por defecto de la oferta de plan: un día (parametrizable por tenant). */
 export const DEFAULT_PLAN_OFFER_TTL_HOURS = 24;
+
+/** Umbral por defecto de cuotas vencidas para agendar una visita del cobrador. */
+export const DEFAULT_VISIT_OVERDUE_THRESHOLD = 3;
 
 export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   rechargesEnabled: false,
@@ -53,6 +62,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   allowAdminOverride: true,
   // Por defecto APAGADO: los pagos conciliados por settlement esperan aprobación humana.
   autoConfirmSettlement: false,
+  visitOverdueThreshold: DEFAULT_VISIT_OVERDUE_THRESHOLD,
 };
 
 /** Aplica un parche parcial sobre los ajustes actuales (inmutable; solo campos presentes). */

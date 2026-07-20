@@ -22,6 +22,10 @@ export const operationalSettings = z.object({
   // Conciliación automática de settlement: ON = abono inmediato cuando un crédito real coincide;
   // OFF (default) = el pago espera aprobación humana (conciliación manual).
   autoConfirmSettlement: z.boolean(),
+  // Cuotas vencidas a partir de las cuales se agenda una visita del cobrador en campo. Tras
+  // visitar, el cliente reaparece cuando la mora crece otro umbral (3 → 6 → 9 …). También es el
+  // umbral con el que el mapa de cobro marca a un cliente como "crítico".
+  visitOverdueThreshold: z.number().int().min(1).max(60),
 });
 export type OperationalSettings = z.infer<typeof operationalSettings>;
 

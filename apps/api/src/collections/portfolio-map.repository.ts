@@ -4,7 +4,7 @@ import { schema } from '@preztiaos/db';
 import type { PortfolioMapClient } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { zoneScopePredicate } from '../iam/zone-scope';
-import { criticalOverdueThreshold } from './critical-overdue-threshold';
+import { resolveOverdueThreshold } from './critical-overdue-threshold';
 import { daysSince } from './critical-clients.repository';
 import type { Session } from '../auth/require-role';
 
@@ -17,16 +17,13 @@ import type { Session } from '../auth/require-role';
  */
 @Injectable()
 export class PortfolioMapRepository {
-  /** Umbral vigente de cuotas vencidas con el que se marca `critical`. */
-  threshold(): number {
-    return criticalOverdueThreshold();
-  }
-
-  async list(session: Session): Promise<PortfolioMapClient[]> {
+  async list(
+    session: Session,
+  ): Promise<{ threshold: number; items: PortfolioMapClient[] }> {
     const today = new Date().toISOString().slice(0, 10);
-    const threshold = this.threshold();
 
     return withTenantTxFor(session.tenantId, async (tx) => {
+      const threshold = await resolveOverdueThreshold(tx, session.tenantId);
       // Cuotas vencidas (no saldadas y con vencimiento anterior a hoy) y cuotas aún pendientes.
       const overdueFilter = sql`${schema.installment.paidMinor} < ${schema.installment.amountDueMinor} AND ${schema.installment.dueDate} < ${today}`;
       const pendingFilter = sql`${schema.installment.paidMinor} < ${schema.installment.amountDueMinor}`;
@@ -75,7 +72,7 @@ export class PortfolioMapRepository {
         .where(and(...conditions))
         .groupBy(schema.credit.id, schema.borrower.id, schema.zone.id);
 
-      return rows
+      const items = rows
         .filter((r) => r.lat != null && r.lng != null)
         .map((r) => ({
           creditId: r.creditId,
@@ -98,6 +95,7 @@ export class PortfolioMapRepository {
           startDate: r.startDate,
           critical: Number(r.overdueCount) >= threshold,
         }));
+      return { threshold, items };
     });
   }
 }

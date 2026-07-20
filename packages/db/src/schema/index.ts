@@ -11,6 +11,8 @@ export * from "./installment";
 export * from "./payment";
 export * from "./borrower";
 export * from "./borrower-note";
+export * from "./collection-note";
+export * from "./collection-visit";
 export * from "./expense";
 export * from "./change-request";
 export * from "./collector-location";

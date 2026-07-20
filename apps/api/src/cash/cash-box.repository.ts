@@ -280,7 +280,10 @@ export class CashBoxDrizzleRepository {
         .where(eq(schema.cashTransaction.cashCountId, count.id))
         .limit(1);
       if (adjusted) {
-        throw new ConflictError('Este arqueo ya fue ajustado', 'COUNT_ALREADY_ADJUSTED');
+        throw new ConflictError(
+          'Este arqueo ya fue ajustado',
+          'COUNT_ALREADY_ADJUSTED',
+        );
       }
 
       const currentBalanceMinor = await balanceOfBox(tx, box.id);
