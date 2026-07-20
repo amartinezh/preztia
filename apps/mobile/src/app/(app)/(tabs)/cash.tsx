@@ -1,3 +1,3 @@
-import { CashScreen } from "@/features/cash/screens/cash-screen";
+import { DineroHubScreen } from "@/features/cash/screens/dinero-hub-screen";
 
-export default CashScreen;
+export default DineroHubScreen;

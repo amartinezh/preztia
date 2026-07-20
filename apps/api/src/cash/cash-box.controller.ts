@@ -192,6 +192,7 @@ export class CashBoxController {
       direction,
       userId,
       collectorId,
+      borrowerId,
       from,
       to,
     } = listCashTransactionsQuery.parse(query);
@@ -204,6 +205,7 @@ export class CashBoxController {
       ...(direction ? { direction } : {}),
       ...(userId ? { userId } : {}),
       ...(collectorId ? { collectorId } : {}),
+      ...(borrowerId ? { borrowerId } : {}),
       ...(from ? { from } : {}),
       ...(to ? { to } : {}),
     });

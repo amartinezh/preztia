@@ -4,8 +4,10 @@ import {
   count,
   desc,
   eq,
+  exists,
   gte,
   lte,
+  or,
   sql,
   type AnyColumn,
   type SQL,
@@ -215,6 +217,7 @@ export class CashQueryRepository {
     direction?: CashTxDirection;
     userId?: string;
     collectorId?: string;
+    borrowerId?: string;
     from?: string;
     to?: string;
   }): Promise<{ items: CashTransactionRow[]; total: number }> {
@@ -230,6 +233,36 @@ export class CashQueryRepository {
       // Cobrador dueño de la caja: filtra por el efectivo de su ruta (vía cash_box.assigned_to).
       if (input.collectorId)
         conds.push(eq(schema.cashBox.assignedTo, input.collectorId));
+      // Cliente: los movimientos que CAUSA un deudor son sus DESEMBOLSOS (egreso, vía credit_id
+      // directo) y sus ABONOS (ingreso, vía payment→credit). EXISTS correlacionados: no multiplican
+      // filas ni alteran el conteo, y las subconsultas quedan aisladas por RLS (mismo tenant tx).
+      if (input.borrowerId) {
+        const disbursementOfBorrower = tx
+          .select({ one: sql`1` })
+          .from(schema.credit)
+          .where(
+            and(
+              eq(schema.credit.id, schema.cashTransaction.creditId),
+              eq(schema.credit.borrowerId, input.borrowerId),
+            ),
+          );
+        const paymentOfBorrower = tx
+          .select({ one: sql`1` })
+          .from(schema.payment)
+          .innerJoin(
+            schema.credit,
+            eq(schema.credit.id, schema.payment.creditId),
+          )
+          .where(
+            and(
+              eq(schema.payment.id, schema.cashTransaction.paymentId),
+              eq(schema.credit.borrowerId, input.borrowerId),
+            ),
+          );
+        conds.push(
+          or(exists(disbursementOfBorrower), exists(paymentOfBorrower)) as SQL,
+        );
+      }
       if (input.from)
         conds.push(gte(schema.cashTransaction.createdAt, new Date(input.from)));
       if (input.to)

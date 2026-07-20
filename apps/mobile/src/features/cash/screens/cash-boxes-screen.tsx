@@ -31,8 +31,12 @@ const SYNC_TONE: Record<"MATCHED" | "MISMATCH" | "UNAVAILABLE", BadgeTone> = {
   UNAVAILABLE: "warning",
 };
 
-/** Dashboard financiero de cajas: saldo total + por caja, arqueo y conciliación (Req 5 y 7). */
-export function CashBoxesScreen() {
+/**
+ * Dashboard financiero de cajas: saldo total + por caja, arqueo y conciliación (Req 5 y 7).
+ * `embedded`: dentro del hub Dinero el botón de Movimientos sobra (existe el segmento homónimo);
+ * se oculta para no duplicar accesos. La Configuración (ADMIN) sí se conserva como ruta.
+ */
+export function CashBoxesScreen({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useT();
   const router = useRouter();
   const { role } = useSession();
@@ -47,12 +51,14 @@ export function CashBoxesScreen() {
         <Row className="justify-between items-center">
           <Text variant="subtitle">{t("cash.boxes.title")}</Text>
           <Row className="gap-2">
-            <Button
-              label={t("cash.movements.link")}
-              variant="secondary"
-              size="sm"
-              onPress={() => router.push("/cash/movements" as Href)}
-            />
+            {embedded ? null : (
+              <Button
+                label={t("cash.movements.link")}
+                variant="secondary"
+                size="sm"
+                onPress={() => router.push("/cash/movements" as Href)}
+              />
+            )}
             {canAdmin ? (
               <Button
                 label={t("cash.config.link")}

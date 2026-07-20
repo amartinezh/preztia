@@ -14,8 +14,9 @@ export type NavGroup = {
 
 /**
  * Grupos del menú según el rol. Reduce las ~11 pestañas del legado a ≤5 grupos coherentes:
- * Cartera (créditos+cuentas), Revisión, Caja, Cuentas (clientes+pagos) y Ajustes. La autoridad
- * real la imponen backend + RLS; esto solo decide qué se ofrece.
+ * Cartera (créditos+cuentas), Solicitudes, Dinero (tesorería+cajas+movimientos) y Clientes
+ * (clientes+pagos+movimientos por cliente) y Ajustes. La autoridad real la imponen backend +
+ * RLS; esto solo decide qué se ofrece.
  */
 export function useNavGroups(): NavGroup[] {
   const { role } = useSession();
@@ -47,7 +48,7 @@ export function useNavGroups(): NavGroup[] {
   if (can(role, "cash:manage")) {
     groups.push({ name: "cash", href: "/cash" as Href, label: t("cash.tab") });
   }
-  // Cuentas agrupa Clientes + Pagos (+ Cobradores/Operación según rol).
+  // Clientes agrupa Clientes + Pagos + Movimientos por cliente (+ Cobradores/Operación según rol).
   if (
     can(role, "client:read") ||
     can(role, "borrower:manage") ||

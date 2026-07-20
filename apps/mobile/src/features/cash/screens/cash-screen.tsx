@@ -40,29 +40,36 @@ const EXPENSE_TONE: Record<Expense["status"], BadgeTone> = {
 };
 
 /**
- * Caja / Tesorería: el dinero real al frente (liquidez del libro de cajas), seguido del reporte
- * diario (P&L de cartera) y los gastos (maker-checker). El detalle por caja (saldos, arqueo,
- * conciliación, movimientos) vive en "Cajas y cuentas".
+ * Resumen de Dinero / Tesorería: el dinero real al frente (liquidez del libro de cajas), seguido
+ * del reporte diario (P&L de cartera) y los gastos (maker-checker). El detalle por caja (saldos,
+ * arqueo, conciliación, movimientos) vive en el segmento "Cajas y cuentas" del hub Dinero.
+ *
+ * `embedded`: dentro del hub Dinero el encabezado propio sobra (el hub ya da título + segmentos);
+ * `onOpenBoxes` cambia al segmento de cajas en lugar de navegar a la ruta suelta.
  */
-export function CashScreen() {
+export function CashScreen({
+  embedded = false,
+  onOpenBoxes,
+}: {
+  embedded?: boolean;
+  onOpenBoxes?: () => void;
+} = {}) {
   const { t } = useT();
   const router = useRouter();
   const { role } = useSession();
   const manages = can(role, "cash:manage");
+  const openBoxes = onOpenBoxes ?? (() => router.push("/cash/boxes" as Href));
 
   return (
     <Screen>
       <Stack gap="lg">
-        <Row className="justify-between items-center">
-          <Text variant="subtitle">{t("cash.title")}</Text>
-          <Button
-            label={t("cash.boxes.link")}
-            variant="secondary"
-            size="sm"
-            onPress={() => router.push("/cash/boxes" as Href)}
-          />
-        </Row>
-        <TreasurySummaryCard onOpenBoxes={() => router.push("/cash/boxes" as Href)} />
+        {embedded ? null : (
+          <Row className="justify-between items-center">
+            <Text variant="subtitle">{t("cash.title")}</Text>
+            <Button label={t("cash.boxes.link")} variant="secondary" size="sm" onPress={openBoxes} />
+          </Row>
+        )}
+        <TreasurySummaryCard onOpenBoxes={openBoxes} />
         <DailyReportCard />
         <ExpensesSection canManage={manages} />
       </Stack>

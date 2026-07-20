@@ -56,6 +56,8 @@ export interface TransactionFilters {
   direction?: "IN" | "OUT";
   /** Cobrador dueño de la caja (su efectivo de ruta). */
   collectorId?: string;
+  /** Cliente que causa el movimiento (abonos vía pago, desembolsos vía crédito). */
+  borrowerId?: string;
   /** Rango de fechas (datetime ISO inclusivo): desde el inicio y hasta el fin del día. */
   from?: string;
   to?: string;
@@ -104,6 +106,7 @@ export function useCashTransactions(filters: TransactionFilters = {}) {
             ...(filters.kind ? { kind: filters.kind } : {}),
             ...(filters.direction ? { direction: filters.direction } : {}),
             ...(filters.collectorId ? { collectorId: filters.collectorId } : {}),
+            ...(filters.borrowerId ? { borrowerId: filters.borrowerId } : {}),
             ...(filters.from ? { from: filters.from } : {}),
             ...(filters.to ? { to: filters.to } : {}),
           },

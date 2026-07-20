@@ -112,7 +112,7 @@ const es = {
   "payment.filter.clear": "Limpiar filtros",
   "payment.filter.results": "resultado(s)",
   "payment.flag.title": "Motivo del marcado",
-  "review.tab": "Revisión",
+  "review.tab": "Solicitudes",
   "review.list.title": "Revisión de solicitudes",
   "review.list.empty": "No hay solicitudes para revisar",
   "review.detail.title": "Expediente",
@@ -333,8 +333,12 @@ const es = {
   "accounts.field.collectedToday": "Cobrado hoy",
   "accounts.field.dueToday": "Pago hoy",
   // Caja / Tesorería (dinero real del libro, reporte diario, gastos)
-  "cash.tab": "Caja",
-  "cash.title": "Caja",
+  "cash.tab": "Dinero",
+  "cash.title": "Dinero",
+  // Hub Dinero: segmentos que aglutinan tesorería, cajas/cuentas y movimientos globales
+  "dinero.segment.summary": "Resumen",
+  "dinero.segment.boxes": "Cajas y cuentas",
+  "dinero.segment.movements": "Movimientos",
   "cash.treasury.title": "Tesorería",
   "cash.treasury.detail": "Ver cajas y cuentas",
   "cash.daily.title": "Reporte diario",
@@ -599,7 +603,7 @@ const es = {
   // Navegación (shell) + menú de usuario
   "nav.inicio": "Inicio",
   "nav.cartera": "Cartera",
-  "nav.cuentas": "Cuentas",
+  "nav.cuentas": "Clientes",
   "nav.settings": "Ajustes",
   // Dashboard inicial de KPIs (panel de bienvenida)
   "home.title": "Panel de control",
@@ -657,8 +661,19 @@ const es = {
   "cartera.filter.settled": "Pagados",
   "cartera.new": "Nuevo crédito",
   "map.title": "Mapa de cobro",
-  // Cuentas (hub: clientes + pagos)
-  "cuentas.title": "Cuentas",
+  // Clientes (hub: clientes + pagos + movimientos por cliente)
+  "cuentas.title": "Clientes",
+  // Movimientos por cliente: ingresos (abonos) y egresos (desembolsos) que causa un cliente
+  "clientMovements.tab": "Movimientos",
+  "clientMovements.title": "Movimientos por cliente",
+  "clientMovements.pickClient": "Elige un cliente para ver sus ingresos y egresos",
+  "clientMovements.search": "Buscar cliente por nombre",
+  "clientMovements.change": "Cambiar cliente",
+  "clientMovements.income": "Ingresos",
+  "clientMovements.expenses": "Egresos",
+  "clientMovements.net": "Neto",
+  "clientMovements.empty": "Este cliente aún no tiene movimientos",
+  "clientMovements.partialHint": "Carga todos los movimientos para ver el total exacto.",
   // Revisión: secciones intuitivas (#6)
   "review.section.inProgress": "En proceso",
   "review.section.toApprove": "Por aprobar",

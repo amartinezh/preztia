@@ -7,6 +7,7 @@ import { can } from "@/core/auth/authorization";
 import { useSession } from "@/core/auth/session";
 import { useT } from "@/core/i18n";
 import { BorrowersScreen } from "@/features/borrowers/screens/borrowers-screen";
+import { ClientMovementsScreen } from "@/features/clients/screens/client-movements-screen";
 import { MyClientsScreen } from "@/features/clients/screens/my-clients-screen";
 import { CollectorsScreen } from "@/features/collectors/screens/collectors-screen";
 import { OperationsScreen } from "@/features/operations/screens/operations-screen";
@@ -15,10 +16,11 @@ import { PaymentsHubScreen } from "@/features/payments/screens/payments-hub-scre
 type Segment = { key: string; label: string; render: () => ReactNode };
 
 /**
- * Hub de "Cuentas" (#4): agrupa la gestión de Clientes y Pagos (y Cobradores/Operación según
- * rol) bajo una sola pestaña con un control segmentado, en lugar de varias pestañas sueltas.
- * El segmento activo vive en la URL (`?tab=`), como en Ajustes: recargar o compartir el enlace
- * no pierde el contexto; si la URL pide un segmento no visible, cae al primero permitido.
+ * Hub de "Clientes" (#3): todo lo referente al cliente bajo una sola pestaña con control
+ * segmentado — Clientes (alta/edición), Pagos (con su detalle) y Movimientos (ingresos/egresos
+ * que causa cada cliente), más Cobradores/Operación según rol. El segmento activo vive en la URL
+ * (`?tab=`), como en Ajustes: recargar o compartir el enlace no pierde el contexto; si la URL
+ * pide un segmento no visible, cae al primero permitido.
  */
 export function CuentasHubScreen() {
   const { t } = useT();
@@ -27,13 +29,23 @@ export function CuentasHubScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
 
   const segments: Segment[] = [];
+  // a) Crear/gestionar clientes.
   if (can(role, "borrower:manage")) {
     segments.push({ key: "clientes", label: t("borrowers.tab"), render: () => <BorrowersScreen /> });
   } else if (can(role, "client:read")) {
     segments.push({ key: "clientes", label: t("clients.tab"), render: () => <MyClientsScreen /> });
   }
+  // b) Pagos + detalle completo de cada pago.
   if (can(role, "payment:reconcile") || can(role, "payment:register")) {
     segments.push({ key: "pagos", label: t("payments.title"), render: () => <PaymentsHubScreen /> });
+  }
+  // c) Movimientos completos por cliente (ingresos/egresos). Vista de gestión (ADMIN/COORDINATOR).
+  if (can(role, "payment:reconcile")) {
+    segments.push({
+      key: "movimientos",
+      label: t("clientMovements.tab"),
+      render: () => <ClientMovementsScreen />,
+    });
   }
   if (can(role, "collector:manage")) {
     segments.push({ key: "cobradores", label: t("collectors.tab"), render: () => <CollectorsScreen /> });

@@ -225,13 +225,16 @@ export const listCashTransactionsOutput = z.object({
 
 // Historial detallado con filtros (Req 5): por caja, tipo, sentido, usuario y rango de fechas.
 // `userId` filtra por quien REGISTRÓ el asiento; `collectorId`, por el cobrador DUEÑO de la caja
-// (su efectivo de ruta), aunque el asiento lo haya registrado otro o el sistema.
+// (su efectivo de ruta), aunque el asiento lo haya registrado otro o el sistema. `borrowerId`
+// filtra los movimientos que CAUSA un cliente: sus abonos (PAYMENT_IN, vía payment→credit) y sus
+// desembolsos (DISBURSEMENT, vía credit), para su libro de ingresos/egresos.
 export const listCashTransactionsQuery = paginationQuery.extend({
   cashBoxId: z.string().uuid().optional(),
   kind: cashTxKind.optional(),
   direction: cashTxDirection.optional(),
   userId: z.string().uuid().optional(),
   collectorId: z.string().uuid().optional(),
+  borrowerId: z.string().uuid().optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 });
