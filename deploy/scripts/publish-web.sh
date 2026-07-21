@@ -26,9 +26,18 @@ fail() { printf '\033[31m✖ %s\033[0m\n' "$*"; exit 1; }
 
 echo "── Export web de Expo (API: $API_URL) ──"
 cd "$REPO_DIR/apps/mobile"
-EXPO_PUBLIC_API_URL="$API_URL" npx expo export --platform web
+# --clear es OBLIGATORIO: Metro cachea el transform de env.ts con el valor de EXPO_PUBLIC_API_URL
+# ya INLINEADO. Una corrida local en dev (sin la var → localhost:3010) envenena esa caché y el
+# export de producción reusaría ese transform IGNORANDO esta variable, horneando localhost:3010 en
+# el bundle → la app web falla con "No hay conexión con el servidor". Limpiar la caché fuerza el
+# re-inlineado con la URL correcta. NO quitar este flag.
+EXPO_PUBLIC_API_URL="$API_URL" npx expo export --platform web --clear
 [ -f dist/index.html ] || fail "el export no generó dist/index.html"
-ok "build en apps/mobile/dist ($(du -sh dist | cut -f1))"
+# Verificación defensiva: la URL de la API debe estar horneada en el bundle JS (no el default local).
+if ! grep -rqF "$API_URL" dist/_expo/static/js/ 2>/dev/null; then
+  fail "el bundle NO horneó $API_URL (¿caché de Metro?). Revisa el export antes de publicar."
+fi
+ok "build en apps/mobile/dist ($(du -sh dist | cut -f1)) · API horneada: $API_URL"
 
 echo "── Subiendo a $DEPLOY_HOST:$REMOTE_DIR ──"
 # tar sobre ssh: funciona aunque el servidor no tenga rsync; --delete implícito
