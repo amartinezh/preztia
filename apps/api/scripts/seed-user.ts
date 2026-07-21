@@ -20,9 +20,10 @@ import { hashPassword } from '../src/auth/password';
  *   3. ADMIN del tenant
  *   4. Árbol de zonas (Antioquia → Medellín)
  *   5. COORDINATOR (alcance: antioquia) + asignación a la zona raíz
- *   6. COLLECTOR (alcance: antioquia.medellin)
- *   7. Deudor (cliente) + contacto + crédito con cronograma
- *   8. Asignación cobrador → cliente
+ *   6. COLLECTOR (alcance: antioquia.medellin) con UN PAR de clientes asignados
+ *   7. Dos deudores (clientes) con geo, contacto y crédito: uno al día y otro en mora
+ *      (cuotas vencidas ≥ umbral por defecto), para poder probar "Visitas" recién sembrado
+ *   8. Asignación cobrador → cada cliente
  *
  * Usa DATABASE_URL (superusuario, que bypassa RLS). Idempotente y repetible.
  */
@@ -31,10 +32,13 @@ import { hashPassword } from '../src/auth/password';
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const ZONE_ROOT_ID = '22222222-2222-4222-8222-222222222222';
 const BORROWER_ID = '11111111-1111-4111-8111-111111111111';
+// Segundo cliente del cobrador (en mora), para que "Visitas → Por visitar" no quede vacío.
+const BORROWER_ID_2 = '11111111-1111-4111-8111-111111111112';
 
 const TENANT_NAME = 'Preztia tenant';
 const TENANT_SLUG = 'preztia-tenant';
 const APPLICANT_PHONE = '5561999998888';
+const APPLICANT_PHONE_2 = '5561999997777';
 const WHATSAPP_PHONE_NUMBER_ID = '123456789012345';
 const CURRENCY = process.env.CREDIT_CURRENCY ?? 'COP';
 
@@ -72,6 +76,7 @@ async function main() {
     collector: randomUUID(),
     zoneChild: randomUUID(),
     credit: randomUUID(),
+    credit2: randomUUID(),
     paymentPlan: randomUUID(),
   };
 
@@ -195,44 +200,114 @@ async function main() {
       coordinatorId: ids.coordinator,
     });
 
-    // 7) Deudor (cliente) + contacto + crédito con cronograma (3 cuotas diarias).
-    await tx.insert(schema.borrowerContact).values({
-      tenantId: TENANT_ID,
-      borrowerId: BORROWER_ID,
-      phone: APPLICANT_PHONE,
-      channelId: WHATSAPP_PHONE_NUMBER_ID,
-    });
-    await tx.insert(schema.credit).values({
-      id: ids.credit,
-      tenantId: TENANT_ID,
-      borrowerId: BORROWER_ID,
-      zoneId: ids.zoneChild,
-      principalMinor: 90000,
-      interestPct: 0,
-      installmentsCount: 3,
-      frequency: 'DAILY',
-      currency: CURRENCY,
-      startDate: today(0),
-      endDate: today(2),
-      status: 'ACTIVE',
-    });
-    await tx.insert(schema.installment).values(
-      [0, 1, 2].map((i) => ({
+    // 6b) Clientes (deudores) con identidad y geo: el mapa/"Visitas" los necesita con
+    //     coordenadas. Cliente 1 al día; cliente 2 en mora, para poblar de una vez la
+    //     pestaña "Visitas → Por visitar" del cobrador recién sembrado.
+    await tx.insert(schema.borrower).values([
+      {
+        id: BORROWER_ID,
+        tenantId: TENANT_ID,
+        nationalId: '1017000001',
+        firstName: 'Carlos',
+        lastName: 'Restrepo',
+        business: 'Tienda La Esquina',
+        phone: APPLICANT_PHONE,
+        lat: 6.2442,
+        lng: -75.5812,
+      },
+      {
+        id: BORROWER_ID_2,
+        tenantId: TENANT_ID,
+        nationalId: '1017000002',
+        firstName: 'Marta',
+        lastName: 'Gómez',
+        business: 'Peluquería Marta',
+        phone: APPLICANT_PHONE_2,
+        lat: 6.2308,
+        lng: -75.5906,
+      },
+    ]);
+
+    // 7) Contacto de WhatsApp + crédito con cronograma de cada cliente.
+    await tx.insert(schema.borrowerContact).values([
+      {
+        tenantId: TENANT_ID,
+        borrowerId: BORROWER_ID,
+        phone: APPLICANT_PHONE,
+        channelId: WHATSAPP_PHONE_NUMBER_ID,
+      },
+      {
+        tenantId: TENANT_ID,
+        borrowerId: BORROWER_ID_2,
+        phone: APPLICANT_PHONE_2,
+        channelId: WHATSAPP_PHONE_NUMBER_ID,
+      },
+    ]);
+    await tx.insert(schema.credit).values([
+      {
+        id: ids.credit,
+        tenantId: TENANT_ID,
+        borrowerId: BORROWER_ID,
+        zoneId: ids.zoneChild,
+        principalMinor: 90000,
+        interestPct: 0,
+        installmentsCount: 3,
+        frequency: 'DAILY',
+        currency: CURRENCY,
+        startDate: today(0),
+        endDate: today(2),
+        status: 'ACTIVE',
+      },
+      {
+        // EN MORA a propósito: 4 cuotas diarias ya vencidas y sin abonar (≥ umbral por
+        // defecto de 3), para que el cobrador vea a este cliente en "Visitas → Por visitar".
+        id: ids.credit2,
+        tenantId: TENANT_ID,
+        borrowerId: BORROWER_ID_2,
+        zoneId: ids.zoneChild,
+        principalMinor: 120000,
+        interestPct: 0,
+        installmentsCount: 4,
+        frequency: 'DAILY',
+        currency: CURRENCY,
+        startDate: today(-4),
+        endDate: today(-1),
+        status: 'ACTIVE',
+      },
+    ]);
+    await tx.insert(schema.installment).values([
+      ...[0, 1, 2].map((i) => ({
         tenantId: TENANT_ID,
         creditId: ids.credit,
         seq: i + 1,
         dueDate: today(i),
         amountDueMinor: 30000,
       })),
-    );
+      ...[0, 1, 2, 3].map((i) => ({
+        tenantId: TENANT_ID,
+        creditId: ids.credit2,
+        seq: i + 1,
+        dueDate: today(i - 4),
+        amountDueMinor: 30000,
+        status: 'OVERDUE' as const,
+      })),
+    ]);
 
-    // 8) Asignación cobrador → cliente (el cobrador solo verá este cliente).
-    await tx.insert(schema.collectorClient).values({
-      tenantId: TENANT_ID,
-      collectorId: ids.collector,
-      borrowerId: BORROWER_ID,
-      assignedBy: ids.coordinator,
-    });
+    // 8) Asignación cobrador → cada cliente (el cobrador solo verá estos dos clientes).
+    await tx.insert(schema.collectorClient).values([
+      {
+        tenantId: TENANT_ID,
+        collectorId: ids.collector,
+        borrowerId: BORROWER_ID,
+        assignedBy: ids.coordinator,
+      },
+      {
+        tenantId: TENANT_ID,
+        collectorId: ids.collector,
+        borrowerId: BORROWER_ID_2,
+        assignedBy: ids.coordinator,
+      },
+    ]);
   });
 
   await db.$client.end();
@@ -248,10 +323,12 @@ async function main() {
   console.log(line('SUPER_ADMIN', SUPER_ADMIN.email, SUPER_ADMIN.password, '(plano de control · sin tenant)'));
   console.log(line('ADMIN', ADMIN.email, ADMIN.password, '(todo el tenant)'));
   console.log(line('COORDINATOR', COORDINATOR.email, COORDINATOR.password, 'zonas: antioquia'));
-  console.log(line('COLLECTOR', COLLECTOR.email, COLLECTOR.password, 'zonas: antioquia.medellin · 1 cliente asignado'));
+  console.log(line('COLLECTOR', COLLECTOR.email, COLLECTOR.password, 'zonas: antioquia.medellin · 2 clientes asignados'));
   console.log('\nDatos de verificación:');
   console.log(`  Zonas: antioquia (raíz) → antioquia.medellin`);
-  console.log(`  Crédito ACTIVO de 90000 (${CURRENCY}) con 3 cuotas; deudor ${BORROWER_ID}`);
+  console.log(`  Cliente 1 (al día): Carlos Restrepo, crédito ACTIVO de 90000 (${CURRENCY}) con 3 cuotas; deudor ${BORROWER_ID}`);
+  console.log(`  Cliente 2 (en mora): Marta Gómez, crédito ACTIVO de 120000 (${CURRENCY}) con 4 cuotas VENCIDAS; deudor ${BORROWER_ID_2}`);
+  console.log('    → visible en la app del cobrador, pestaña "Visitas → Por visitar"');
   console.log('  Plan de pago por defecto: "20 días · 20%" (20 cuotas diarias, 20% de interés)');
   console.log('\nNota: el SUPER_ADMIN NO envía x-tenant-id; los demás roles usan el x-tenant-id de arriba.\n');
 }
