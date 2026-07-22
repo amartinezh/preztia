@@ -1,6 +1,6 @@
 # CLAUDE.md — PreztiaOS
 
-Guía para generar y modificar código en este repositorio. La **fuente única de verdad** de la arquitectura (el *cómo*) es [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); el **análisis y diseño funcional** (el *qué*, validado contra el código: bounded contexts, modelo de datos/dominio, máquinas de estado, flujos) vive en [docs/DESIGN.md](docs/DESIGN.md); el cliente, en [docs/FRONTEND_ARCHITECTURE.md](docs/FRONTEND_ARCHITECTURE.md). Este archivo resume lo que **siempre** debe respetarse al escribir código.
+Guía para generar y modificar código en este repositorio. La **fuente única de verdad** de la arquitectura (el *cómo*) es [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); el **análisis y diseño funcional** (el *qué*, validado contra el código: bounded contexts, modelo de datos/dominio, máquinas de estado, flujos) vive en [docs/DESIGN.md](docs/DESIGN.md); el cliente, en [docs/FRONTEND_ARCHITECTURE.md](docs/FRONTEND_ARCHITECTURE.md); los **hallazgos de seguridad abiertos** (severidad, estado, remediación), en [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md). Este archivo resume lo que **siempre** debe respetarse al escribir código.
 
 PreztiaOS es una plataforma **multi-tenant** de préstamos y cobranza (gota a gota / cobranza por zonas). Monorepo **pnpm + Turborepo**, scope `@preztiaos/*`.
 
@@ -54,6 +54,8 @@ Por ser una plataforma **fintech multi-tenant**, todo caso de uso debe considera
 - [ ] **Invariantes** enunciados y cubiertos por **pruebas**.
 - [ ] **Dinero en unidades menores** (entero), sin coma flotante.
 - [ ] Respeta **multitenancy**: toda escritura por `withTenantTx`; toda tabla de negocio lleva `tenant_id`.
+- [ ] **AuthZ explícita en cada endpoint**: `requireTenant` **y** `requireRole`/`requireReviewer`/`requireAdmin`. `requireTenant` a solas NO es autorización — deja pasar a cualquier rol del tenant. Si el recurso es de un cobrador, acótalo además a su cartera/zona (`collector_client`, `zoneScopePredicate`).
+- [ ] Todo **endpoint público** (webhook) **falla cerrado**: si no se puede probar la autenticidad, se rechaza; nunca se procesa "para no perder eventos".
 - [ ] Operaciones de dinero y webhooks son **idempotentes** (sin doble cobro/abono).
 - [ ] Movimientos de dinero / cambios de estado quedan en el **audit log** (append-only).
 - [ ] Listados con **paginación**; sin N+1; trabajo pesado a colas.

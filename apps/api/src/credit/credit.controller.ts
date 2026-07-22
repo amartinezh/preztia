@@ -23,6 +23,7 @@ import { BorrowerPolicyRepository } from './borrower-policy.repository';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireRole } from '../auth/require-role';
+import { requireReviewer } from '../auth/require-reviewer';
 import { Idempotent } from '../observability/idempotent.decorator';
 import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
@@ -49,9 +50,11 @@ export class CreditController {
   @Get('credits')
   async list(
     @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
     @Query() query: Record<string, string>,
   ) {
     const tenant = requireTenant(tenantId);
+    requireRole(authorization, DATA_PLANE_ROLES);
     const { page, pageSize } = paginationQuery.parse(query);
     const { items, total } = await this.queries.listCredits({
       tenantId: tenant,
@@ -63,13 +66,21 @@ export class CreditController {
 
   @Post('credits')
   @Idempotent()
-  async grant(@Body() body: unknown, @Headers('x-tenant-id') tenantId: string) {
+  async grant(
+    @Body() body: unknown,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    // Otorgar crédito ES la operación de desembolso: mismo listón que aprobar un expediente
+    // (ADMIN/COORDINATOR). El COLLECTOR opera la ruta de cobro, no origina deuda.
+    requireReviewer(authorization);
     const dto = grantCreditInput.parse(body); // validación con zod en la frontera
     // La moneda la fija el servidor según la configuración del tenant, no el cliente.
     return this.handler.execute({
       ...dto,
-      tenantId,
-      currency: await resolveTenantCurrency(tenantId),
+      tenantId: tenant,
+      currency: await resolveTenantCurrency(tenant),
     });
   }
 

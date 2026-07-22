@@ -113,6 +113,14 @@ export class WhatsappWebhookController {
    * `phone_number_id` del canal (BD, cifrado; se configura en la pantalla "WhatsApp de la zona").
    * Extraer el número del cuerpo aún-no-verificado solo sirve para ELEGIR el secreto: no
    * se actúa sobre el contenido hasta validar la firma.
+   *
+   * FALLA CERRADO en los tres casos en que no se puede probar la autenticidad: sin
+   * `phone_number_id`, sin canal que lo reconozca, o con el canal sin App Secret. Antes se
+   * aceptaba el evento "para no perder mensajes durante la configuración inicial", lo que
+   * convertía el endpoint en una puerta abierta: cualquiera podía suplantar el teléfono de un
+   * deudor, empujar el flujo de originación, inyectar comprobantes de pago falsos y hacer que
+   * el número verificado del tenant enviara mensajes a destinos arbitrarios. Es el mismo
+   * criterio que ya aplicaban los webhooks de PicPay y Mercado Pago (401 sin secreto).
    */
   private async assertAuthentic(
     rawBody: Buffer | undefined,
@@ -124,13 +132,12 @@ export class WhatsappWebhookController {
       : null;
     const appSecret = creds?.appSecret;
     if (!appSecret) {
-      // Canal sin App Secret: se acepta con aviso para no perder mensajes durante la
-      // configuración inicial, pero SIN verificación de autenticidad. Configúralo en la
-      // pantalla "WhatsApp de la zona" cuanto antes.
-      this.logger.warn(
-        `Canal ${phoneNumberId ?? 'desconocido'} sin App Secret configurado: se omite la verificación de firma`,
+      // Aviso accionable: el canal existe pero le falta el App Secret, o el número no está
+      // mapeado. Hasta configurarlo en "WhatsApp de la zona", el canal NO recibe mensajes.
+      this.logger.error(
+        `Canal ${phoneNumberId ?? 'desconocido'} sin App Secret: no se puede verificar la firma; evento RECHAZADO`,
       );
-      return;
+      throw new ForbiddenException('Canal sin App Secret configurado');
     }
     if (!rawBody || !isValidSignature(rawBody, signature, appSecret)) {
       throw new ForbiddenException('Firma de webhook inválida');

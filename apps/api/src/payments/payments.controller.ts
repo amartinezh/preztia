@@ -25,11 +25,20 @@ import { CashPaymentDrizzleRepository } from './cash-payment.repository';
 import { ManualVerifyPaymentRepository } from './manual-verify-payment.repository';
 import { PaymentReceiptOriginalStorage } from './payment-receipt-original.storage';
 import { RunSettlementReconciliationService } from './run-settlement-reconciliation.service';
+import { CollectorCreditScopeReader } from './collector-credit-scope.reader';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireReviewer } from '../auth/require-reviewer';
+import { requireRole, type Session } from '../auth/require-role';
 
 const uuid = z.string().uuid();
+
+// Consultar y abonar la cartera lo hace cualquier rol del plano de datos; al COLLECTOR se le
+// acota además a los clientes que tiene asignados (ver `CollectorCreditScopeReader`).
+const DATA_PLANE_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
+// Disparar la conciliación mueve dinero (confirma pagos): listón de revisor, como el resto
+// de decisiones de cartera.
+const MANAGER_ROLES = ['ADMIN', 'COORDINATOR'] as const;
 
 /**
  * Frontera HTTP del slice de pagos: valida con zod (contrato) y delega.
@@ -45,16 +54,20 @@ export class PaymentsController {
     private readonly manualVerify: ManualVerifyPaymentRepository,
     private readonly receipts: PaymentReceiptOriginalStorage,
     private readonly settlementReconcile: RunSettlementReconciliationService,
+    private readonly collectorScope: CollectorCreditScopeReader,
   ) {}
 
   @Get('credits/:creditId/payments')
   async listPayments(
     @Param('creditId') creditId: string,
     @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
     @Query() query: Record<string, string>,
   ) {
     const tenant = requireTenant(tenantId);
+    const session = requireRole(authorization, DATA_PLANE_ROLES);
     const id = uuid.parse(creditId);
+    await this.assertWithinScope(tenant, session, id);
     const { page, pageSize } = paginationQuery.parse(query);
     const { items, total } = await this.queries.listCreditPayments({
       tenantId: tenant,
@@ -69,11 +82,14 @@ export class PaymentsController {
   async registerCashPayment(
     @Param('creditId') creditId: string,
     @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() body: unknown,
   ) {
     const tenant = requireTenant(tenantId);
+    const session = requireRole(authorization, DATA_PLANE_ROLES);
     const id = uuid.parse(creditId);
+    await this.assertWithinScope(tenant, session, id);
     const { amountMinor } = registerCashPaymentInput.parse(body);
     const result = await this.cashPayments.register({
       tenantId: tenant,
@@ -89,9 +105,12 @@ export class PaymentsController {
   async getPortfolio(
     @Param('creditId') creditId: string,
     @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
   ) {
     const tenant = requireTenant(tenantId);
+    const session = requireRole(authorization, DATA_PLANE_ROLES);
     const id = uuid.parse(creditId);
+    await this.assertWithinScope(tenant, session, id);
     const portfolio = await this.queries.getPortfolio({
       tenantId: tenant,
       creditId: id,
@@ -104,8 +123,10 @@ export class PaymentsController {
   @HttpCode(200)
   async reconcilePayments(
     @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
   ) {
     const tenant = requireTenant(tenantId);
+    requireRole(authorization, MANAGER_ROLES);
     return this.reconcile.execute({ tenantId: tenant });
   }
 
@@ -114,8 +135,10 @@ export class PaymentsController {
   @HttpCode(200)
   async reconcileSettlement(
     @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
   ) {
     const tenant = requireTenant(tenantId);
+    requireRole(authorization, MANAGER_ROLES);
     return this.settlementReconcile.execute({ tenantId: tenant });
   }
 
@@ -211,5 +234,24 @@ export class PaymentsController {
       .setHeader('Content-Disposition', 'inline')
       .setHeader('Cache-Control', 'no-store')
       .send(original.bytes);
+  }
+
+  /**
+   * Acota al COLLECTOR a los créditos de su cartera asignada (ADMIN/COORDINATOR gobiernan
+   * todo el tenant). Responde 404 —no 403— para no confirmarle la existencia de un crédito
+   * que no le corresponde; mismo criterio que `collectionLogFor` en el slice de cobranza.
+   */
+  private async assertWithinScope(
+    tenantId: string,
+    session: Session,
+    creditId: string,
+  ): Promise<void> {
+    if (session.role !== 'COLLECTOR') return;
+    const inPortfolio = await this.collectorScope.isInPortfolio({
+      tenantId,
+      collectorId: session.userId,
+      creditId,
+    });
+    if (!inPortfolio) throw new NotFoundException('Crédito no encontrado');
   }
 }

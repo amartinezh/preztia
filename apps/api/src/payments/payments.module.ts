@@ -49,6 +49,7 @@ import { RunSettlementReconciliationService } from './run-settlement-reconciliat
 import { SettlementReviewSettingsReader } from './settlement-review-settings.reader';
 import { PaymentsQueryRepository } from './payments-query.repository';
 import { CashPaymentDrizzleRepository } from './cash-payment.repository';
+import { CollectorCreditScopeReader } from './collector-credit-scope.reader';
 import { PaymentsController } from './payments.controller';
 import { AuthModule } from '../auth/auth.module';
 import {
@@ -85,6 +86,7 @@ function reconciliationMaxAttempts(): number {
   ],
   providers: [
     CashPaymentDrizzleRepository,
+    CollectorCreditScopeReader,
     // Puertos del slice → adaptadores.
     {
       provide: CREDIT_PORTFOLIO_REPOSITORY,
