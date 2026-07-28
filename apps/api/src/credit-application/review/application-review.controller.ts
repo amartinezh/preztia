@@ -42,6 +42,10 @@ import { ReExtractDocumentService } from './re-extract-document.service';
 
 const uuid = z.string().uuid();
 
+// Cupo del archivo dentro de un documento (1 = anverso). Ausente equivale al primero, para que
+// los enlaces existentes de un solo archivo sigan funcionando.
+const documentFileSlot = z.coerce.number().int().min(1).max(5).default(1);
+
 /**
  * Frontera HTTP de la revisión antifraude de cartera: valida con zod (contrato), exige JWT
  * y rol de revisión (ADMIN/COORDINATOR) y delega. No contiene reglas de negocio ni SQL; los
@@ -172,6 +176,7 @@ export class ApplicationReviewController {
   async original(
     @Param('id') id: string,
     @Param('documentType') documentType: string,
+    @Query('slot') slot: string | undefined,
     @Headers('x-tenant-id') tenantId: string | undefined,
     @Headers('authorization') authorization: string | undefined,
     @Res() res: Response,
@@ -182,6 +187,8 @@ export class ApplicationReviewController {
       tenantId: tenant,
       applicationId: uuid.parse(id),
       documentType: requiredDocumentType.parse(documentType),
+      // Cupo del archivo dentro del documento (anverso/reverso); por defecto, el primero.
+      slot: documentFileSlot.parse(slot),
     });
     // PII en reposo: se muestra inline pero NUNCA se cachea.
     res

@@ -130,6 +130,10 @@ export const applicationDocumentDetail = z.object({
   mimeType: z.string().nullable(),
   // true si hay binario original almacenado para abrir.
   hasOriginal: z.boolean(),
+  // Archivos que el documento exige (2 = ambos lados) y cuántos llegaron ya. El detalle
+  // ofrece un enlace por archivo: el analista debe poder ver el reverso, no solo el anverso.
+  expectedFiles: z.number().int().min(1),
+  receivedFiles: z.number().int().min(0),
   identifiedType: z.string().nullable(),
   matchesExpected: z.boolean().nullable(),
   confidence: z.number().int().nullable(),

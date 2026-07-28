@@ -25,6 +25,7 @@ export class RequiredDocumentCatalogDrizzleRepository implements RequiredDocumen
           key: schema.creditDocumentRequirement.documentKey,
           title: schema.creditDocumentRequirement.title,
           description: schema.creditDocumentRequirement.description,
+          expectedFiles: schema.creditDocumentRequirement.expectedFiles,
         })
         .from(schema.creditDocumentRequirement)
         .where(
@@ -40,10 +41,12 @@ export class RequiredDocumentCatalogDrizzleRepository implements RequiredDocumen
           key: RequiredDocumentType;
           title: string;
           description: string;
+          expectedFiles: number;
         }): RequiredDocumentSpec => ({
           key: row.key,
           title: row.title,
           description: row.description,
+          expectedFiles: row.expectedFiles,
         }),
       );
     });

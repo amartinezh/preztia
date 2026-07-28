@@ -14,6 +14,7 @@ import type {
   ApplicantRef,
   CreditApplicationRepository,
   DocumentOutcome,
+  LockedCreditApplication,
   RequiredDocumentCatalog,
 } from "./ports";
 import type { OutboundRecipient, OutboundTextSender } from "../../conversations/text/ports";
@@ -25,7 +26,16 @@ class FakeRepo implements CreditApplicationRepository {
   async findActiveByApplicant() { return this.active; }
   async create(input: { applicant: ApplicantRef }) { this.created.push(input); return "app-1"; }
   async reset(input: { tenantId: string; applicationId: string }) { this.resets.push(input); }
-  async saveDocumentOutcome(_: DocumentOutcome) {}
+  async withActiveApplicationLocked<T>(
+    _: ApplicantRef,
+    fn: (locked: LockedCreditApplication | null) => Promise<T>,
+  ): Promise<T> {
+    return fn(
+      this.active
+        ? { ...this.active, saveDocumentOutcome: async (_o: DocumentOutcome) => {} }
+        : null,
+    );
+  }
 }
 class SpySender implements OutboundTextSender {
   sent: { to: OutboundRecipient; body: string }[] = [];
@@ -41,6 +51,7 @@ const SPECS: readonly RequiredDocumentSpec[] = REQUESTED_DOCUMENTS.map((key) => 
   key,
   title: `Envíame tu ${key}`,
   description: `Descripción de ${key}`,
+  expectedFiles: 1,
 }));
 const titleOf = (key: RequiredDocumentType) => findDocumentSpec(SPECS, key)!.title;
 
@@ -69,7 +80,7 @@ describe("StartCreditApplicationHandler", () => {
   });
 
   it("es idempotente: si ya hay solicitud activa no crea otra y recuerda el pendiente", async () => {
-    let app = createCreditApplication(REQUESTED_DOCUMENTS);
+    let app = createCreditApplication(REQUESTED_DOCUMENTS.map((type) => ({ type, expectedFiles: 1 })));
     app = recordDocumentOutcome(app, DOC1, { status: "approved", score: 0, reasons: [] });
     const repo = new FakeRepo({ id: "app-1", application: app });
 
@@ -82,7 +93,7 @@ describe("StartCreditApplicationHandler", () => {
   });
 
   it("si la solicitud activa ya está completa, informa y orienta al reinicio (no queda en silencio)", async () => {
-    let app = createCreditApplication(REQUESTED_DOCUMENTS);
+    let app = createCreditApplication(REQUESTED_DOCUMENTS.map((type) => ({ type, expectedFiles: 1 })));
     for (const key of REQUESTED_DOCUMENTS) {
       app = recordDocumentOutcome(app, key, { status: "approved", score: 0, reasons: [] });
     }
@@ -105,7 +116,7 @@ describe("StartCreditApplicationHandler", () => {
   });
 
   it("reinicia: con solicitud activa la resetea y vuelve a pedir el primer documento", async () => {
-    let app = createCreditApplication(REQUESTED_DOCUMENTS);
+    let app = createCreditApplication(REQUESTED_DOCUMENTS.map((type) => ({ type, expectedFiles: 1 })));
     app = recordDocumentOutcome(app, DOC1, { status: "approved", score: 0, reasons: [] });
     const repo = new FakeRepo({ id: "app-1", application: app });
 

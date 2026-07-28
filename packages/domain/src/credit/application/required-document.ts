@@ -16,6 +16,12 @@ export type RequiredDocumentType =
   | "INCOME_PROOF"; // futuro: aún no se solicita
 
 /**
+ * Cuántos archivos componen un documento cuando el catálogo no lo especifica.
+ * Un solo archivo es el caso habitual; el anverso/reverso de una cédula son dos.
+ */
+export const DEFAULT_EXPECTED_FILES = 1;
+
+/**
  * Especificación de un documento requerido tal como la configura el tenant: la
  * llave estable (identidad técnica), el título que el chat muestra para pedirlo y
  * la descripción con la que la IA puede identificar de qué documento se trata.
@@ -26,6 +32,13 @@ export interface RequiredDocumentSpec {
   readonly title: string;
   /** Descripción suficiente para que la IA identifique el documento recibido. */
   readonly description: string;
+  /**
+   * Cuántos archivos componen el documento (p. ej. 2 = anverso y reverso). El protocolo
+   * no da el documento por completo hasta reunirlos todos: pedir "ambos lados" con un
+   * solo cupo de archivo es lo que hacía que la segunda foto se juzgara contra el
+   * documento siguiente y gastara un intento.
+   */
+  readonly expectedFiles: number;
 }
 
 /**
@@ -45,4 +58,12 @@ export function findDocumentSpec(
   key: RequiredDocumentType,
 ): RequiredDocumentSpec | undefined {
   return specs.find((spec) => spec.key === key);
+}
+
+/** Archivos que exige un documento del catálogo; el valor por defecto si no está especificado. */
+export function expectedFilesOf(
+  specs: readonly RequiredDocumentSpec[],
+  key: RequiredDocumentType,
+): number {
+  return findDocumentSpec(specs, key)?.expectedFiles ?? DEFAULT_EXPECTED_FILES;
 }

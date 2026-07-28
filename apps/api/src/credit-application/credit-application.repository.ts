@@ -6,15 +6,17 @@ import {
   type ApplicantRef,
   type CreditApplicationRepository,
   type DocumentOutcome,
+  type LockedCreditApplication,
 } from '@preztiaos/application';
 import {
   type CreditApplication,
   type CreditApplicationStatus,
+  documentOf,
   type DocumentStatus,
   REQUESTED_DOCUMENTS,
   type RequiredDocumentType,
 } from '@preztiaos/domain';
-import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 
 // Estados en los que una solicitud se considera ACTIVA (en curso).
 const ACTIVE_STATUSES: CreditApplicationStatus[] = [
@@ -53,6 +55,47 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
     });
   }
 
+  /**
+   * Abre UNA transacción, bloquea la fila de la solicitud activa (`FOR UPDATE`) y ejecuta `fn`
+   * con el agregado ya leído. Dos mensajes del mismo solicitante (las dos fotos de un álbum,
+   * que WhatsApp entrega como webhooks independientes) quedan así en serie: el segundo espera
+   * al commit del primero y por tanto lee el estado YA avanzado.
+   *
+   * `fn` hace I/O de red (IA, MinIO, WhatsApp) con el cerrojo tomado; es deliberado, porque la
+   * decisión depende del estado leído. El bloqueo afecta solo a esa solicitud, nunca a otras.
+   */
+  async withActiveApplicationLocked<T>(
+    applicant: ApplicantRef,
+    fn: (locked: LockedCreditApplication | null) => Promise<T>,
+  ): Promise<T> {
+    return withTenantTxFor(applicant.tenantId, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(schema.creditApplication)
+        .where(
+          and(
+            eq(schema.creditApplication.applicantPhone, applicant.applicant),
+            inArray(schema.creditApplication.status, ACTIVE_STATUSES),
+          ),
+        )
+        .for('update');
+      if (!row) return fn(null);
+
+      const docs = await tx
+        .select()
+        .from(schema.creditApplicationDocument)
+        .where(eq(schema.creditApplicationDocument.applicationId, row.id));
+
+      const locked: LockedCreditApplication = {
+        id: row.id,
+        application: toAggregate(row.status, docs),
+        saveDocumentOutcome: (outcome) =>
+          this.writeDocumentOutcome(tx, outcome),
+      };
+      return fn(locked);
+    });
+  }
+
   async create(input: {
     applicant: ApplicantRef;
     application: CreditApplication;
@@ -85,6 +128,9 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
           applicationId,
           documentType: doc.type,
           status: doc.status,
+          expectedFiles: doc.expectedFiles,
+          receivedFiles: doc.receivedFiles,
+          mismatchAttempts: doc.mismatchAttempts,
         })),
       );
 
@@ -104,11 +150,14 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
     applicationId: string;
   }): Promise<void> {
     await withTenantTxFor(input.tenantId, async (tx) => {
-      // Vuelve todos los documentos a PENDING, limpiando los datos KYC previos.
+      // Vuelve todos los documentos a PENDING, limpiando los datos KYC previos. Los intentos
+      // fallidos también se reinician: el solicitante empieza el protocolo de cero.
       await tx
         .update(schema.creditApplicationDocument)
         .set({
           status: 'PENDING',
+          receivedFiles: 0,
+          mismatchAttempts: 0,
           mediaId: null,
           storageKey: null,
           mimeType: null,
@@ -121,6 +170,17 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
         .where(
           eq(
             schema.creditApplicationDocument.applicationId,
+            input.applicationId,
+          ),
+        );
+
+      // Los archivos de la ronda anterior quedan superados: se retiran para liberar los cupos
+      // (1..expected_files) que la ronda nueva volverá a ocupar.
+      await tx
+        .delete(schema.creditApplicationDocumentFile)
+        .where(
+          eq(
+            schema.creditApplicationDocumentFile.applicationId,
             input.applicationId,
           ),
         );
@@ -139,56 +199,86 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
     });
   }
 
-  async saveDocumentOutcome(outcome: DocumentOutcome): Promise<void> {
-    const resultingStatus = documentStatusOf(
-      outcome.application,
-      outcome.documentType,
-    );
-    await withTenantTxFor(outcome.tenantId, async (tx) => {
-      await tx
-        .update(schema.creditApplicationDocument)
-        .set({
-          status: resultingStatus,
-          mediaId: outcome.mediaId,
-          storageKey: outcome.storageKey,
-          mimeType: outcome.mimeType,
-          sha256: outcome.sha256,
-          fraudScore: outcome.assessment.score,
-          fraudReasons: [...outcome.assessment.reasons],
-          manualReview: outcome.manualReview,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(
-              schema.creditApplicationDocument.applicationId,
-              outcome.applicationId,
-            ),
-            eq(
-              schema.creditApplicationDocument.documentType,
-              outcome.documentType,
-            ),
-          ),
-        );
+  /**
+   * Escribe el resultado de un archivo DENTRO de la transacción que ya sostiene el cerrojo:
+   * archiva el binario aceptado, refleja el estado del agregado y deja el evento de auditoría.
+   * Abrir aquí una transacción nueva provocaría un interbloqueo contra el `FOR UPDATE` propio.
+   */
+  private async writeDocumentOutcome(
+    tx: Tx,
+    outcome: DocumentOutcome,
+  ): Promise<void> {
+    const document = documentOf(outcome.application, outcome.documentType);
+    const isFirstFile = document.receivedFiles === 1;
 
-      await tx
-        .update(schema.creditApplication)
-        .set({ status: outcome.application.status, updatedAt: new Date() })
-        .where(eq(schema.creditApplication.id, outcome.applicationId));
-
-      await tx.insert(schema.creditApplicationEvent).values({
+    // Archivo aceptado: queda registrado en su cupo (append-only, evidencia KYC).
+    if (outcome.storageKey) {
+      await tx.insert(schema.creditApplicationDocumentFile).values({
         tenantId: outcome.tenantId,
         applicationId: outcome.applicationId,
-        type: 'DOCUMENT_RECORDED',
-        payload: {
-          documentType: outcome.documentType,
-          documentStatus: resultingStatus,
-          fraudStatus: outcome.assessment.status,
-          fraudScore: outcome.assessment.score,
-          manualReview: outcome.manualReview,
-          applicationStatus: outcome.application.status,
-        },
+        documentType: outcome.documentType,
+        slot: document.receivedFiles,
+        mediaId: outcome.mediaId,
+        storageKey: outcome.storageKey,
+        mimeType: outcome.mimeType,
+        sha256: outcome.sha256,
       });
+    }
+
+    await tx
+      .update(schema.creditApplicationDocument)
+      .set({
+        status: document.status,
+        receivedFiles: document.receivedFiles,
+        mismatchAttempts: document.mismatchAttempts,
+        fraudScore: outcome.assessment.score,
+        fraudReasons: [...outcome.assessment.reasons],
+        manualReview: outcome.manualReview,
+        updatedAt: new Date(),
+        // Las columnas de un solo archivo describen el PRIMERO: los lectores que muestran
+        // "el documento" siguen viendo el anverso aunque después llegue el reverso.
+        ...(isFirstFile && outcome.storageKey
+          ? {
+              mediaId: outcome.mediaId,
+              storageKey: outcome.storageKey,
+              mimeType: outcome.mimeType,
+              sha256: outcome.sha256,
+            }
+          : {}),
+      })
+      .where(
+        and(
+          eq(
+            schema.creditApplicationDocument.applicationId,
+            outcome.applicationId,
+          ),
+          eq(
+            schema.creditApplicationDocument.documentType,
+            outcome.documentType,
+          ),
+        ),
+      );
+
+    await tx
+      .update(schema.creditApplication)
+      .set({ status: outcome.application.status, updatedAt: new Date() })
+      .where(eq(schema.creditApplication.id, outcome.applicationId));
+
+    await tx.insert(schema.creditApplicationEvent).values({
+      tenantId: outcome.tenantId,
+      applicationId: outcome.applicationId,
+      type: 'DOCUMENT_RECORDED',
+      payload: {
+        documentType: outcome.documentType,
+        documentStatus: document.status,
+        receivedFiles: document.receivedFiles,
+        expectedFiles: document.expectedFiles,
+        mismatchAttempts: document.mismatchAttempts,
+        fraudStatus: outcome.assessment.status,
+        fraudScore: outcome.assessment.score,
+        manualReview: outcome.manualReview,
+        applicationStatus: outcome.application.status,
+      },
     });
   }
 }
@@ -196,6 +286,9 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
 type DocumentRow = {
   documentType: RequiredDocumentType;
   status: DocumentStatus;
+  expectedFiles: number;
+  receivedFiles: number;
+  mismatchAttempts: number;
 };
 
 // Reconstruye el agregado, ordenando los documentos según REQUESTED_DOCUMENTS para
@@ -209,7 +302,13 @@ function toAggregate(
   );
   return {
     status,
-    documents: ordered.map((d) => ({ type: d.documentType, status: d.status })),
+    documents: ordered.map((d) => ({
+      type: d.documentType,
+      status: d.status,
+      expectedFiles: d.expectedFiles,
+      receivedFiles: d.receivedFiles,
+      mismatchAttempts: d.mismatchAttempts,
+    })),
   };
 }
 
@@ -219,13 +318,4 @@ function orderIndex(type: RequiredDocumentType): number {
     type,
   );
   return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
-}
-
-function documentStatusOf(
-  app: CreditApplication,
-  type: RequiredDocumentType,
-): DocumentStatus {
-  const doc = app.documents.find((d) => d.type === type);
-  if (!doc) throw new Error(`Documento ${type} ausente en el agregado`);
-  return doc.status;
 }

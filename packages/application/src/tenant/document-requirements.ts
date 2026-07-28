@@ -9,6 +9,8 @@ export interface DocumentRequirementItem {
   title: string;
   description: string;
   sortOrder: number;
+  /** Archivos que componen el documento (2 = ambos lados). */
+  expectedFiles: number;
   active: boolean;
 }
 

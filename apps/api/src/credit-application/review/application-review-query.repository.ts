@@ -166,6 +166,8 @@ export class ApplicationReviewQueryRepository {
           manualReview: schema.creditApplicationDocument.manualReview,
           mimeType: schema.creditApplicationDocument.mimeType,
           storageKey: schema.creditApplicationDocument.storageKey,
+          expectedFiles: schema.creditApplicationDocument.expectedFiles,
+          receivedFiles: schema.creditApplicationDocument.receivedFiles,
         })
         .from(schema.creditApplicationDocument)
         .where(
@@ -225,6 +227,8 @@ export class ApplicationReviewQueryRepository {
             manualReview: d.manualReview,
             mimeType: d.mimeType ?? null,
             hasOriginal: d.storageKey != null,
+            expectedFiles: d.expectedFiles,
+            receivedFiles: d.receivedFiles,
             identifiedType: extraction?.identifiedType ?? null,
             matchesExpected: extraction?.matchesExpected ?? null,
             confidence: extraction?.confidence ?? null,

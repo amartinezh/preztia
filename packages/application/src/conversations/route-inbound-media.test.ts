@@ -32,7 +32,7 @@ const MESSAGE: ImageMessage = {
 
 const ACTIVE_APPLICATION: ActiveCreditApplication = {
   id: "app-1",
-  application: createCreditApplication(["IDENTITY_DOCUMENT"]),
+  application: createCreditApplication([{ type: "IDENTITY_DOCUMENT", expectedFiles: 1 }]),
 };
 
 const PORTFOLIO: ActiveCreditPortfolio = { creditId: "credit-1", currency: "BRL", installments: [] };
@@ -64,7 +64,7 @@ class FakeApplications implements CreditApplicationRepository {
   async reset(): Promise<void> {
     throw new Error("no usado");
   }
-  async saveDocumentOutcome(): Promise<void> {
+  async withActiveApplicationLocked(): Promise<never> {
     throw new Error("no usado");
   }
 }

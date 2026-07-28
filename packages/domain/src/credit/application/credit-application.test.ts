@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   createCreditApplication,
   decideApplicationReview,
+  documentOf,
   isComplete,
   nextPendingDocument,
+  pendingFilesOf,
   recordDocumentOutcome,
+  recordDocumentResult,
   type CreditApplication,
 } from "./credit-application";
 import { DomainError } from "../../shared/money";
@@ -14,7 +17,9 @@ import { REQUESTED_DOCUMENTS } from "./required-document";
 const approved: FraudAssessment = { status: "approved", score: 0, reasons: [] };
 const rejected: FraudAssessment = { status: "rejected", score: 100, reasons: ["formato no permitido"] };
 
-const fresh = (): CreditApplication => createCreditApplication(REQUESTED_DOCUMENTS);
+// Checklist por defecto, un archivo por documento (el caso simple).
+const single = REQUESTED_DOCUMENTS.map((type) => ({ type, expectedFiles: 1 }));
+const fresh = (): CreditApplication => createCreditApplication(single);
 // Destructurar evita el `| undefined` del acceso por índice (noUncheckedIndexedAccess).
 const [FIRST] = REQUESTED_DOCUMENTS;
 
@@ -28,7 +33,15 @@ describe("createCreditApplication", () => {
 
   it("rechaza un checklist vacío o con duplicados", () => {
     expect(() => createCreditApplication([])).toThrow(DomainError);
-    expect(() => createCreditApplication(["IDENTITY_DOCUMENT", "IDENTITY_DOCUMENT"])).toThrow(DomainError);
+    expect(() =>
+      createCreditApplication([
+        { type: "IDENTITY_DOCUMENT", expectedFiles: 1 },
+        { type: "IDENTITY_DOCUMENT", expectedFiles: 1 },
+      ]),
+    ).toThrow(DomainError);
+    expect(() =>
+      createCreditApplication([{ type: "IDENTITY_DOCUMENT", expectedFiles: 0 }]),
+    ).toThrow(DomainError);
   });
 });
 
@@ -71,6 +84,78 @@ describe("recordDocumentOutcome", () => {
 
   it("rechaza un documento ajeno al checklist", () => {
     expect(() => recordDocumentOutcome(fresh(), "BANK_STATEMENT", approved)).toThrow(DomainError);
+  });
+});
+
+describe("documentos de varios archivos", () => {
+  // Cédula por ambos lados (2 archivos) seguida de un documento de un solo archivo.
+  const twoSided = (): CreditApplication =>
+    createCreditApplication([
+      { type: "IDENTITY_DOCUMENT", expectedFiles: 2 },
+      { type: "BUSINESS_VALIDITY_CERTIFICATE", expectedFiles: 1 },
+    ]);
+
+  it("el primer archivo deja el documento RECEIVED, no VALIDATED, y no avanza el checklist", () => {
+    const app = recordDocumentResult(twoSided(), "IDENTITY_DOCUMENT", true);
+    const doc = documentOf(app, "IDENTITY_DOCUMENT");
+
+    expect(doc.status).toBe("RECEIVED");
+    expect(doc.receivedFiles).toBe(1);
+    expect(pendingFilesOf(app, "IDENTITY_DOCUMENT")).toBe(1);
+    // Sigue siendo el documento pendiente: la segunda foto NO se juzga contra el siguiente.
+    expect(nextPendingDocument(app)).toBe("IDENTITY_DOCUMENT");
+  });
+
+  it("al reunir todos los archivos pasa a VALIDATED y avanza al siguiente documento", () => {
+    let app = recordDocumentResult(twoSided(), "IDENTITY_DOCUMENT", true);
+    app = recordDocumentResult(app, "IDENTITY_DOCUMENT", true);
+
+    expect(documentOf(app, "IDENTITY_DOCUMENT").status).toBe("VALIDATED");
+    expect(pendingFilesOf(app, "IDENTITY_DOCUMENT")).toBe(0);
+    expect(nextPendingDocument(app)).toBe("BUSINESS_VALIDITY_CERTIFICATE");
+  });
+
+  it("invariante: receivedFiles nunca supera expectedFiles", () => {
+    let app = twoSided();
+    for (let i = 0; i < 5; i += 1) app = recordDocumentResult(app, "IDENTITY_DOCUMENT", true);
+
+    const doc = documentOf(app, "IDENTITY_DOCUMENT");
+    expect(doc.receivedFiles).toBe(doc.expectedFiles);
+  });
+
+  it("un rechazo no consume cupo de archivo", () => {
+    let app = recordDocumentResult(twoSided(), "IDENTITY_DOCUMENT", true);
+    app = recordDocumentResult(app, "IDENTITY_DOCUMENT", false);
+
+    const doc = documentOf(app, "IDENTITY_DOCUMENT");
+    expect(doc.status).toBe("REJECTED");
+    expect(doc.receivedFiles).toBe(1); // el anverso válido no se pierde
+  });
+});
+
+describe("intentos fallidos", () => {
+  it("cada rechazo suma un intento", () => {
+    let app = recordDocumentResult(fresh(), FIRST, false);
+    expect(documentOf(app, FIRST).mismatchAttempts).toBe(1);
+
+    app = recordDocumentResult(app, FIRST, false);
+    expect(documentOf(app, FIRST).mismatchAttempts).toBe(2);
+  });
+
+  it("un archivo válido reinicia los intentos del documento", () => {
+    let app = recordDocumentResult(fresh(), FIRST, false);
+    app = recordDocumentResult(app, FIRST, true);
+    expect(documentOf(app, FIRST).mismatchAttempts).toBe(0);
+  });
+
+  it("un envío que llega con el documento ya VALIDATED no gasta intento ni degrada el estado", () => {
+    const validated = recordDocumentResult(fresh(), FIRST, true);
+    // La foto del reverso que el solicitante mandó de más, o un webhook reentregado.
+    const late = recordDocumentResult(validated, FIRST, false);
+
+    expect(late).toBe(validated); // misma instancia: sin cambios
+    expect(documentOf(late, FIRST).mismatchAttempts).toBe(0);
+    expect(documentOf(late, FIRST).status).toBe("VALIDATED");
   });
 });
 

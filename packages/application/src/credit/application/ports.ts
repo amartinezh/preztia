@@ -58,6 +58,15 @@ export interface DocumentOutcome {
   readonly application: CreditApplication;
 }
 
+/**
+ * Solicitud activa BLOQUEADA para escritura: mientras el caso de uso la sostiene, ningún otro
+ * mensaje del mismo solicitante puede leer ni modificar su estado. `saveDocumentOutcome` escribe
+ * dentro de esa misma transacción, así que leer-decidir-registrar es atómico.
+ */
+export interface LockedCreditApplication extends ActiveCreditApplication {
+  saveDocumentOutcome(outcome: DocumentOutcome): Promise<void>;
+}
+
 /** Puerto: persistencia de la solicitud de crédito y sus documentos (bajo RLS). */
 export interface CreditApplicationRepository {
   /** Devuelve la solicitud activa del solicitante, o null si no hay ninguna. */
@@ -70,11 +79,17 @@ export interface CreditApplicationRepository {
    */
   reset(input: { tenantId: string; applicationId: string }): Promise<void>;
   /**
-   * Persiste el resultado de un documento: inserta/actualiza la fila del documento,
-   * actualiza el estado de la solicitud y registra el evento de auditoría, todo en
-   * la misma transacción.
+   * Ejecuta `fn` con la solicitud activa del solicitante bloqueada en una única transacción
+   * (`SELECT ... FOR UPDATE`). Es lo que serializa un álbum de fotos: WhatsApp entrega cada
+   * imagen como un mensaje independiente y sin este cerrojo las dos leían el mismo estado,
+   * se juzgaban contra el mismo documento y una gastaba un intento en vano.
+   *
+   * `fn` recibe `null` si el solicitante no tiene solicitud activa.
    */
-  saveDocumentOutcome(outcome: DocumentOutcome): Promise<void>;
+  withActiveApplicationLocked<T>(
+    applicant: ApplicantRef,
+    fn: (locked: LockedCreditApplication | null) => Promise<T>,
+  ): Promise<T>;
 }
 
 /**
@@ -115,6 +130,8 @@ export interface DocumentStorage {
     tenantId: string;
     applicationId: string;
     documentType: RequiredDocumentType;
+    /** cupo del archivo dentro del documento (1..expectedFiles): distingue anverso de reverso. */
+    slot: number;
     media: DownloadedMedia;
   }): Promise<StoredDocument>;
 }
@@ -146,6 +163,12 @@ export interface DocumentReviewJob {
   readonly spec?: RequiredDocumentSpec;
   /** binario ya descargado del documento. */
   readonly media: DownloadedMedia;
+  /**
+   * Intentos fallidos que este documento acumula HOY, leídos del agregado bajo el cerrojo.
+   * Antes el revisor los contaba sobre todo el historial de extracciones, que nunca se
+   * limpiaba: un documento validado tras dos errores seguía arrastrándolos para siempre.
+   */
+  readonly priorMismatchAttempts: number;
 }
 
 /** Resultado de revisar el documento: la decisión (dominio) + contexto para el mensaje. */

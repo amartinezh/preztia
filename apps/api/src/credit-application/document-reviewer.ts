@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { and, count, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import {
   type DocumentReviewJob,
@@ -35,9 +35,9 @@ interface TenantAiCredentials {
  *
  * Compone la decisión de revisión: (1) si es estructuralmente inválido, no gasta IA;
  * (2) identifica el documento con IA (configurable por tenant) y PERSISTE la extracción
- * para trazabilidad —best-effort: si la IA falla, no bloquea—; (3) cuenta cuántas veces
- * el documento ya no coincidió y aplica la regla pura `decideDocumentReview` del dominio
- * con el máximo de intentos del `.env`.
+ * para trazabilidad —best-effort: si la IA falla, no bloquea—; (3) aplica la regla pura
+ * `decideDocumentReview` del dominio con los intentos vivos que trae el agregado y el
+ * máximo del `.env`.
  */
 @Injectable()
 export class AiDocumentReviewer implements DocumentReviewer {
@@ -62,9 +62,6 @@ export class AiDocumentReviewer implements DocumentReviewer {
       };
     }
 
-    // Intentos previos en que el documento NO coincidió (antes de este envío).
-    const priorMismatchAttempts = await this.priorMismatches(job);
-
     // Identificación con IA (best-effort): si falla, identification=null → no bloquea.
     const extraction = await this.identify(job);
     const identification: DocumentIdentification | null = extraction
@@ -77,7 +74,10 @@ export class AiDocumentReviewer implements DocumentReviewer {
     const decision = decideDocumentReview({
       structural,
       identification,
-      priorMismatchAttempts,
+      // Los intentos vivos del documento los trae el agregado, leído bajo el cerrojo de la
+      // solicitud. Contarlos aquí sobre document_extraction sumaba también los de rondas ya
+      // superadas (un documento validado tras dos errores los arrastraba para siempre).
+      priorMismatchAttempts: job.priorMismatchAttempts,
       maxAttempts,
     });
     return { decision, identifiedType: extraction?.identifiedType ?? null };
@@ -149,23 +149,6 @@ export class AiDocumentReviewer implements DocumentReviewer {
     return Number.isFinite(n) && n >= 0 && n <= 100
       ? n
       : DEFAULT_MIN_CONFIDENCE;
-  }
-
-  // Cuántas veces este documento ya fue identificado como NO coincidente (bajo RLS).
-  private priorMismatches(job: DocumentReviewJob): Promise<number> {
-    return withTenantTxFor(job.tenantId, async (tx) => {
-      const [row] = await tx
-        .select({ value: count() })
-        .from(schema.documentExtraction)
-        .where(
-          and(
-            eq(schema.documentExtraction.applicationId, job.applicationId),
-            eq(schema.documentExtraction.documentType, job.documentType),
-            eq(schema.documentExtraction.matchesExpected, false),
-          ),
-        );
-      return Number(row?.value ?? 0);
-    });
   }
 
   private resolveCredentials(

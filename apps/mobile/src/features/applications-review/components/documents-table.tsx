@@ -3,14 +3,14 @@ import { Badge, Button, Card, Row, Stack, Text } from "@preztiaos/ui";
 import type { ApplicationDocumentDetail } from "@preztiaos/contracts";
 
 import { useT } from "@/core/i18n";
-import { useReExtractDocument } from "../api/queries";
+import { useReExtractDocument, type DocumentFileRef } from "../api/queries";
 import { AntifraudVisionPanel } from "./antifraud-vision-panel";
 import { documentLabel, documentStatusBadge } from "./review-status";
 
 type Props = {
   applicationId: string;
   documents: ApplicationDocumentDetail[];
-  onViewOriginal: (documentType: string) => void;
+  onViewOriginal: (file: DocumentFileRef) => void;
 };
 
 /**
@@ -44,7 +44,7 @@ function DocumentCard({
 }: {
   applicationId: string;
   doc: ApplicationDocumentDetail;
-  onViewOriginal: (documentType: string) => void;
+  onViewOriginal: (file: DocumentFileRef) => void;
 }) {
   const { t } = useT();
   const badge = documentStatusBadge(doc.status);
@@ -104,13 +104,22 @@ function DocumentCard({
       {doc.visionVerdict ? <AntifraudVisionPanel verdict={doc.visionVerdict} /> : null}
 
       <Row className="flex-wrap gap-2 pt-1">
-        <Button
-          label={t("review.detail.viewOriginal")}
-          size="sm"
-          variant="secondary"
-          disabled={!doc.hasOriginal}
-          onPress={() => onViewOriginal(doc.documentType)}
-        />
+        {/* Un enlace por archivo recibido: con "ambos lados" el analista debe poder abrir
+            el reverso, no solo el anverso. Con un solo archivo se ve igual que antes. */}
+        {viewableSlots(doc).map((slot) => (
+          <Button
+            key={slot}
+            label={
+              doc.expectedFiles > 1
+                ? `${t("review.detail.viewOriginal")} (${slot}/${doc.expectedFiles})`
+                : t("review.detail.viewOriginal")
+            }
+            size="sm"
+            variant="secondary"
+            disabled={!doc.hasOriginal}
+            onPress={() => onViewOriginal({ documentType: doc.documentType, slot })}
+          />
+        ))}
         <Button
           label={doc.documentType === "BUSINESS_PHOTO" ? "Re-estudiar con IA" : "Reintentar lectura con IA"}
           size="sm"
@@ -121,4 +130,13 @@ function DocumentCard({
       </Row>
     </Card>
   );
+}
+
+/**
+ * Cupos abiertos: uno por archivo ya recibido. Siempre al menos el primero, para que un
+ * expediente antiguo (sin contador) conserve su botón de "ver original".
+ */
+function viewableSlots(doc: ApplicationDocumentDetail): number[] {
+  const count = Math.max(1, doc.receivedFiles);
+  return Array.from({ length: count }, (_, i) => i + 1);
 }

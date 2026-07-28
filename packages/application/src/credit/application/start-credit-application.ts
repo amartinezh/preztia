@@ -54,7 +54,11 @@ export class StartCreditApplicationHandler
       return;
     }
 
-    const application = createCreditApplication(specs.map((spec) => spec.key));
+    // El checklist congela cuántos archivos exige cada documento: cambiar el catálogo
+    // después no debe alterar expedientes ya en curso.
+    const application = createCreditApplication(
+      specs.map((spec) => ({ type: spec.key, expectedFiles: spec.expectedFiles })),
+    );
     await this.applications.create({ applicant: input, application });
 
     // Primer paso del flujo: preguntar el monto. Al responderlo, `RecordAmountReplyHandler`

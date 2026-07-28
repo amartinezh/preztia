@@ -93,6 +93,9 @@ export class ReExtractDocumentService {
         sizeBytes: bytes.length,
         sha256: createHash('sha256').update(bytes).digest('hex'),
       },
+      // `reExtract` no aplica la regla de intentos (no auto-rechaza), así que el contador
+      // es irrelevante aquí: releer un documento nunca debe penalizar al solicitante.
+      priorMismatchAttempts: 0,
     };
 
     const extraction = await this.reviewer.reExtract(job);

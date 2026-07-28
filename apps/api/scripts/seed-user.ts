@@ -107,6 +107,10 @@ async function main() {
         tenantId: TENANT_ID,
         documentKey: 'IDENTITY_DOCUMENT',
         title: 'Envía una foto de tu documento de identidad (ambos lados).',
+        // Pide ambos lados: son DOS archivos, y el documento no se da por completo
+        // hasta reunirlos. Con uno solo, la segunda foto se juzgaba contra el
+        // documento siguiente y gastaba un intento.
+        expectedFiles: 2,
         description: 'Cédula o identificación oficial con foto, legible.',
         sortOrder: 1,
       },

@@ -28,13 +28,17 @@ export class MinioDocumentStorage implements DocumentStorage {
     tenantId: string;
     applicationId: string;
     documentType: RequiredDocumentType;
+    slot: number;
     media: DownloadedMedia;
   }): Promise<StoredDocument> {
     if (!this.bucketReady)
       this.bucketReady = ensureBucket(this.client, this.bucket);
     await this.bucketReady;
 
-    const storageKey = `${input.tenantId}/${input.applicationId}/${input.documentType}`;
+    // El cupo forma parte de la clave: sin él, el reverso sobrescribiría al anverso.
+    // El cupo 1 conserva la clave histórica para no invalidar lo ya almacenado.
+    const base = `${input.tenantId}/${input.applicationId}/${input.documentType}`;
+    const storageKey = input.slot > 1 ? `${base}/${input.slot}` : base;
 
     await this.client.send(
       new PutObjectCommand({

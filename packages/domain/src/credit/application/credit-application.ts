@@ -4,18 +4,39 @@
 
 import { ConflictError, DomainError } from "../../shared/money";
 import { type FraudAssessment, isAcceptable } from "./fraud";
-import { type RequiredDocumentType } from "./required-document";
+import { DEFAULT_EXPECTED_FILES, type RequiredDocumentType } from "./required-document";
 
 /** Estado de la solicitud a lo largo del protocolo. */
 export type CreditApplicationStatus = "AWAITING_DOCUMENTS" | "IN_REVIEW" | "APPROVED" | "REJECTED";
 
-/** Estado de cada documento dentro de la solicitud. */
+/**
+ * Estado de cada documento dentro de la solicitud.
+ * - `PENDING`   → aún no llegó ningún archivo.
+ * - `RECEIVED`  → llegaron algunos archivos pero faltan (p. ej. está el anverso, falta el reverso).
+ * - `VALIDATED` → se reunieron todos los archivos que el documento exige.
+ * - `REJECTED`  → el último envío no se aceptó; se pedirá de nuevo.
+ */
 export type DocumentStatus = "PENDING" | "RECEIVED" | "VALIDATED" | "REJECTED";
 
 /** Estado de un documento concreto del checklist. */
 export interface ApplicationDocument {
   readonly type: RequiredDocumentType;
   readonly status: DocumentStatus;
+  /** Archivos que componen el documento (p. ej. 2 = ambos lados). Invariante: ≥ 1. */
+  readonly expectedFiles: number;
+  /** Archivos ya aceptados. Invariante: 0 ≤ receivedFiles ≤ expectedFiles. */
+  readonly receivedFiles: number;
+  /**
+   * Envíos seguidos que la IA no reconoció como este documento. Se reinicia al validarlo:
+   * los intentos son del documento *pendiente*, no un historial perpetuo de la solicitud.
+   */
+  readonly mismatchAttempts: number;
+}
+
+/** Documento solicitado al crear el checklist: qué se pide y de cuántos archivos consta. */
+export interface DocumentRequest {
+  readonly type: RequiredDocumentType;
+  readonly expectedFiles: number;
 }
 
 /** Vista inmutable de la solicitud (lo que el dominio razona; la persistencia es de infra). */
@@ -26,20 +47,27 @@ export interface CreditApplication {
 
 /**
  * Crea una solicitud nueva con el checklist solicitado, todos PENDING.
- * Invariante: el conjunto de documentos es exactamente `requested` (sin duplicados).
+ * Invariantes: el conjunto de documentos es exactamente `requested` (sin duplicados)
+ * y cada documento exige al menos un archivo.
  */
 export function createCreditApplication(
-  requested: readonly RequiredDocumentType[],
+  requested: readonly DocumentRequest[],
 ): CreditApplication {
   if (requested.length === 0) {
     throw new DomainError("Una solicitud debe pedir al menos un documento");
   }
-  if (new Set(requested).size !== requested.length) {
+  if (new Set(requested.map((r) => r.type)).size !== requested.length) {
     throw new DomainError("El checklist de documentos no admite duplicados");
   }
   return {
     status: "AWAITING_DOCUMENTS",
-    documents: requested.map((type) => ({ type, status: "PENDING" as const })),
+    documents: requested.map((request) => ({
+      type: request.type,
+      status: "PENDING" as const,
+      expectedFiles: assertPositiveFiles(request.type, request.expectedFiles),
+      receivedFiles: 0,
+      mismatchAttempts: 0,
+    })),
   };
 }
 
@@ -49,37 +77,78 @@ export function nextPendingDocument(app: CreditApplication): RequiredDocumentTyp
   return pending ? pending.type : null;
 }
 
+/** Documento del checklist por su tipo; falla rápido si no pertenece a la solicitud. */
+export function documentOf(
+  app: CreditApplication,
+  type: RequiredDocumentType,
+): ApplicationDocument {
+  const target = app.documents.find((doc) => doc.type === type);
+  if (!target) {
+    throw new DomainError(`El documento ${type} no pertenece a esta solicitud`);
+  }
+  return target;
+}
+
+/** Archivos que aún faltan para dar por completo un documento (0 si ya está completo). */
+export function pendingFilesOf(app: CreditApplication, type: RequiredDocumentType): number {
+  const doc = documentOf(app, type);
+  return Math.max(0, doc.expectedFiles - doc.receivedFiles);
+}
+
 /** true cuando todos los documentos están VALIDATED. */
 export function isComplete(app: CreditApplication): boolean {
   return app.documents.every((doc) => doc.status === "VALIDATED");
 }
 
 /**
- * Registra el resultado de revisar un documento.
- * - accepted → VALIDATED; si con eso se completa el checklist, la solicitud pasa a IN_REVIEW.
- * - !accepted → REJECTED (se pedirá reenvío); la solicitud sigue AWAITING_DOCUMENTS.
+ * Registra el resultado de revisar un ARCHIVO de un documento.
+ * - accepted → suma un archivo; si con él se reúnen todos los que el documento exige pasa a
+ *   VALIDATED (y reinicia los intentos), si no queda RECEIVED a la espera del resto.
+ * - !accepted → REJECTED y suma un intento fallido; no consume cupo de archivo.
+ * - Al completarse el checklist entero, la solicitud pasa a IN_REVIEW.
  *
- * Idempotencia: si el documento ya estaba VALIDATED, se devuelve la solicitud sin cambios
- * (un reenvío del mismo o un webhook reentregado no degrada el estado).
+ * Idempotencia: si el documento ya estaba VALIDATED, se devuelve la solicitud SIN CAMBIOS.
+ * Un archivo que llega tarde (el reverso que el solicitante mandó de más, o un webhook
+ * reentregado) no degrada el estado NI gasta un intento: no es culpa suya que llegara
+ * cuando el documento ya estaba completo.
  */
 export function recordDocumentResult(
   app: CreditApplication,
   type: RequiredDocumentType,
   accepted: boolean,
 ): CreditApplication {
-  const target = app.documents.find((doc) => doc.type === type);
-  if (!target) {
-    throw new DomainError(`El documento ${type} no pertenece a esta solicitud`);
-  }
-  if (target.status === "VALIDATED") return app; // idempotente
+  const target = documentOf(app, type);
+  if (target.status === "VALIDATED") return app; // idempotente: ni estado ni intentos
 
-  const newStatus: DocumentStatus = accepted ? "VALIDATED" : "REJECTED";
   const documents = app.documents.map((doc) =>
-    doc.type === type ? { ...doc, status: newStatus } : doc,
+    doc.type === type ? applyResult(doc, accepted) : doc,
   );
   const updated: CreditApplication = { ...app, documents };
 
   return { ...updated, status: isComplete(updated) ? "IN_REVIEW" : "AWAITING_DOCUMENTS" };
+}
+
+/** Transición de un documento al recibir un archivo: cupos y contador de intentos. */
+function applyResult(doc: ApplicationDocument, accepted: boolean): ApplicationDocument {
+  if (!accepted) {
+    return { ...doc, status: "REJECTED", mismatchAttempts: doc.mismatchAttempts + 1 };
+  }
+  const receivedFiles = Math.min(doc.receivedFiles + 1, doc.expectedFiles);
+  const complete = receivedFiles >= doc.expectedFiles;
+  return {
+    ...doc,
+    status: complete ? "VALIDATED" : "RECEIVED",
+    receivedFiles,
+    // Un archivo válido limpia los intentos: el solicitante ya demostró tener el documento.
+    mismatchAttempts: 0,
+  };
+}
+
+function assertPositiveFiles(type: RequiredDocumentType, expectedFiles: number): number {
+  if (!Number.isInteger(expectedFiles) || expectedFiles < DEFAULT_EXPECTED_FILES) {
+    throw new DomainError(`El documento ${type} debe exigir al menos un archivo`);
+  }
+  return expectedFiles;
 }
 
 /**

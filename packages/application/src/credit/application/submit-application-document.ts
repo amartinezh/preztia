@@ -4,7 +4,13 @@ import type {
   RequiredDocumentSpec,
   RequiredDocumentType,
 } from "@preztiaos/domain";
-import { findDocumentSpec, nextPendingDocument, recordDocumentResult } from "@preztiaos/domain";
+import {
+  documentOf,
+  findDocumentSpec,
+  nextPendingDocument,
+  pendingFilesOf,
+  recordDocumentResult,
+} from "@preztiaos/domain";
 import type { OutboundTextSender } from "../../conversations/text/ports";
 import type {
   AntifraudService,
@@ -15,6 +21,7 @@ import type {
   DocumentStorage,
   DownloadedMedia,
   InboundMessageDeduplicator,
+  LockedCreditApplication,
   MediaDownloader,
   RequiredDocumentCatalog,
   TenantResolver,
@@ -40,11 +47,19 @@ const COMPLETED =
   "¡Gracias! Recibimos todos tus documentos. Por último, comparte tu *ubicación* actual con el " +
   "clip 📎 → Ubicación (idealmente desde tu negocio o domicilio) para completar tu solicitud.";
 
+const ALREADY_COMPLETE =
+  "Ya tenemos todos tus documentos y tu solicitud está *en revisión*; no necesitas enviar nada más. " +
+  "Te avisaremos el resultado.";
+
 /**
- * Caso de uso: recibe un documento del solicitante y, según la revisión (antifraude
- * estructural + identificación por IA + intentos previos), decide aceptarlo, pedirlo de
- * nuevo, ofrecer revisión manual o aceptarlo para revisión manual. Solo se almacena en
- * MinIO lo aceptado (no se gasta espacio en lo inválido). Idempotente por messageId.
+ * Caso de uso: recibe un ARCHIVO del solicitante y, según la revisión (antifraude estructural +
+ * identificación por IA + intentos previos), decide aceptarlo, pedirlo de nuevo, ofrecer revisión
+ * manual o aceptarlo para revisión manual. Solo se almacena lo aceptado (no se gasta espacio en lo
+ * inválido). Idempotente por messageId.
+ *
+ * Un documento puede constar de varios archivos (anverso y reverso): mientras falten, el documento
+ * queda a la espera y NO se avanza al siguiente. Todo el tramo leer-decidir-registrar ocurre con la
+ * solicitud bloqueada, de modo que un álbum de fotos se procesa en serie y en el orden real.
  *
  * No conoce WhatsApp, MinIO, IA ni la BD: solo coordina dominio + puertos.
  */
@@ -73,50 +88,94 @@ export class SubmitApplicationDocumentHandler {
       return; // ya procesado
     }
 
-    const applicant = { tenantId, channelId: cmd.channelId, applicant: cmd.applicant };
-    const active = await this.applications.findActiveByApplicant(applicant);
-    if (!active) return; // sin protocolo activo: el archivo no forma parte de una solicitud
-
-    const documentType = nextPendingDocument(active.application);
-    if (!documentType) return; // ya estaba completa
-
-    const specs = await this.catalog.listRequested(tenantId);
-    const spec = findDocumentSpec(specs, documentType);
-    const recipient = { channelId: cmd.channelId, recipient: cmd.applicant };
-
-    // 1) Descargar y validar estructuralmente (formato/tamaño/reuso) sobre los metadatos.
+    // Descarga y catálogo van FUERA del cerrojo: no dependen del estado de la solicitud y
+    // sostener la transacción durante esa I/O solo alargaría el bloqueo sin ganar nada.
     const media =
       cmd.prepared?.downloaded ?? (await this.downloader.download(cmd.media, cmd.channelId));
+    const specs = await this.catalog.listRequested(tenantId);
+
+    const applicant = { tenantId, channelId: cmd.channelId, applicant: cmd.applicant };
+    const completedApplicationId = await this.applications.withActiveApplicationLocked(
+      applicant,
+      (locked) => this.processLocked({ cmd, tenantId, media, specs, locked }),
+    );
+
+    // Fuera del cerrojo: el pipeline antifraude consulta fuentes externas y es lento; retenerlo
+    // dentro solo serviría para bloquear al solicitante mientras corre.
+    if (completedApplicationId) {
+      await this.completion.onCompleted({
+        tenantId,
+        applicationId: completedApplicationId,
+        applicant: cmd.applicant,
+      });
+    }
+  }
+
+  /**
+   * Tramo crítico, con la solicitud bloqueada: decide el destino del archivo y registra el
+   * resultado. Devuelve el id de la solicitud si con este archivo quedó completa.
+   */
+  private async processLocked(input: {
+    cmd: SubmitDocumentCommand;
+    tenantId: string;
+    media: DownloadedMedia;
+    specs: readonly RequiredDocumentSpec[];
+    locked: LockedCreditApplication | null;
+  }): Promise<string | null> {
+    const { cmd, tenantId, media, specs, locked } = input;
+    if (!locked) return null; // sin protocolo activo: el archivo no forma parte de una solicitud
+
+    const recipient = { channelId: cmd.channelId, recipient: cmd.applicant };
+    const documentType = nextPendingDocument(locked.application);
+    if (!documentType) {
+      // Llegó cuando ya estaba todo completo (el reverso que sobró, un reenvío tardío). No se
+      // registra nada ni se cuenta intento: no es un error del solicitante.
+      await this.sender.sendText(recipient, ALREADY_COMPLETE);
+      return null;
+    }
+
+    const spec = findDocumentSpec(specs, documentType);
+    const pending = documentOf(locked.application, documentType);
+
+    // 1) Validar estructuralmente (formato/tamaño/reuso) sobre los metadatos del binario.
     const structural = await this.antifraud.assess({
       tenantId,
-      applicationId: active.id,
+      applicationId: locked.id,
       documentType,
       mimeType: media.mimeType,
       sizeBytes: media.sizeBytes,
       sha256: media.sha256,
     });
 
-    // 2) Revisar: identifica con IA, cuenta intentos previos y aplica la regla del dominio.
+    // 2) Revisar: identifica con IA y aplica la regla del dominio con los intentos del agregado.
     const { decision, identifiedType } = await this.reviewer.review(
       {
         tenantId,
-        applicationId: active.id,
+        applicationId: locked.id,
         documentType,
         applicantPhone: cmd.applicant,
         mediaId: cmd.media.mediaId,
         ...(spec ? { spec } : {}),
         media,
+        priorMismatchAttempts: pending.mismatchAttempts,
       },
       structural,
     );
 
-    const accepted =
-      decision.kind === "accepted" || decision.kind === "accepted_for_manual_review";
+    const accepted = decision.kind === "accepted" || decision.kind === "accepted_for_manual_review";
     const manualReview = decision.kind === "accepted_for_manual_review";
 
-    // 3) Solo se almacena lo aceptado; lo no aceptado no gasta almacenamiento.
+    // 3) Solo se almacena lo aceptado; lo no aceptado no gasta almacenamiento. El cupo es el
+    // siguiente archivo del documento (1 = anverso), lo que evita pisar el ya guardado.
+    const slot = pending.receivedFiles + 1;
     const stored = accepted
-      ? await this.storage.store({ tenantId, applicationId: active.id, documentType, media })
+      ? await this.storage.store({
+          tenantId,
+          applicationId: locked.id,
+          documentType,
+          slot,
+          media,
+        })
       : null;
 
     // Análisis antifraude por VISIÓN del local: solo para la foto del negocio aceptada. Best-effort
@@ -124,17 +183,17 @@ export class SubmitApplicationDocumentHandler {
     if (accepted && documentType === "BUSINESS_PHOTO" && this.businessPhotoVision) {
       await this.businessPhotoVision.analyze({
         tenantId,
-        applicationId: active.id,
+        applicationId: locked.id,
         applicantPhone: cmd.applicant,
         mediaId: cmd.media.mediaId,
         photo: media,
       });
     }
 
-    const application = recordDocumentResult(active.application, documentType, accepted);
-    await this.applications.saveDocumentOutcome({
+    const application = recordDocumentResult(locked.application, documentType, accepted);
+    await locked.saveDocumentOutcome({
       tenantId,
-      applicationId: active.id,
+      applicationId: locked.id,
       documentType,
       mediaId: cmd.media.mediaId,
       storageKey: stored?.storageKey ?? null,
@@ -145,30 +204,35 @@ export class SubmitApplicationDocumentHandler {
       application,
     });
 
-    // 4) Responder al solicitante según la decisión.
+    // 4) Responder al solicitante según la decisión (dentro del cerrojo, para que el orden de
+    // los mensajes coincida con el orden real de las transiciones).
     if (!accepted) {
       await this.sender.sendText(
         recipient,
         rejectionMessage(decision, identifiedType, documentPrompt(specs, documentType)),
       );
-      return;
+      return null;
+    }
+
+    const ack = manualReview
+      ? "📝 Archivo recibido y marcado para *revisión manual* de un analista."
+      : "✅ Archivo recibido.";
+
+    // Al documento todavía le faltan archivos: se pide el resto en vez de pasar al siguiente.
+    const missing = pendingFilesOf(application, documentType);
+    if (missing > 0) {
+      await this.sender.sendText(recipient, `${ack} ${remainingFilesPrompt(missing)}`);
+      return null;
     }
 
     const next = nextPendingDocument(application);
     if (next) {
-      const ack = manualReview
-        ? "📝 Documento recibido y marcado para *revisión manual* de un analista."
-        : "✅ Documento recibido.";
       await this.sender.sendText(recipient, `${ack} ${documentPrompt(specs, next)}`);
-      return;
+      return null;
     }
 
-    await this.completion.onCompleted({
-      tenantId,
-      applicationId: active.id,
-      applicant: cmd.applicant,
-    });
     await this.sender.sendText(recipient, COMPLETED);
+    return locked.id;
   }
 }
 
@@ -178,6 +242,13 @@ function documentPrompt(
   type: RequiredDocumentType,
 ): string {
   return findDocumentSpec(specs, type)?.title ?? `Envíame el documento: ${type}.`;
+}
+
+/** Pide los archivos que aún faltan del documento en curso (p. ej. el reverso de la cédula). */
+function remainingFilesPrompt(missing: number): string {
+  return missing === 1
+    ? "Falta *1 foto más* de este mismo documento (el otro lado). Envíala, por favor."
+    : `Faltan *${missing} fotos más* de este mismo documento. Envíalas, por favor.`;
 }
 
 /** Mensaje al solicitante cuando el documento NO se aceptó. */

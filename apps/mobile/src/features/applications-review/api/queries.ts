@@ -168,14 +168,24 @@ export function useReExtractDocument(applicationId: string) {
  * un documento seleccionado (al abrir el visor). No se cachea (`gcTime: 0`): el binario es PII
  * y se descarta al cerrar; el componente revoca el objectURL.
  */
-export function useDocumentOriginal(applicationId: string, documentType: string | null) {
+/** Archivo concreto a abrir: el documento y su cupo (1 = anverso). `null` = visor cerrado. */
+export interface DocumentFileRef {
+  documentType: string;
+  slot: number;
+}
+
+export function useDocumentOriginal(applicationId: string, file: DocumentFileRef | null) {
   return useQuery({
-    queryKey: [...reviewKeys.detail(applicationId), "original", documentType],
-    enabled: documentType != null,
+    queryKey: [...reviewKeys.detail(applicationId), "original", file?.documentType, file?.slot],
+    enabled: file != null,
     gcTime: 0,
     staleTime: Infinity,
     queryFn: async () =>
-      fetchDocumentOriginalUrl({ applicationId, documentType: documentType as string }),
+      fetchDocumentOriginalUrl({
+        applicationId,
+        documentType: (file as DocumentFileRef).documentType,
+        slot: (file as DocumentFileRef).slot,
+      }),
   });
 }
 
@@ -187,13 +197,16 @@ export function useDocumentOriginal(applicationId: string, documentType: string 
 export async function fetchDocumentOriginalUrl(input: {
   applicationId: string;
   documentType: string;
+  /** Cupo del archivo dentro del documento (anverso/reverso); por defecto, el primero. */
+  slot?: number;
 }): Promise<{ url: string; mimeType: string }> {
   const token = authState.getAccessToken();
   const tenantId = authState.getTenantId();
   if (!token || !tenantId) throw normalizeHttpError(401, { message: "Sesión sin tenant" });
 
+  const slot = input.slot && input.slot > 1 ? `?slot=${input.slot}` : "";
   const res = await fetch(
-    `${env.apiUrl}/applications/${input.applicationId}/documents/${input.documentType}/original`,
+    `${env.apiUrl}/applications/${input.applicationId}/documents/${input.documentType}/original${slot}`,
     { headers: { Authorization: `Bearer ${token}`, "x-tenant-id": tenantId } },
   );
   if (!res.ok) {

@@ -725,6 +725,7 @@ const es = {
   "docs.include": "Incluir",
   "docs.field.title": "Texto en el chat",
   "docs.field.description": "Descripción (pista para la IA)",
+  "docs.field.expectedFiles": "Fotos que lo componen (2 si pides ambos lados)",
   "docs.saved": "Documentos requeridos guardados.",
   "docs.empty.warning": "Activa al menos un documento para poder iniciar solicitudes.",
   "docs.type.IDENTITY_DOCUMENT": "Documento de identidad",

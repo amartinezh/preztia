@@ -4,13 +4,13 @@ import type { BusinessPhotoVerdict } from "@preztiaos/contracts";
 import { Button, Modal, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
-import { useDocumentOriginal, useReExtractDocument } from "../api/queries";
+import { useDocumentOriginal, useReExtractDocument, type DocumentFileRef } from "../api/queries";
 import { AntifraudVisionPanel } from "./antifraud-vision-panel";
 import { documentLabel } from "./review-status";
 
 type Props = {
   applicationId: string;
-  documentType: string | null; // null = cerrado
+  file: DocumentFileRef | null; // null = cerrado
   // Dictamen de visión cuando el documento abierto es la foto del negocio (BUSINESS_PHOTO).
   visionVerdict?: BusinessPhotoVerdict | null;
   onClose: () => void;
@@ -22,9 +22,10 @@ type Props = {
  * imagen; en otro caso (PDF, etc.) ofrece abrir en el navegador. Libera el objectURL al
  * cambiar/cerrar (no deja PII en memoria).
  */
-export function DocumentViewer({ applicationId, documentType, visionVerdict, onClose }: Props) {
+export function DocumentViewer({ applicationId, file, visionVerdict, onClose }: Props) {
   const { t } = useT();
-  const query = useDocumentOriginal(applicationId, documentType);
+  const documentType = file?.documentType ?? null;
+  const query = useDocumentOriginal(applicationId, file);
   const reExtract = useReExtractDocument(applicationId);
   const url = query.data?.url;
   const isBusinessPhoto = documentType === "BUSINESS_PHOTO";
@@ -55,7 +56,12 @@ export function DocumentViewer({ applicationId, documentType, visionVerdict, onC
     <Modal
       visible={documentType != null}
       onClose={onClose}
-      title={documentType ? documentLabel(documentType) : t("review.original.title")}
+      title={
+        documentType
+          ? // Con varios archivos, el título dice cuál se está viendo (1 = anverso).
+            `${documentLabel(documentType)}${file && file.slot > 1 ? ` · archivo ${file.slot}` : ""}`
+          : t("review.original.title")
+      }
     >
       <View className="p-4">
         {query.isPending ? <Spinner label={t("common.loading")} /> : null}

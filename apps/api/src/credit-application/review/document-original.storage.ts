@@ -28,25 +28,35 @@ export class DocumentOriginalStorage {
     tenantId: string;
     applicationId: string;
     documentType: string;
+    /** Archivo dentro del documento (1 = anverso). Por defecto, el primero. */
+    slot?: number;
   }): Promise<OriginalDocument> {
-    // RLS ya acota al tenant; se leen los documentos del expediente y se elige por tipo.
-    const documents = await withTenantTxFor(input.tenantId, async (tx) =>
+    const slot = input.slot ?? 1;
+
+    // RLS ya acota al tenant; se busca el archivo por (documento, cupo). Un documento puede
+    // constar de varios (anverso/reverso) y el analista debe poder abrir cualquiera.
+    const files = await withTenantTxFor(input.tenantId, async (tx) =>
       tx
         .select({
-          documentType: schema.creditApplicationDocument.documentType,
-          storageKey: schema.creditApplicationDocument.storageKey,
-          mimeType: schema.creditApplicationDocument.mimeType,
+          documentType: schema.creditApplicationDocumentFile.documentType,
+          slot: schema.creditApplicationDocumentFile.slot,
+          storageKey: schema.creditApplicationDocumentFile.storageKey,
+          mimeType: schema.creditApplicationDocumentFile.mimeType,
         })
-        .from(schema.creditApplicationDocument)
+        .from(schema.creditApplicationDocumentFile)
         .where(
           eq(
-            schema.creditApplicationDocument.applicationId,
+            schema.creditApplicationDocumentFile.applicationId,
             input.applicationId,
           ),
         ),
     );
 
-    const target = documents.find((d) => d.documentType === input.documentType);
+    const target =
+      files.find(
+        (f) => f.documentType === input.documentType && f.slot === slot,
+      ) ?? (slot === 1 ? await this.legacyFile(input) : null);
+
     if (!target?.storageKey) {
       throw new NotFoundException('El documento no tiene original almacenado');
     }
@@ -63,5 +73,33 @@ export class DocumentOriginalStorage {
       bytes: decryptAtRest(sealed),
       mimeType: target.mimeType ?? 'application/octet-stream',
     };
+  }
+
+  /**
+   * Expedientes anteriores a los documentos de varios archivos: su único binario vive en las
+   * columnas de `credit_application_document`, sin fila en la tabla de archivos. Se sirven desde
+   * ahí para que el historial ya almacenado siga viéndose.
+   */
+  private async legacyFile(input: {
+    tenantId: string;
+    applicationId: string;
+    documentType: string;
+  }): Promise<{ storageKey: string | null; mimeType: string | null } | null> {
+    const documents = await withTenantTxFor(input.tenantId, async (tx) =>
+      tx
+        .select({
+          documentType: schema.creditApplicationDocument.documentType,
+          storageKey: schema.creditApplicationDocument.storageKey,
+          mimeType: schema.creditApplicationDocument.mimeType,
+        })
+        .from(schema.creditApplicationDocument)
+        .where(
+          eq(
+            schema.creditApplicationDocument.applicationId,
+            input.applicationId,
+          ),
+        ),
+    );
+    return documents.find((d) => d.documentType === input.documentType) ?? null;
   }
 }

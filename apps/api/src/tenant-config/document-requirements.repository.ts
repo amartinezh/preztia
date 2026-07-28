@@ -23,6 +23,7 @@ export class DocumentRequirementsRepository implements DocumentRequirementsStore
           title: schema.creditDocumentRequirement.title,
           description: schema.creditDocumentRequirement.description,
           sortOrder: schema.creditDocumentRequirement.sortOrder,
+          expectedFiles: schema.creditDocumentRequirement.expectedFiles,
           active: schema.creditDocumentRequirement.active,
         })
         .from(schema.creditDocumentRequirement)
@@ -46,6 +47,7 @@ export class DocumentRequirementsRepository implements DocumentRequirementsStore
             title: item.title,
             description: item.description,
             sortOrder: item.sortOrder,
+            expectedFiles: item.expectedFiles,
             active: item.active,
           })
           .onConflictDoUpdate({
@@ -57,6 +59,7 @@ export class DocumentRequirementsRepository implements DocumentRequirementsStore
               title: item.title,
               description: item.description,
               sortOrder: item.sortOrder,
+              expectedFiles: item.expectedFiles,
               active: item.active,
               updatedAt: new Date(),
             },

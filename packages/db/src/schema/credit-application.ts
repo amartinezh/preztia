@@ -109,7 +109,17 @@ export const creditApplicationDocument = pgTable(
       .references(() => creditApplication.id),
     documentType: requiredDocument("document_type").notNull(),
     status: documentStatus("status").notNull().default("PENDING"),
-    // Referencia y ubicación del binario (en MinIO, cifrado en reposo).
+    // Cuántos archivos componen el documento (copiado del catálogo al crear la solicitud, para
+    // que un cambio posterior del catálogo no altere expedientes en curso). 2 = ambos lados.
+    expectedFiles: integer("expected_files").notNull().default(1),
+    // Cuántos archivos válidos se han recibido ya. VALIDATED cuando alcanza expected_files.
+    receivedFiles: integer("received_files").notNull().default(0),
+    // Envíos seguidos que la IA no reconoció como este documento. Se reinicia al validarlo:
+    // sustituye al conteo histórico sobre document_extraction, que nunca se limpiaba.
+    mismatchAttempts: integer("mismatch_attempts").notNull().default(0),
+    // Referencia y ubicación del PRIMER archivo (en MinIO, cifrado en reposo). Se conserva
+    // como atajo para los lectores de un solo archivo; el conjunto completo, incluido este,
+    // vive en credit_application_document_file.
     mediaId: text("media_id"),
     storageKey: text("storage_key"),
     mimeType: text("mime_type"),
@@ -128,6 +138,43 @@ export const creditApplicationDocument = pgTable(
     documentByTypeIdx: uniqueIndex("credit_application_document_type_idx").on(
       t.applicationId,
       t.documentType,
+    ),
+  }),
+);
+
+// Cada ARCHIVO aceptado de un documento del checklist. Un documento puede constar de varios
+// (anverso y reverso de la cédula), y hasta reunirlos todos no se da por validado. Es append-only:
+// el rastro de qué binario llegó, cuándo y con qué hash es evidencia KYC, no estado mutable.
+export const creditApplicationDocumentFile = pgTable(
+  "credit_application_document_file",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => creditApplication.id),
+    documentType: requiredDocument("document_type").notNull(),
+    // Posición dentro del documento, 1..expected_files, en orden de llegada (1 = anverso).
+    slot: integer("slot").notNull(),
+    // Referencia y ubicación del binario (en MinIO, cifrado en reposo).
+    mediaId: text("media_id").notNull(),
+    storageKey: text("storage_key").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sha256: text("sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // Un archivo por cupo: dos mensajes en carrera no pueden ocupar el mismo (el cupo se
+    // asigna dentro de la transacción que bloquea la solicitud, así que además se serializan).
+    slotIdx: uniqueIndex("credit_application_document_file_slot_idx").on(
+      t.applicationId,
+      t.documentType,
+      t.slot,
+    ),
+    // Idempotencia: un mismo media de WhatsApp no se archiva dos veces en la solicitud.
+    mediaIdx: uniqueIndex("credit_application_document_file_media_idx").on(
+      t.applicationId,
+      t.mediaId,
     ),
   }),
 );

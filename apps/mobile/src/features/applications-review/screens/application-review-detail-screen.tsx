@@ -12,6 +12,7 @@ import {
   useOfferPlans,
   usePlanOfferLive,
   useRejectApplication,
+  type DocumentFileRef,
 } from "../api/queries";
 import { applicationStatusBadge } from "../components/review-status";
 import { DocumentsTable } from "../components/documents-table";
@@ -40,7 +41,7 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
   usePlanOfferLive(applicationId, query.data?.planOffer.status);
 
   const [conversationOpen, setConversationOpen] = useState(false);
-  const [viewerDocument, setViewerDocument] = useState<string | null>(null);
+  const [viewerFile, setViewerFile] = useState<DocumentFileRef | null>(null);
   const [decision, setDecision] = useState<DecisionMode>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [offerError, setOfferError] = useState<string | null>(null);
@@ -124,7 +125,7 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
           <DocumentsTable
             applicationId={applicationId}
             documents={detail.documents}
-            onViewOriginal={setViewerDocument}
+            onViewOriginal={setViewerFile}
           />
         </Stack>
 
@@ -158,11 +159,12 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
       <ConversationPanel applicationId={applicationId} visible={conversationOpen} onClose={() => setConversationOpen(false)} />
       <DocumentViewer
         applicationId={applicationId}
-        documentType={viewerDocument}
+        file={viewerFile}
         visionVerdict={
-          detail.documents.find((d) => d.documentType === viewerDocument)?.visionVerdict ?? null
+          detail.documents.find((d) => d.documentType === viewerFile?.documentType)
+            ?.visionVerdict ?? null
         }
-        onClose={() => setViewerDocument(null)}
+        onClose={() => setViewerFile(null)}
       />
       <DecisionModal
         mode={decision}

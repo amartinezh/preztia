@@ -27,6 +27,9 @@ export const creditDocumentRequirement = pgTable(
     description: text("description").notNull(),
     // Orden de solicitud dentro del protocolo (menor se pide primero).
     sortOrder: integer("sort_order").notNull(),
+    // Cuántos archivos componen el documento: 1 el caso normal, 2 cuando se piden "ambos
+    // lados". El protocolo no lo da por completo hasta reunirlos todos.
+    expectedFiles: integer("expected_files").notNull().default(1),
     // Permite desactivar un documento sin borrar su historial/configuración.
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

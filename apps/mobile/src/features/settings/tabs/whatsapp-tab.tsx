@@ -155,7 +155,16 @@ const DOC_TYPE_LABEL: Record<RequiredDocumentTypeContract, MessageKey> = {
   INCOME_PROOF: "docs.type.INCOME_PROOF",
 };
 
-type DocDraft = { active: boolean; title: string; description: string };
+type DocDraft = {
+  active: boolean;
+  title: string;
+  description: string;
+  /** Archivos que componen el documento: 2 cuando el título pide "ambos lados". */
+  expectedFiles: number;
+};
+
+/** Tope de archivos por documento; coincide con el máximo que acepta el contrato. */
+const MAX_EXPECTED_FILES = 5;
 
 /** Documentos requeridos: define qué pide el bot al iniciar una solicitud. */
 function DocumentRequirementsCard() {
@@ -180,6 +189,7 @@ function DocumentRequirementsCard() {
             active: row?.active ?? false,
             title: row?.title ?? "",
             description: row?.description ?? "",
+            expectedFiles: row?.expectedFiles ?? 1,
           },
         ];
       }),
@@ -202,6 +212,7 @@ function DocumentRequirementsCard() {
         title: current[key]!.title.trim(),
         description: current[key]!.description.trim(),
         sortOrder: order + 1,
+        expectedFiles: current[key]!.expectedFiles,
         active: true,
       }));
     if (items.some((i) => !i.title || !i.description)) {
@@ -255,6 +266,17 @@ function DocumentRequirementsCard() {
                       onChangeText={(text) => set(key, { description: text })}
                     />
                   </Field>
+                  {/* Si el título pide "ambos lados", aquí se declara que son 2 archivos: el
+                      bot no da el documento por completo hasta reunirlos todos. */}
+                  <Field label={t("docs.field.expectedFiles")}>
+                    <Input
+                      value={String(d.expectedFiles)}
+                      keyboardType="number-pad"
+                      onChangeText={(text) =>
+                        set(key, { expectedFiles: clampExpectedFiles(text) })
+                      }
+                    />
+                  </Field>
                 </Stack>
               ) : null}
             </Stack>
@@ -267,3 +289,9 @@ function DocumentRequirementsCard() {
   );
 }
 
+/** Lee el número de archivos del input, acotado al rango que el contrato admite (1..5). */
+function clampExpectedFiles(text: string): number {
+  const parsed = Number.parseInt(text, 10);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.min(Math.max(parsed, 1), MAX_EXPECTED_FILES);
+}
