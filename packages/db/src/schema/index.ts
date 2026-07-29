@@ -7,6 +7,7 @@ export * from "./required-document-catalog";
 export * from "./document-extraction";
 export * from "./document-validation";
 export * from "./conversation-message";
+export * from "./conversation-failure";
 export * from "./installment";
 export * from "./payment";
 export * from "./borrower";

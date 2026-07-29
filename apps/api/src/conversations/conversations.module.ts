@@ -73,6 +73,7 @@ import { KnowledgeAssistantRouter } from './ai/knowledge-assistant.router';
 import { WhatsappTextSender } from './text/whatsapp-text-sender';
 import { LoggingTextSender } from './text/logging-text-sender';
 import { ConversationMessageLog } from './conversation-message.log';
+import { ConversationFailureLog } from './conversation-failure.log';
 import { PaymentsModule } from '../payments/payments.module';
 import { MediaRouterDispatcher } from '../payments/adapters/media-router.dispatcher';
 import {
@@ -304,6 +305,9 @@ import {
     // Transcript de la conversación (entrante + saliente).
     ConversationMessageLog,
     { provide: CONVERSATION_LOG, useExisting: ConversationMessageLog },
+
+    // Bitácora de los mensajes que no se pudieron atender (clasificación de la bandeja).
+    ConversationFailureLog,
 
     // Puertos del caso de uso de texto → adaptadores.
     { provide: CONFIG_REPOSITORY, useClass: TenantConfigDrizzleRepository },

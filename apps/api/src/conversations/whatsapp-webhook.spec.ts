@@ -69,10 +69,15 @@ function signatureFor(body: unknown, secret: string): string {
 
 describe('WhatsappWebhookController · autenticidad del evento', () => {
   const process$ = { execute: jest.fn() };
+  // Bitácora de fallos: aquí solo interesa que el evento se rechace, no lo que se registre.
+  const failures = { record: jest.fn() };
   const controller = new WhatsappWebhookController(
     process$ as unknown as ConstructorParameters<
       typeof WhatsappWebhookController
     >[0],
+    failures as unknown as ConstructorParameters<
+      typeof WhatsappWebhookController
+    >[1],
   );
 
   beforeEach(() => {

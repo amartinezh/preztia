@@ -22,6 +22,7 @@ export { Card, type CardProps } from "./components/card";
 export { Modal, type ModalProps } from "./components/modal";
 export { Select, type SelectProps, type SelectOption } from "./components/select";
 export { Switch, type SwitchProps } from "./components/switch";
+export { Checkbox, type CheckboxProps } from "./components/checkbox";
 export { Badge, type BadgeTone } from "./components/badge";
 export { Spinner } from "./components/spinner";
 export { Skeleton } from "./components/skeleton";

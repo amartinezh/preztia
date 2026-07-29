@@ -35,6 +35,7 @@ export * from "./credit/payment/receiver-match";
 export * from "./credit/payment/settlement-match";
 export * from "./credit/payment/payment-intent";
 export * from "./conversations/inbound-message";
+export * from "./conversations/conversation-outcome";
 export * from "./conversations/assistant";
 export * from "./antifraud/alert";
 export * from "./antifraud/scoring";

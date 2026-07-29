@@ -206,7 +206,8 @@ erDiagram
 | `payment` | comprobante PIX recibido + extracción + verificación bancaria | único `(tenant, end_to_end_id)`; `payer_tax_id`/`payer_name` = **PII** |
 | `payment_allocation` | porción de un pago abonada a una cuota | único `(payment_id, installment_id)` |
 | `payment_event` | bitácora append-only de movimientos de dinero | nunca se edita/borra |
-| `conversation_message` | transcript append-only de la conversación (in/out) | índice por `(tenant, applicant_phone, created_at)` |
+| `conversation_message` | transcript de la conversación (in/out) | índice por `(tenant, applicant_phone, created_at)`; `UPDATE` revocado al rol `app` (un mensaje no se reescribe); el `DELETE` lo usa la depuración de la bandeja, auditada en `audit_log` |
+| `conversation_failure` | bitácora append-only de los mensajes que NO se pudieron atender (etapa, error truncado) | índice por `(tenant, applicant_phone, created_at)`; alimenta el desenlace `TECHNICAL_FAILURE` de la bandeja |
 | `tenant_config` | config por tenant: `whatsapp_phone_number_id`, `knowledge_base`, `ai_provider`/`ai_api_key` | PK `tenant_id`; resuelve tenant desde el webhook |
 | `tenant_bank_account` | cuenta recaudadora por `(país, banco)`; `pix_key`, `api_key`, `unverified_policy` | único `(tenant, country, bank)` |
 | `borrower_contact` | vínculo teléfono → deudor (búsqueda de pagos) | único `(tenant, phone)` |

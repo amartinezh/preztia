@@ -18,6 +18,7 @@ import { ProcessInboundMessageHandler } from '@preztiaos/application';
 import { whatsappWebhookEvent } from '@preztiaos/contracts';
 import { isValidSignature } from './whatsapp-signature';
 import { toInboundMessages } from './whatsapp-message.mapper';
+import { ConversationFailureLog } from './conversation-failure.log';
 import {
   resolveWhatsappCredentialsByPhone,
   whatsappVerifyTokenHashExists,
@@ -33,7 +34,10 @@ import {
 export class WhatsappWebhookController {
   private readonly logger = new Logger(WhatsappWebhookController.name);
 
-  constructor(private readonly process: ProcessInboundMessageHandler) {}
+  constructor(
+    private readonly process: ProcessInboundMessageHandler,
+    private readonly failures: ConversationFailureLog,
+  ) {}
 
   @Get()
   async verify(
@@ -103,6 +107,10 @@ export class WhatsappWebhookController {
           `Error procesando mensaje ${message.id} (canal ${message.channelId})`,
           err instanceof Error ? err.stack : String(err),
         );
+        // El log del proceso se rota y nadie de la operación lo lee: el fallo se persiste
+        // además en la bitácora del tenant para que la bandeja pueda mostrar QUIÉN se quedó
+        // sin terminar la solicitud por un problema nuestro y no por abandono.
+        await this.failures.record(message, err);
       }
     }
     return { received: true };
