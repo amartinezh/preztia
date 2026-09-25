@@ -36,7 +36,7 @@ Por ser una plataforma **fintech multi-tenant**, todo caso de uso debe considera
 **Críticos (dinero + multi-tenant):**
 - **Seguridad** → aislamiento por RLS; identidad del tenant desde **JWT** (nunca confiar en `x-tenant-id` del cliente), 401 si falta; authZ por rol y por subárbol de zonas; secretos solo por entorno.
 - **Auditabilidad** → todo movimiento de dinero y cambio de estado va a un **audit log append-only** (quién/qué/cuándo/tenant); nada de editar o borrar historial financiero.
-- **Confiabilidad / idempotencia** → toda operación de dinero y todo webhook (WhatsApp) es **idempotente** (clave de idempotencia); reintentos seguros; sin doble cobro/abono.
+- **Confiabilidad / idempotencia** → toda operación de dinero y todo webhook (WhatsApp, Telegram) es **idempotente** (clave de idempotencia); reintentos seguros; sin doble cobro/abono.
 - **Integridad financiera** → invariantes de agregado (saldo nunca negativo, `Σ abonos ≤ total`, cuadre de caja) verificados con pruebas.
 
 **Operación:**

@@ -125,6 +125,13 @@ flowchart TB
 > el alcance del usuario** (`zoneScopePredicate`: ADMIN todo el tenant, COORDINATOR su subárbol).
 > Los **rechazos** quedan en `credit_application_rejection` (histórico con motivo obligatorio).
 
+> **Telegram (ADR #40):** cada zona puede tener además un **bot de Telegram** (`telegram_channel`).
+> El tenant habilita WhatsApp, Telegram o ambos (`tenant_config.messaging_channels`). El remitente
+> de Telegram se identifica por su **teléfono verificado** (comparte su contacto con el botón del
+> bot; `telegram_chat_link` guarda chat ⇄ teléfono), así que todo lo demás (solicitud, KYC, cobro,
+> bandeja) sigue indexado por teléfono y es común a ambos canales. El `channel_id` de los agregados
+> es el `phone_number_id` de WhatsApp o `tg:<bot_id>`.
+
 ---
 
 ## 4. Modelo de dominio por contexto
@@ -160,6 +167,9 @@ Reglas puras que reciben campos ya extraídos y emiten **`ValidationAlert`** (`c
 ### Conversations
 - **`inbound-message`** — modelo del mensaje entrante (text/audio/image/document).
 - **`assistant`** — respuestas y constantes del asistente (`OFF_TOPIC_REPLY`, `ASSISTANT_UNAVAILABLE_REPLY`).
+- **`messaging-channel`** — proveedor de un `channelId` (`WHATSAPP` sin prefijo / `TELEGRAM` = `tg:<bot_id>`).
+- **`telegram-contact`** — `verifiedPhoneOf`: solo el contacto PROPIO identifica al remitente de Telegram.
+- **`proactive-channel`** — `chooseProactiveChannel`: canal alcanzable para recordatorios y avisos.
 
 ### Payments
 - **`payment-review`** (`decidePaymentReview`) — decide el estado del pago a partir de extracción + verificación bancaria + antifraude.
@@ -201,16 +211,18 @@ erDiagram
 | `credit_document_requirement` | **catálogo configurable por tenant** (qué documentos, orden, título, descripción para la IA) | único `(tenant, document_key)`; `active` |
 | `document_extraction` | todo lo extraído por IA de un documento (trazabilidad) | `fields`/`file_metadata`/`raw_response` jsonb; `provider`/`model`; `confidence` |
 | `document_validation` | **reporte antifraude append-only** (veredicto vigente = el más reciente) | `status` `validation_status`, `score`, `alerts`, `consulted_sources` |
-| `processed_inbound_message` | idempotencia de webhooks (un `wamid` por tenant) | PK `(tenant_id, message_id)` |
+| `processed_inbound_message` | idempotencia de webhooks (un `wamid` o `tg:<bot>:<chat>:<msg>` por tenant) | PK `(tenant_id, message_id)` |
 | `credit_application_event` | bitácora append-only de la solicitud | nunca se edita/borra |
 | `payment` | comprobante PIX recibido + extracción + verificación bancaria | único `(tenant, end_to_end_id)`; `payer_tax_id`/`payer_name` = **PII** |
 | `payment_allocation` | porción de un pago abonada a una cuota | único `(payment_id, installment_id)` |
 | `payment_event` | bitácora append-only de movimientos de dinero | nunca se edita/borra |
 | `conversation_message` | transcript de la conversación (in/out) | índice por `(tenant, applicant_phone, created_at)`; `UPDATE` revocado al rol `app` (un mensaje no se reescribe); el `DELETE` lo usa la depuración de la bandeja, auditada en `audit_log` |
 | `conversation_failure` | bitácora append-only de los mensajes que NO se pudieron atender (etapa, error truncado) | índice por `(tenant, applicant_phone, created_at)`; alimenta el desenlace `TECHNICAL_FAILURE` de la bandeja |
-| `tenant_config` | config por tenant: `whatsapp_phone_number_id`, `knowledge_base`, `ai_provider`/`ai_api_key` | PK `tenant_id`; resuelve tenant desde el webhook |
+| `tenant_config` | config por tenant: `whatsapp_phone_number_id`, `knowledge_base`, `ai_provider`/`ai_api_key`, `messaging_channels` (WhatsApp/Telegram habilitados) | PK `tenant_id`; resuelve tenant desde el webhook |
 | `tenant_bank_account` | cuenta recaudadora por `(país, banco)`; `pix_key`, `api_key`, `unverified_policy` | único `(tenant, country, bank)` |
 | `borrower_contact` | vínculo teléfono → deudor (búsqueda de pagos) | único `(tenant, phone)` |
+| `telegram_channel` | bot de Telegram de una zona (token y secret del webhook **cifrados**) | único `bot_id`, `channel_id`, `webhook_hook_id` y `zone_id` (un bot por zona) |
+| `telegram_chat_link` | chat de Telegram ⇄ teléfono verificado; `blocked_at` si el usuario bloqueó el bot | único `(channel_id, chat_id)`; único parcial `(channel_id, phone)`: el último contacto verificado gana |
 | `tenant` | **tabla GLOBAL** del plano de control (su `id` ES el tenant); la gobierna el super admin | único `slug`; RLS `id = current_tenant` (un admin lee su propia fila; el control-plane BYPASSRLS gestiona todas) |
 | `app_user` | usuario operador (IAM); `role` ∈ `user_role`, `zone_paths` para alcance | `email` único GLOBAL; `tenant_id` **nullable** (NULL = `SUPER_ADMIN`, plano de control) |
 | `collector_client` | asignación cobrador → cliente (deudor); el cobrador solo ve sus clientes | único `(tenant, collector_id, borrower_id)`; alcance por cliente = authZ de aplicación |
@@ -253,6 +265,10 @@ flowchart LR
 ---
 
 ## 7. Flujo principal: WhatsApp → solicitud / KYC / pago
+
+> Telegram sigue el mismo flujo desde `ProcessInboundMessage`: `TelegramWebhookController` autentica
+> el update (secret del bot), `IdentifyTelegramSenderHandler` lo traduce al `InboundMessage` común
+> (`from` = teléfono verificado) y a partir de ahí los pasos son idénticos.
 
 ```mermaid
 sequenceDiagram

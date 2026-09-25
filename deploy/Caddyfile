@@ -34,8 +34,21 @@
 api.{$DOMAIN} {
 	encode zstd gzip
 	# Access log (JSON a stdout): permite verificar si una petición LLEGÓ y con qué status
-	# (p. ej. los POST de Meta a /webhooks/whatsapp) sin depender de que la API loguee.
+	# (p. ej. los POST de Meta a /webhooks/whatsapp o de Telegram a /webhooks/telegram/…) sin
+	# depender de que la API loguee.
 	log
+
+	# Webhook de Telegram (ADR #40): solo desde las redes de la Bot API. Es defensa en profundidad:
+	# la autenticidad ya la prueba el secret token de cada bot en la API (403 si no coincide).
+	# Rangos publicados por Telegram: https://core.telegram.org/bots/webhooks
+	# Requiere que Caddy vea la IP REAL del cliente (el access log trae `remote_ip`). Si Telegram
+	# amplía sus rangos, el botón "Verificar" de la zona mostrará un 403 como último error.
+	@telegram_outside {
+		path /webhooks/telegram/*
+		not remote_ip 149.154.160.0/20 91.108.4.0/22
+	}
+	respond @telegram_outside 403
+
 	reverse_proxy api:3010
 }
 

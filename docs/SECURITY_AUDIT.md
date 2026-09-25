@@ -256,6 +256,14 @@ Vale la pena registrarlo: acota el riesgo real de lo anterior y evita "arreglar"
 - **Secretos nunca devueltos** por el API (`hasApiKey`/`hasAppSecret` booleanos) y cifrado
   AES-256-GCM en reposo para credenciales y documentos KYC.
 - **Webhooks de PicPay y Mercado Pago fallan cerrado** (401 sin secreto configurado).
+- **Webhook de Telegram falla cerrado** (ADR #40, [telegram-webhook.controller.ts](../apps/api/src/telegram/telegram-webhook.controller.ts)):
+  URL con id opaco por bot (no es el token) + header `X-Telegram-Bot-Api-Secret-Token` comparado en
+  tiempo constante; 403 ante id desconocido o secret ausente/distinto. En Caddy, además, solo se
+  aceptan las redes de Telegram (`149.154.160.0/20`, `91.108.4.0/22`). La identidad del remitente
+  exige su contacto PROPIO (`contact.user_id === from.id`): un contacto reenviado no suplanta a
+  un deudor. El token del bot (va en la URL de la Bot API) nunca se registra ni se propaga en
+  errores; token y secret se guardan cifrados, y `telegram_channel`/`telegram_chat_link` tienen
+  RLS `FORCE` (migración 0056).
 - **Doble portón en la purga** de tenant: `SuperAdminGuard` + contraseña de entorno que falla
   cerrado.
 

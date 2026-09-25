@@ -1,6 +1,6 @@
 # Plan — Canal Telegram (driver adicional a WhatsApp, por zona)
 
-> **Estado:** Fases 0–5 ✅ código listo; migraciones 0055 (generada) y 0056 (RLS + funciones, a mano) escritas y validadas, SIN aplicar · Fase 6 pendiente. **ADR propuesto:** #40.
+> **Estado:** Fases 0–6 ✅ código y documentación completos (ADR #40). Migraciones 0055–0056 escritas y validadas; **pendiente aplicarlas** (`db:migrate`) y la prueba de punta a punta con un bot real.
 > **Alcance:** que un tenant pueda operar con **WhatsApp, Telegram o ambos**, configurados desde
 > Ajustes (habilitación por tenant) y en el panel de Zonas (un bot por zona, igual que un número de
 > WhatsApp por zona), con **paridad funcional completa**: originación (monto → documentos KYC →
@@ -472,6 +472,16 @@ descarga por prefijo; regresión: **toda la suite actual de WhatsApp sigue verde
 | **6 · Endurecimiento** | Allowlist IPs, throttle/cola, `logs.sh`, deep link de invitación, docs (ARCHITECTURE ADR #40, DESIGN, SECURITY_AUDIT, DEPLOYMENT runbook BotFather) | Checklist de CLAUDE.md completo |
 
 ---
+
+### Bitácora de la Fase 6 (endurecimiento y documentación)
+
+- Caddy: `/webhooks/telegram/*` solo desde `149.154.160.0/20` y `91.108.4.0/22` (defensa en profundidad; `caddy validate` OK y probado con un Caddy local: 403 solo en esa ruta). El runbook indica cómo comprobar que Caddy ve la IP real y cómo retirarlo si no.
+- `deploy/scripts/logs.sh --tg`: llegada en Caddy (con IP de origen, sin el id de la URL) → logs `Telegram:*` → bots, vínculos (verificados, sin verificar, bloqueados) y transcript `tg:`. El `sed` y el SQL se probaron con una línea real de access log y contra Postgres.
+- Auditoría de identidad (D1): cada vinculación de un teléfono a un chat escribe `VERIFY telegram-contact` en `audit_log`, en la MISMA transacción, con los chats reemplazados y solo los últimos 4 dígitos. Validado contra Postgres real con RLS (incluido que el tenant B no ve los vínculos de A).
+- R2: la confirmación tras verificar el número aconseja enviar los documentos como *archivo* (Telegram recomprime las fotos). Los mensajes del bot usan el mismo formato HTML que el resto del canal.
+- Documentación: ADR #40 en ARCHITECTURE (fecha actualizada), modelo, flujo y dominio en DESIGN, controles en SECURITY_AUDIT, runbook de BotFather en DEPLOYMENT §7 y la regla de idempotencia de webhooks en CLAUDE.md.
+- Límites de envío: el cron envía en secuencia (cada envío espera su respuesta HTTP, muy por debajo de 30 msg/s por bot) y el 429 se atiende con `retry_after`. **No hace falta cola por ahora**; a revisar si un tenant supera algunos miles de recordatorios por corrida.
+- Queda como evolución, sin compromiso: deep link de invitación (`t.me/<bot>?start=<token>`) para vincular deudores antiguos, y botones inline (`callback_query`) para los menús de planes y montos (Q1).
 
 ### Bitácora de la Fase 5 (frontend) y migraciones
 

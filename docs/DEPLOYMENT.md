@@ -130,6 +130,35 @@ docker compose -f docker-compose.prod.yml exec postgres \
 - Fuentes configurables con `NEWS_FEEDS` en `.env.prod` (formato `Etiqueta|url` separadas por `;`).
   Vacío → feeds por defecto (Brasil). Hora del refresco: `NEWS_REFRESH_CRON` (por defecto `0 6 * * *`).
 
+## 7. Canal Telegram (por zona)
+
+Requisitos (una vez por servidor):
+- `PUBLIC_API_URL=https://api.<dominio>` en `.env.prod`: la API la usa para registrar el webhook de
+  cada bot. Sin ella el alta del bot responde 503 (`PUBLIC_API_URL_MISSING`).
+- Migraciones **0055** y **0056** aplicadas (`--profile migrate up migrate`). `migrate` dice
+  "applied" aunque no aplique nada: verifica la RLS con
+  `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname LIKE 'telegram_%';`
+  (ambas filas `t|t`).
+- El Caddyfile solo deja pasar `/webhooks/telegram/*` desde las redes de Telegram. Comprueba que
+  Caddy ve la IP real del cliente: en `./deploy/scripts/logs.sh --tg` los hits deben mostrar IPs
+  `149.154.x.x` o `91.108.x.x`, no una IP interna de Docker (`172.x`). Si ves `172.x`, quita el
+  bloque `@telegram_outside` del Caddyfile (la autenticidad la sigue probando el secret del bot).
+
+Por cada zona:
+1. En Telegram, abre **@BotFather** → `/newbot` → nombre y usuario del bot → copia el **token**.
+2. Recomendado en @BotFather: `/setjoingroups` → *Disable* (el bot solo atiende chats privados).
+3. En la app: **Ajustes → Canales / IA** → activa Telegram (y elige el canal preferido de cobranza).
+4. **Zonas → Canales** de la zona → pega el token → *Vincular bot*. La API valida el token con
+   Telegram y registra el webhook.
+5. *Verificar conexión* debe decir "Conexión verificada", sin último error.
+6. Prueba: escribe `/start` al bot desde un teléfono → te pide compartir el número → al compartirlo
+   confirma y ya atiende como por WhatsApp.
+
+Diagnóstico: `./deploy/scripts/logs.sh --tg` (llegada en Caddy → logs de la API → bots, vínculos y
+transcript). Si un bot deja de recibir: *Verificar* re-registra el webhook y muestra el último error
+que reportó Telegram. Para rotar el token: `/revoke` en @BotFather → pega el nuevo en *Rotar token*
+(debe ser del MISMO bot).
+
 ## Notas de seguridad
 - Ningún servicio de datos expone puertos al host: solo Caddy. El aislamiento entre empresas lo
   garantiza además RLS en Postgres.

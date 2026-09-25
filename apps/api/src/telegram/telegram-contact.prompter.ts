@@ -6,6 +6,7 @@ import {
   TelegramBotApiClient,
   type TelegramReplyMarkup,
 } from './telegram-bot-api.client';
+import { whatsappMarkupToTelegramHtml } from './telegram-markup';
 
 const SHARE_CONTACT_BUTTON = '📱 Compartir mi número';
 
@@ -21,8 +22,12 @@ const REQUEST_CONTACT_TEXT =
   '¡Hola! 👋 Para atenderte y proteger tu información necesitamos verificar tu número. ' +
   `Toca el botón «${SHARE_CONTACT_BUTTON}» que aparece abajo.`;
 
+// Telegram recomprime las FOTOS; enviadas como ARCHIVO llegan con la calidad original, lo que
+// mejora la lectura de los documentos de identidad y comprobantes (antifraude/KYC).
 const IDENTIFIED_TEXT =
-  '¡Listo! ✅ Ya verificamos tu número. Escríbenos en qué te podemos ayudar.';
+  '¡Listo! ✅ Ya verificamos tu número. Escríbenos en qué te podemos ayudar.\n\n' +
+  '📎 Consejo: cuando te pidamos documentos o comprobantes, envíalos como *archivo* ' +
+  '(clip → Archivo) para que lleguen nítidos.';
 
 const REJECTION_TEXT: Record<TelegramContactRejection, string> = {
   NOT_OWN_CONTACT:
@@ -71,7 +76,9 @@ export class TelegramContactPrompterAdapter implements TelegramContactPrompter {
     }
     await this.api.sendMessage(token, {
       chatId: chat.chatId,
-      text,
+      // Mismo formato que el resto de mensajes del canal (marcado ligero → HTML escapado).
+      text: whatsappMarkupToTelegramHtml(text),
+      parseMode: 'HTML',
       replyMarkup,
     });
   }

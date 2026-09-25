@@ -7,6 +7,9 @@ import type {
 } from '@preztiaos/application';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 
+// Dígitos del teléfono que se conservan en la auditoría (el resto es PII).
+const PHONE_VISIBLE_DIGITS = 4;
+
 /**
  * Adaptador de `telegram_chat_link` (chat de Telegram ⇄ teléfono verificado, ADR #40) bajo el rol
  * `app` + RLS. Solo guarda el chat_id y el teléfono: ni nombre ni username (minimización de PII).
@@ -90,7 +93,7 @@ export class TelegramChatLinkRepository implements TelegramChatLinkStore {
       const now = new Date();
       // El último contacto verificado gana: se retira el teléfono de cualquier otro chat del bot
       // ANTES de asignarlo (índice único parcial por canal + teléfono).
-      await tx
+      const replaced = await tx
         .update(schema.telegramChatLink)
         .set({ phone: null, verifiedAt: null, updatedAt: now })
         .where(
@@ -99,8 +102,9 @@ export class TelegramChatLinkRepository implements TelegramChatLinkStore {
             eq(schema.telegramChatLink.phone, input.phone),
             ne(schema.telegramChatLink.chatId, input.chatId),
           ),
-        );
-      await tx
+        )
+        .returning({ chatId: schema.telegramChatLink.chatId });
+      const [link] = await tx
         .insert(schema.telegramChatLink)
         .values({
           tenantId: input.tenantId,
@@ -120,7 +124,23 @@ export class TelegramChatLinkRepository implements TelegramChatLinkStore {
             blockedAt: null,
             updatedAt: now,
           },
-        });
+        })
+        .returning({ id: schema.telegramChatLink.id });
+      // Vincular un teléfono a un chat es un cambio de IDENTIDAD: queda en el audit log
+      // append-only en la misma transacción. Sin el teléfono completo (PII).
+      await tx.insert(schema.auditLog).values({
+        tenantId: input.tenantId,
+        actorId: null,
+        action: 'VERIFY telegram-contact',
+        entity: 'telegram-chat-link',
+        entityId: link?.id ?? null,
+        payload: {
+          channelId: input.channelId,
+          chatId: input.chatId,
+          phoneLast4: input.phone.slice(-PHONE_VISIBLE_DIGITS),
+          replacedChats: replaced.map((r) => r.chatId),
+        },
+      });
     });
   }
 }

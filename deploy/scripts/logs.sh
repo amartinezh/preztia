@@ -8,6 +8,7 @@
 #   ./deploy/scripts/logs.sh -f api             # seguir logs en vivo (Ctrl+C para salir)
 #   ./deploy/scripts/logs.sh --errors           # solo errores de todos los servicios
 #   ./deploy/scripts/logs.sh --wa               # diagnóstico del webhook de WhatsApp
+#   ./deploy/scripts/logs.sh --tg               # diagnóstico del webhook de Telegram
 #   ./deploy/scripts/logs.sh --since 6h         # ventana de tiempo (def. 2h; ej. 30m, 24h)
 #   ./deploy/scripts/logs.sh -n 200 api         # cuántas líneas (def. 80)
 #
@@ -24,13 +25,14 @@ COMPOSE=(docker compose -f "$REPO_DIR/docker-compose.prod.yml")
 ERR_RE='error|fatal|panic|exception|traceback|unauthorized|forbidden|denied|refused|failed|timeout|too many|out of memory|oom|28P01|no valid A records|rate.?limit'
 SERVICES_ALL=(postgres redis minio api caddy)
 
-SINCE="2h" LINES=80 FOLLOW=0 ONLY_ERRORS=0 ONLY_WA=0
+SINCE="2h" LINES=80 FOLLOW=0 ONLY_ERRORS=0 ONLY_WA=0 ONLY_TG=0
 TARGETS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -f|--follow)  FOLLOW=1 ;;
     --errors)     ONLY_ERRORS=1 ;;
     --wa)         ONLY_WA=1 ;;
+    --tg)         ONLY_TG=1 ;;
     --since)      SINCE="$2"; shift ;;
     -n|--lines)   LINES="$2"; shift ;;
     -h|--help)    grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -84,6 +86,41 @@ if [ "$ONLY_WA" = 1 ]; then
       SELECT to_char(created_at, '"'"'MM-DD HH24:MI:SS'"'"') AS hora, direction, kind,
              left(coalesce(body, '"'"'(media)'"'"'), 60) AS texto
       FROM conversation_message ORDER BY created_at DESC LIMIT 14;"' \
+    2>/dev/null || echo "  (no se pudo consultar la BD)"
+  exit 0
+fi
+
+# ── Modo Telegram: llegada → autenticación → identificación → transcript ──────
+#   1. ¿Telegram llama al webhook y con qué status?  → access log de Caddy. Un 403 aquí viene
+#      de la lista de IPs de Caddy o del secret token del bot (ver sección 2).
+#   2. ¿Qué hizo la API?                              → logs Telegram:* (sin PII).
+#   3. ¿Se identificaron los chats y hubo diálogo?    → vínculos y transcript de canales tg:.
+if [ "$ONLY_TG" = 1 ]; then
+  title "1 · LLEGADA — hits a /webhooks/telegram según Caddy (últimas ${SINCE})"
+  # El id opaco de la URL se recorta: basta con saber que el hit llegó y su status.
+  "${COMPOSE[@]}" logs -t --since "$SINCE" caddy 2>&1 \
+    | grep -F '"uri":"/webhooks/telegram/' \
+    | sed -E 's/^[^|]*\| ([0-9T:.-]+Z?).*"remote_ip":"([^"]+)".*"method":"([A-Z]+)".*"status":([0-9]+).*/  \1  \3 desde \2 → HTTP \4/' \
+    | tail -n "$LINES" || echo "  (sin hits: ¿bot vinculado? usa «Verificar» en Zonas → Canales)"
+
+  title "2 · PIPELINE — logs de la API (Telegram) (últimas ${SINCE})"
+  "${COMPOSE[@]}" logs -t --since "$SINCE" api 2>&1 \
+    | grep -E 'Telegram:|Messaging:' \
+    | tail -n "$LINES" || echo "  (nada: mira la sección 1)"
+
+  title "3 · BOTS, VÍNCULOS Y TRANSCRIPT"
+  "${COMPOSE[@]}" exec -T postgres sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -P pager=off -c "
+      SELECT c.channel_id, c.bot_username, c.webhook_registered_at IS NOT NULL AS webhook,
+             count(l.*) FILTER (WHERE l.phone IS NOT NULL) AS verificados,
+             count(l.*) FILTER (WHERE l.phone IS NULL)     AS sin_verificar,
+             count(l.*) FILTER (WHERE l.blocked_at IS NOT NULL) AS bloqueados
+      FROM telegram_channel c LEFT JOIN telegram_chat_link l ON l.channel_id = c.channel_id
+      GROUP BY c.channel_id, c.bot_username, c.webhook_registered_at;" -c "
+      SELECT to_char(created_at, '"'"'MM-DD HH24:MI:SS'"'"') AS hora, channel_id, direction, kind,
+             left(coalesce(body, '"'"'(media)'"'"'), 50) AS texto
+      FROM conversation_message WHERE channel_id LIKE '"'"'tg:%'"'"'
+      ORDER BY created_at DESC LIMIT 14;"' \
     2>/dev/null || echo "  (no se pudo consultar la BD)"
   exit 0
 fi
