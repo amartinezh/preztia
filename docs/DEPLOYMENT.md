@@ -148,7 +148,7 @@ Por cada zona:
 1. En Telegram, abre **@BotFather** → `/newbot` → nombre y usuario del bot → copia el **token**.
 2. Recomendado en @BotFather: `/setjoingroups` → *Disable* (el bot solo atiende chats privados).
 3. En la app: **Ajustes → Canales / IA** → activa Telegram (y elige el canal preferido de cobranza).
-4. **Zonas → Canales** de la zona → pega el token → *Vincular bot*. La API valida el token con
+4. **Ajustes → pestaña Zonas → Zonas → botón Canales** de la zona → pega el token → *Vincular bot*. La API valida el token con
    Telegram y registra el webhook.
 5. *Verificar conexión* debe decir "Conexión verificada", sin último error.
 6. Prueba: escribe `/start` al bot desde un teléfono → te pide compartir el número → al compartirlo

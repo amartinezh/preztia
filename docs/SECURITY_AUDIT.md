@@ -42,7 +42,7 @@ de PicPay y Mercado Pago. Cubierto por
 [whatsapp-webhook.spec.ts](../apps/api/src/conversations/whatsapp-webhook.spec.ts).
 
 > ⚠️ **Operativo:** un canal sin App Secret deja de recibir mensajes. Antes de desplegar, verifica
-> que todos los canales activos lo tengan cargado en *Zonas → WhatsApp de la zona*.
+> que todos los canales activos lo tengan cargado en *Ajustes → Zonas → Canales de la zona*.
 
 ### #2 · `POST /credits` sin control de rol — ✅ CORREGIDO (2026-07-22)
 

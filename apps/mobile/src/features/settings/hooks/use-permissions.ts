@@ -11,7 +11,8 @@ export type SettingsSection =
   | "whatsapp"
   | "plans"
   | "bankAccounts"
-  | "users";
+  | "users"
+  | "zones";
 
 /** Acceso por sección: `canView` controla si la pestaña se muestra; `canEdit`, si se puede modificar. */
 export interface SectionAccess {
@@ -26,19 +27,19 @@ export interface SectionAccess {
  *
  * Lectura vs. escritura: el COORDINATOR ve "General" y "Cobranza" en SOLO LECTURA (el backend
  * permite el GET a revisores pero el PATCH exige ADMIN); las secciones sensibles (WhatsApp/IA,
- * Planes, Cuentas bancarias, Usuarios) ni siquiera aparecen para el Coordinador.
+ * Planes, Cuentas bancarias, Usuarios, Zonas) ni siquiera aparecen para el Coordinador.
  */
 function policyFor(role: UserRole | null): Record<SettingsSection, SectionAccess> {
   const isAdmin = role === "ADMIN";
   const isReviewer = can(role, "application:review"); // ADMIN o COORDINATOR
-  const manageOrg = can(role, "user:manage") || can(role, "zone:manage");
   return {
     general: { canView: isReviewer, canEdit: isAdmin },
     collection: { canView: isReviewer, canEdit: isAdmin },
     whatsapp: { canView: isAdmin, canEdit: isAdmin },
     plans: { canView: isAdmin, canEdit: isAdmin },
     bankAccounts: { canView: can(role, "cash:admin"), canEdit: can(role, "cash:admin") },
-    users: { canView: manageOrg, canEdit: manageOrg },
+    users: { canView: can(role, "user:manage"), canEdit: can(role, "user:manage") },
+    zones: { canView: can(role, "zone:manage"), canEdit: can(role, "zone:manage") },
   };
 }
 

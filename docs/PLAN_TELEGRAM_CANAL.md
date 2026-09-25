@@ -557,7 +557,7 @@ Ajustes respecto al diseño original, decididos al implementar:
 1. `PUBLIC_API_URL=https://api.preztia.co` en `.env` de producción (y en `env.prod.example`).
 2. Caddy ya sirve `api.` por HTTPS en 443 (puerto admitido por Telegram); añadir el log de
    `/webhooks/telegram/*` al diagnóstico.
-3. Runbook por zona: BotFather `/newbot` → copiar token → *Zonas → Canales → Telegram → Guardar*
+3. Runbook por zona: BotFather `/newbot` → copiar token → *Ajustes → Zonas → Canales (de la zona) → Telegram → Vincular bot*
    → *Verificar* (debe mostrar webhook OK, 0 errores) → probar con `/start` desde un teléfono.
 4. `pnpm db:generate` tras los esquemas; aplicar la migración manual de RLS; `pnpm build` antes de
    la API; `pnpm db:migrate`.

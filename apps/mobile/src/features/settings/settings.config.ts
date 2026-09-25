@@ -7,6 +7,7 @@ import { WhatsappTab } from "./tabs/whatsapp-tab";
 import { PlansTab } from "./tabs/plans-tab";
 import { BankAccountsTab } from "./tabs/bank-accounts-tab";
 import { UsersTab } from "./tabs/users-tab";
+import { ZonesTab } from "./tabs/zones-tab";
 
 /**
  * Definición DECLARATIVA de las pestañas de Ajustes. Añadir una sección es agregar una entrada
@@ -26,4 +27,5 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
   { id: "plans", label: "Planes", Component: PlansTab },
   { id: "bankAccounts", label: "Cuentas bancarias", Component: BankAccountsTab },
   { id: "users", label: "Usuarios", Component: UsersTab },
+  { id: "zones", label: "Zonas", Component: ZonesTab },
 ];
