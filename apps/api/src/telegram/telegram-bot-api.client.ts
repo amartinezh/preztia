@@ -33,6 +33,28 @@ export class TelegramApiError extends Error {
   }
 }
 
+/** Botón de un teclado de respuesta; `request_contact` comparte el número del propio usuario. */
+export interface TelegramKeyboardButton {
+  readonly text: string;
+  readonly request_contact?: boolean;
+}
+
+/** Teclado nativo bajo el campo de texto, o la orden de retirarlo. */
+export type TelegramReplyMarkup =
+  | {
+      readonly keyboard: readonly (readonly TelegramKeyboardButton[])[];
+      readonly one_time_keyboard?: boolean;
+      readonly resize_keyboard?: boolean;
+      readonly input_field_placeholder?: string;
+    }
+  | { readonly remove_keyboard: true };
+
+export interface TelegramOutgoingMessage {
+  readonly chatId: string;
+  readonly text: string;
+  readonly replyMarkup?: TelegramReplyMarkup;
+}
+
 interface BotApiResponse<T> {
   ok: boolean;
   result?: T;
@@ -80,6 +102,18 @@ export class TelegramBotApiClient implements TelegramBotGateway {
   async deleteWebhook(botToken: string): Promise<void> {
     await this.call<boolean>(botToken, 'deleteWebhook', {
       drop_pending_updates: false,
+    });
+  }
+
+  /** Envía un mensaje de texto a un chat (texto plano; teclado opcional). */
+  async sendMessage(
+    botToken: string,
+    message: TelegramOutgoingMessage,
+  ): Promise<void> {
+    await this.call<unknown>(botToken, 'sendMessage', {
+      chat_id: message.chatId,
+      text: message.text,
+      ...(message.replyMarkup ? { reply_markup: message.replyMarkup } : {}),
     });
   }
 

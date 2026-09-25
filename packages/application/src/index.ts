@@ -49,5 +49,6 @@ export * from "./conversations/process-inbound-message";
 export * from "./conversations/route-inbound-media";
 export * from "./conversations/capture-applicant-location";
 export * from "./conversations/telegram-channel";
+export * from "./conversations/telegram-inbound";
 export * from "./conversations/text/ports";
 export * from "./conversations/text/answer-text-message";

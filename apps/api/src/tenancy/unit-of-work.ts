@@ -2,7 +2,7 @@ import { createDb, schema, type Db } from '@preztiaos/db';
 import { eq, sql } from 'drizzle-orm';
 import { channelProviderOf } from '@preztiaos/domain';
 import { tenantStorage } from './tenant-context';
-import { decryptOptionalSecret } from '../shared/secret-cipher';
+import { decryptOptionalSecret, decryptSecret } from '../shared/secret-cipher';
 
 const db = createDb(process.env.APP_DATABASE_URL!); // rol 'app' (sin bypass de RLS)
 
@@ -108,6 +108,59 @@ async function resolveZonePathByTelegramChannel(
     sql`SELECT resolve_zone_path_by_telegram_channel(${channelId})::text AS zone_path`,
   )) as Array<{ zone_path: string | null }>;
   return rows[0]?.zone_path ?? null;
+}
+
+/** Bot de Telegram que corresponde a la URL de un webhook, con su secret ya descifrado. */
+export interface TelegramWebhookTarget {
+  tenantId: string;
+  channelId: string;
+  secretToken: string;
+}
+
+/**
+ * Resuelve el bot al que llegó un update por el id opaco de la URL del webhook (el update de
+ * Telegram no dice a qué bot va). La función SECURITY DEFINER solo devuelve tenant + canal; el
+ * secret se lee después bajo RLS con el tenant ya fijado (defensa en profundidad).
+ * `null` si el id no corresponde a ningún bot ⇒ el webhook falla cerrado.
+ */
+export async function resolveTelegramWebhookTarget(
+  hookId: string,
+): Promise<TelegramWebhookTarget | null> {
+  const rows = (await db.execute(
+    sql`SELECT tenant_id, channel_id FROM resolve_telegram_hook(${hookId})`,
+  )) as Array<{ tenant_id: string; channel_id: string }>;
+  const hook = rows[0];
+  if (!hook) return null;
+
+  return withTenantTxFor(hook.tenant_id, async (tx) => {
+    const [row] = await tx
+      .select({ secret: schema.telegramChannel.webhookSecret })
+      .from(schema.telegramChannel)
+      .where(eq(schema.telegramChannel.webhookHookId, hookId))
+      .limit(1);
+    if (!row) return null;
+    return {
+      tenantId: hook.tenant_id,
+      channelId: hook.channel_id,
+      secretToken: decryptSecret(row.secret),
+    };
+  });
+}
+
+/** Token (descifrado) del bot de Telegram de un canal `tg:<bot_id>`. `null` si no está mapeado. */
+export async function resolveTelegramBotToken(
+  channelId: string,
+): Promise<string | null> {
+  const tenantId = await resolveTenantByTelegramChannel(channelId);
+  if (!tenantId) return null;
+  return withTenantTxFor(tenantId, async (tx) => {
+    const [row] = await tx
+      .select({ botToken: schema.telegramChannel.botToken })
+      .from(schema.telegramChannel)
+      .where(eq(schema.telegramChannel.channelId, channelId))
+      .limit(1);
+    return row ? decryptSecret(row.botToken) : null;
+  });
 }
 
 /** Credenciales de Meta (Graph API) de un canal, ya descifradas. `null` en los campos no cargados. */

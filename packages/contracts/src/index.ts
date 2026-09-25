@@ -19,6 +19,7 @@ export * from "./reporting";
 export * from "./dashboard";
 export * from "./whatsapp-channels";
 export * from "./telegram-channels";
+export * from "./telegram-webhook";
 export * from "./conversations-inbox";
 export * from "./credit-application-review";
 export * from "./credit-document-requirements";

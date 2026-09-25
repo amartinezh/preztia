@@ -1,37 +1,59 @@
 import { Module } from '@nestjs/common';
 import {
+  IdentifyTelegramSenderHandler,
   type MessagingChannelsReader,
   RegisterTelegramChannelHandler,
   RemoveTelegramChannelHandler,
   RotateTelegramBotTokenHandler,
   type TelegramBotGateway,
   type TelegramChannelStore,
+  type TelegramChatLinkStore,
+  type TelegramContactPrompter,
   type TelegramWebhookEndpoint,
   type TelegramWebhookSecrets,
   VerifyTelegramWebhookHandler,
 } from '@preztiaos/application';
 import { TenantConfigModule } from '../tenant-config/tenant-config.module';
+import { ConversationsModule } from '../conversations/conversations.module';
 import { MessagingChannelsRepository } from '../tenant-config/messaging-channels.repository';
 import { TelegramChannelController } from './telegram-channel.controller';
 import { TelegramChannelRepository } from './telegram-channel.repository';
 import { TelegramBotApiClient } from './telegram-bot-api.client';
+import { TelegramChatLinkRepository } from './telegram-chat-link.repository';
+import { TelegramContactPrompterAdapter } from './telegram-contact.prompter';
+import { TelegramWebhookController } from './telegram-webhook.controller';
 import {
   RandomTelegramWebhookSecrets,
   TelegramWebhookEndpointConfig,
 } from './telegram-webhook.config';
 
 /**
- * Módulo de Telegram (ADR #40): alta, rotación, verificación y baja de bots por zona. Cada puerto
- * de la aplicación se enlaza con su adaptador (Bot API, Drizzle, entorno, CSPRNG).
+ * Módulo de Telegram (ADR #40): alta, rotación, verificación y baja de bots por zona, y la
+ * ENTRADA de mensajes (webhook + verificación del contacto) hacia el mismo despachador que WhatsApp.
+ * Cada puerto de la aplicación se enlaza con su adaptador (Bot API, Drizzle, entorno, CSPRNG).
  */
 @Module({
-  imports: [TenantConfigModule],
-  controllers: [TelegramChannelController],
+  imports: [TenantConfigModule, ConversationsModule],
+  controllers: [TelegramChannelController, TelegramWebhookController],
   providers: [
     TelegramChannelRepository,
     TelegramBotApiClient,
     TelegramWebhookEndpointConfig,
     RandomTelegramWebhookSecrets,
+    TelegramChatLinkRepository,
+    TelegramContactPrompterAdapter,
+
+    // Entrada: identificación del remitente por su teléfono verificado (gate de contacto).
+    {
+      provide: IdentifyTelegramSenderHandler,
+      inject: [TelegramChatLinkRepository, TelegramContactPrompterAdapter],
+      useFactory: (
+        links: TelegramChatLinkStore,
+        prompter: TelegramContactPrompter,
+      ) => new IdentifyTelegramSenderHandler(links, prompter),
+    },
+
+    // Alta y mantenimiento de bots por zona.
     {
       provide: RegisterTelegramChannelHandler,
       inject: [

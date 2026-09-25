@@ -34,26 +34,59 @@ export class ConversationFailureLog {
   private readonly logger = new Logger('Conversations:Failures');
 
   async record(message: InboundMessage, error: unknown): Promise<void> {
+    await this.persist(
+      {
+        channelId: message.channelId,
+        applicantPhone: message.from,
+        stage: STAGE_BY_KIND[message.kind] ?? 'UNKNOWN',
+        messageKind: message.kind,
+        messageId: message.id,
+      },
+      error,
+    );
+  }
+
+  /**
+   * Fallo técnico al vincular el contacto VERIFICADO de un chat de Telegram (ADR #40). Solo se
+   * registra con el teléfono ya verificado como propio: un contacto ajeno o inválido no es un
+   * fallo nuestro y no se atribuye a nadie.
+   */
+  async recordContactVerification(
+    input: { channelId: string; applicantPhone: string; messageId: string },
+    error: unknown,
+  ): Promise<void> {
+    await this.persist(
+      { ...input, stage: 'CONTACT_VERIFICATION', messageKind: 'contact' },
+      error,
+    );
+  }
+
+  private async persist(
+    failure: {
+      channelId: string;
+      applicantPhone: string;
+      stage: Stage;
+      messageKind: string;
+      messageId: string;
+    },
+    error: unknown,
+  ): Promise<void> {
     try {
-      const tenantId = await resolveTenantByChannel(message.channelId);
+      const tenantId = await resolveTenantByChannel(failure.channelId);
       if (!tenantId) return; // canal sin tenant: no hay dónde registrar
-      const zonePath = await resolveZonePathByChannel(message.channelId);
+      const zonePath = await resolveZonePathByChannel(failure.channelId);
       await withTenantTxFor(tenantId, async (tx) => {
         await tx.insert(schema.conversationFailure).values({
           tenantId,
-          channelId: message.channelId,
-          applicantPhone: message.from,
+          ...failure,
           zonePath,
-          stage: STAGE_BY_KIND[message.kind] ?? 'UNKNOWN',
-          messageKind: message.kind,
-          messageId: message.id,
           errorName: error instanceof Error ? error.name : 'UnknownError',
           errorMessage: describe(error),
         });
       });
     } catch (err) {
       this.logger.error(
-        `No se pudo registrar el fallo del mensaje ${message.id}`,
+        `No se pudo registrar el fallo del mensaje ${failure.messageId}`,
         err instanceof Error ? err.stack : String(err),
       );
     }

@@ -530,5 +530,7 @@ import {
         ),
     },
   ],
+  // El webhook de Telegram (TelegramModule) reutiliza el mismo despachador y la misma bitácora.
+  exports: [ProcessInboundMessageHandler, ConversationFailureLog],
 })
 export class ConversationsModule {}

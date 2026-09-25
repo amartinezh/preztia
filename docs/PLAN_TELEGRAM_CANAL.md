@@ -1,6 +1,6 @@
 # Plan — Canal Telegram (driver adicional a WhatsApp, por zona)
 
-> **Estado:** Fase 0 ✅ · Fase 1 🟡 código listo, falta migración (2026-09-25); Fases 2–6 pendientes. **ADR propuesto:** #40.
+> **Estado:** Fase 0 ✅ · Fases 1–2 🟡 código listo, falta migración (0055 generada + 0056 RLS/funciones) · Fases 3–6 pendientes. **ADR propuesto:** #40.
 > **Alcance:** que un tenant pueda operar con **WhatsApp, Telegram o ambos**, configurados desde
 > Ajustes (habilitación por tenant) y en el panel de Zonas (un bot por zona, igual que un número de
 > WhatsApp por zona), con **paridad funcional completa**: originación (monto → documentos KYC →
@@ -472,6 +472,15 @@ descarga por prefijo; regresión: **toda la suite actual de WhatsApp sigue verde
 | **6 · Endurecimiento** | Allowlist IPs, throttle/cola, `logs.sh`, deep link de invitación, docs (ARCHITECTURE ADR #40, DESIGN, SECURITY_AUDIT, DEPLOYMENT runbook BotFather) | Checklist de CLAUDE.md completo |
 
 ---
+
+### Bitácora de la Fase 2 (código listo; depende de la migración de la Fase 1)
+
+- Dominio: [telegram-contact.ts](../packages/domain/src/conversations/telegram-contact.ts) — `verifiedPhoneOf` (contacto PROPIO: `contact.user_id === from.id`; un contacto sin `user_id` también se rechaza; normaliza a E.164 sin `+`) y `telegramInboundMessageId` (`tg:<bot>:<chat>:<message_id>`).
+- Aplicación: `IdentifyTelegramSenderHandler` ([telegram-inbound/](../packages/application/src/conversations/telegram-inbound/)) — chat sin teléfono ⇒ pide el contacto y NO enruta; contacto propio ⇒ vincula (el último verificado gana) y confirma; mensaje de chat identificado ⇒ `InboundMessage` común con `from = teléfono`.
+- Infra: `POST /webhooks/telegram/:hookId` (forma del id validada antes de la BD, secret comparado por SHA-256 + `timingSafeEqual`, 403 en todo caso no autenticado; tras autenticar, siempre 200); `toTelegramInbound` (solo chats privados, no bots; foto de mayor resolución); `TelegramChatLinkRepository`; `TelegramContactPrompterAdapter` (teclado `request_contact`). Los mensajes de verificación NO van al transcript (sin teléfono al que atribuirlos).
+- Fallos: un fallo técnico al vincular un contacto propio se registra con la etapa `CONTACT_VERIFICATION`; un contacto ajeno o inválido no es un fallo nuestro y no se atribuye.
+- Resuelto de paso: la purga de datos del tenant no borraba `conversation_failure` ni `credit_application_document_file`; esta última tiene una FK a `credit_application`, así que la purga fallaba entera para cualquier tenant con archivos KYC. Nueva guardia `tenant-data-purge.spec.ts`: toda tabla con `tenant_id` debe estar purgada o conservada explícitamente, en orden FK-seguro.
+- **Pendiente para la Fase 3:** las respuestas a un chat identificado siguen fallando en el envío (`driverFor` → "TELEGRAM sin integración"), y el fallo queda registrado en la bitácora. La Fase 3 registra el driver de Telegram en `MessagingModule`.
 
 ### Bitácora de la Fase 1 (código listo; falta `db:generate` + migración RLS)
 
