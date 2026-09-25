@@ -40,6 +40,7 @@ export const conversationFailureStage = z.enum([
   "DOCUMENT_INTAKE",
   "AUDIO_INTAKE",
   "LOCATION_CAPTURE",
+  "CONTACT_VERIFICATION",
   "UNKNOWN",
 ]);
 export type ConversationFailureStage = z.infer<typeof conversationFailureStage>;

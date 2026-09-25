@@ -73,6 +73,22 @@ export const updateAssistantConfigInput = z.object({
 });
 export type UpdateAssistantConfigInput = z.infer<typeof updateAssistantConfigInput>;
 
+// ── Canales de mensajería del tenant (ADR #40): WhatsApp, Telegram o ambos ─────────────────────
+// Cada zona configura después su número/bot. Los invariantes (≥ 1 habilitado; el preferido para
+// cobranza, habilitado) los valida el dominio sobre el estado resultante del parche (400 si no).
+export const messagingProvider = z.enum(["WHATSAPP", "TELEGRAM"]);
+export type MessagingProviderContract = z.infer<typeof messagingProvider>;
+
+export const messagingChannelsSettings = z.object({
+  whatsappEnabled: z.boolean(),
+  telegramEnabled: z.boolean(),
+  preferredProactiveChannel: messagingProvider,
+});
+export type MessagingChannelsSettings = z.infer<typeof messagingChannelsSettings>;
+
+export const updateMessagingChannelsInput = messagingChannelsSettings.partial();
+export type UpdateMessagingChannelsInput = z.infer<typeof updateMessagingChannelsInput>;
+
 const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 
 export const tenantConfigContract = c.router({
@@ -120,5 +136,20 @@ export const tenantConfigContract = c.router({
     body: updateAssistantConfigInput,
     responses: { 200: assistantConfigView },
     summary: "Actualiza base de conocimiento, proveedor y API key del asistente (ADMIN)",
+  },
+  getMessagingChannels: {
+    method: "GET",
+    path: "/tenant-config/messaging-channels",
+    headers: tenantHeaders,
+    responses: { 200: messagingChannelsSettings },
+    summary: "Proveedores de mensajería habilitados en el tenant (WhatsApp/Telegram)",
+  },
+  updateMessagingChannels: {
+    method: "PATCH",
+    path: "/tenant-config/messaging-channels",
+    headers: tenantHeaders,
+    body: updateMessagingChannelsInput,
+    responses: { 200: messagingChannelsSettings, 400: z.object({ message: z.string() }) },
+    summary: "Habilita/deshabilita WhatsApp y Telegram y fija el canal preferido de cobranza (ADMIN)",
   },
 });

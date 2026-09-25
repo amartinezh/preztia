@@ -15,6 +15,7 @@ import { ReportingModule } from './reporting/reporting.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { TelegramModule } from './telegram/telegram.module';
 import { PaymentPlanModule } from './credit/plans/payment-plan.module';
 import { CollectionsModule } from './collections/collections.module';
 import { NewsModule } from './news/news.module';
@@ -38,6 +39,7 @@ import { tenantMiddleware } from './tenancy/tenant-context';
     DashboardModule,
     ObservabilityModule,
     WhatsappModule,
+    TelegramModule,
     PaymentPlanModule,
     CollectionsModule,
     NewsModule,

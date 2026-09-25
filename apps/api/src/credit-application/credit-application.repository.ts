@@ -17,6 +17,7 @@ import {
   type RequiredDocumentType,
 } from '@preztiaos/domain';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
+import { findChannelZone } from '../messaging/channel-zone';
 
 // Estados en los que una solicitud se considera ACTIVA (en curso).
 const ACTIVE_STATUSES: CreditApplicationStatus[] = [
@@ -102,12 +103,8 @@ export class CreditApplicationDrizzleRepository implements CreditApplicationRepo
   }): Promise<string> {
     const { applicant, application } = input;
     return withTenantTxFor(applicant.tenantId, async (tx) => {
-      // Zona del canal (un número = una zona): estampa la solicitud para scopearla por alcance.
-      const [channel] = await tx
-        .select({ zonePath: schema.whatsappChannel.zonePath })
-        .from(schema.whatsappChannel)
-        .where(eq(schema.whatsappChannel.phoneNumberId, applicant.channelId))
-        .limit(1);
+      // Zona del canal (un número o bot = una zona): estampa la solicitud para scopearla por alcance.
+      const channel = await findChannelZone(tx, applicant.channelId);
 
       const [created] = await tx
         .insert(schema.creditApplication)

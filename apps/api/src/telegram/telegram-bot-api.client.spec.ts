@@ -1,0 +1,143 @@
+// Sin reintentos ni esperas en las pruebas: se ejerce el cliente, no el backoff.
+jest.mock('../shared/fetch-retry', () => ({
+  fetchWithRetry: (url: string, init: RequestInit) => fetch(url, init),
+}));
+
+import { DomainError } from '@preztiaos/domain';
+import {
+  TelegramApiError,
+  TelegramBotApiClient,
+} from './telegram-bot-api.client';
+
+const TOKEN = '7012345678:AAHsecretoDelBotQueNuncaDebeFiltrarse';
+const client = new TelegramBotApiClient();
+const fetchMock = jest.fn();
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  global.fetch = fetchMock;
+});
+
+function telegramReplies(body: unknown, status = 200): void {
+  fetchMock.mockResolvedValue(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
+}
+
+async function errorOf(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise;
+  } catch (error) {
+    return error as Error;
+  }
+  throw new Error('se esperaba un fallo');
+}
+
+describe('TelegramBotApiClient', () => {
+  it('traduce getMe a la identidad del bot (bot_id como texto)', async () => {
+    telegramReplies({
+      ok: true,
+      result: { id: 7012345678, username: 'norte_bot' },
+    });
+
+    await expect(client.getMe(TOKEN)).resolves.toEqual({
+      botId: '7012345678',
+      username: 'norte_bot',
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`https://api.telegram.org/bot${TOKEN}/getMe`);
+    expect(init.method).toBe('POST');
+  });
+
+  it('registra el webhook solo para mensajes, con secret y límite de conexiones', async () => {
+    telegramReplies({ ok: true, result: true });
+
+    await client.setWebhook(TOKEN, {
+      url: 'https://api.preztia.co/webhooks/telegram/hook',
+      secretToken: 'secreto',
+      dropPendingUpdates: true,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      url: 'https://api.preztia.co/webhooks/telegram/hook',
+      secret_token: 'secreto',
+      drop_pending_updates: true,
+      allowed_updates: ['message'],
+      max_connections: 10,
+    });
+  });
+
+  it('mapea getWebhookInfo, incluida la fecha del último error', async () => {
+    telegramReplies({
+      ok: true,
+      result: {
+        url: 'https://x/hook',
+        pending_update_count: 3,
+        last_error_date: 1_700_000_000,
+        last_error_message: 'Wrong response from the webhook: 403 Forbidden',
+      },
+    });
+
+    await expect(client.getWebhookInfo(TOKEN)).resolves.toEqual({
+      url: 'https://x/hook',
+      pendingUpdateCount: 3,
+      lastErrorMessage: 'Wrong response from the webhook: 403 Forbidden',
+      lastErrorAt: new Date(1_700_000_000_000),
+    });
+  });
+
+  it.each([401, 404])(
+    'convierte el rechazo del token (%i) en un error de dominio accionable',
+    async (code) => {
+      telegramReplies(
+        { ok: false, error_code: code, description: 'Unauthorized' },
+        code,
+      );
+
+      const error = await errorOf(client.getMe(TOKEN));
+
+      expect(error).toBeInstanceOf(DomainError);
+      expect((error as DomainError).code).toBe('TELEGRAM_INVALID_TOKEN');
+    },
+  );
+
+  it('reporta otros fallos de la API sin filtrar el token', async () => {
+    telegramReplies(
+      {
+        ok: false,
+        error_code: 400,
+        description: 'Bad Request: bad webhook: HTTPS url must be provided',
+      },
+      400,
+    );
+
+    const error = await errorOf(
+      client.setWebhook(TOKEN, {
+        url: 'http://inseguro',
+        secretToken: 's',
+        dropPendingUpdates: false,
+      }),
+    );
+
+    expect(error).toBeInstanceOf(TelegramApiError);
+    expect(error.message).toContain('HTTPS url must be provided');
+    expect(error.message).not.toContain(TOKEN);
+  });
+
+  it('ante un fallo de red no propaga la causa (que puede contener la URL con el token)', async () => {
+    fetchMock.mockRejectedValue(
+      new TypeError(`fetch failed: https://api.telegram.org/bot${TOKEN}/getMe`),
+    );
+
+    const error = await errorOf(client.getMe(TOKEN));
+
+    expect(error).toBeInstanceOf(TelegramApiError);
+    expect(error.message).not.toContain(TOKEN);
+    expect(error.cause).toBeUndefined();
+    expect(error.stack ?? '').not.toContain(TOKEN);
+  });
+});

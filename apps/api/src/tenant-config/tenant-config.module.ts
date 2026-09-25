@@ -3,11 +3,13 @@ import { TenantConfigController } from './tenant-config.controller';
 import { TenantConfigRepository } from './tenant-config.repository';
 import { AssistantConfigRepository } from './assistant-config.repository';
 import { DocumentRequirementsRepository } from './document-requirements.repository';
+import { MessagingChannelsRepository } from './messaging-channels.repository';
 
 /**
  * Módulo de CONFIGURACIÓN DE COBRO del tenant (ajustes operativos) y del ASISTENTE de WhatsApp
  * (base de conocimiento + IA). Plano de datos bajo el rol `app` + RLS y `JwtGuard`. Exporta el
- * repo operativo para que el alta de clientes aplique el cupo por defecto.
+ * repo operativo para que el alta de clientes aplique el cupo por defecto, y los canales de
+ * mensajería habilitados (WhatsApp/Telegram) para el alta de bots por zona.
  */
 @Module({
   controllers: [TenantConfigController],
@@ -15,7 +17,8 @@ import { DocumentRequirementsRepository } from './document-requirements.reposito
     TenantConfigRepository,
     AssistantConfigRepository,
     DocumentRequirementsRepository,
+    MessagingChannelsRepository,
   ],
-  exports: [TenantConfigRepository],
+  exports: [TenantConfigRepository, MessagingChannelsRepository],
 })
 export class TenantConfigModule {}

@@ -6,6 +6,7 @@ import type {
   CommittedApplicantContext,
 } from '@preztiaos/application';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { findChannelZone } from '../messaging/channel-zone';
 
 /**
  * Adaptador del puerto `ApplicantJourneyReader`: decide si un solicitante YA se comprometió con un
@@ -37,17 +38,15 @@ export class ApplicantJourneyRepository implements ApplicantJourneyReader {
         .limit(1);
       if (!committed) return null;
 
-      // Comprometido: resuelve el teléfono de atención de la zona del canal (número → zona → tel).
-      const [channelZone] = await tx
+      // Comprometido: resuelve el teléfono de atención de la zona del canal (canal → zona → tel).
+      const channelZone = await findChannelZone(tx, input.channelId);
+      if (!channelZone) return { supportPhone: null };
+      const [zone] = await tx
         .select({ supportPhone: schema.zone.supportPhone })
-        .from(schema.whatsappChannel)
-        .innerJoin(
-          schema.zone,
-          eq(schema.zone.id, schema.whatsappChannel.zoneId),
-        )
-        .where(eq(schema.whatsappChannel.phoneNumberId, input.channelId))
+        .from(schema.zone)
+        .where(eq(schema.zone.id, channelZone.zoneId))
         .limit(1);
-      return { supportPhone: channelZone?.supportPhone ?? null };
+      return { supportPhone: zone?.supportPhone ?? null };
     });
   }
 }

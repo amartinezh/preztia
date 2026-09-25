@@ -13,6 +13,8 @@ export const conversationFailureStage = pgEnum("conversation_failure_stage", [
   "AUDIO_INTAKE",
   // Captura de la ubicación compartida.
   "LOCATION_CAPTURE",
+  // Verificación del contacto de Telegram (contacto ajeno o teléfono inválido, ADR #40).
+  "CONTACT_VERIFICATION",
   // Tipo no reconocido o fallo antes de poder clasificar.
   "UNKNOWN",
 ]);

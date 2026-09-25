@@ -15,6 +15,7 @@ import { DocumentOriginalStorage } from './document-original.storage';
 import { PlanOfferRepository } from './plan-offer.repository';
 import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
 import { CreditRegisteredWhatsappNotifier } from './credit-registered.notifier';
+import { MessagingModule } from '../../messaging/messaging.module';
 import { ReExtractDocumentService } from './re-extract-document.service';
 import { AiDocumentReviewer } from '../document-reviewer';
 import { GeminiBusinessPhotoAnalyzer } from '../ai/gemini-business-photo.analyzer';
@@ -39,7 +40,7 @@ import { TenantConfigModule } from '../../tenant-config/tenant-config.module';
  * reusa el reviewer de IA, el catálogo de documentos y el pipeline de validación antifraude.
  */
 @Module({
-  imports: [PaymentPlanModule, TenantConfigModule],
+  imports: [PaymentPlanModule, TenantConfigModule, MessagingModule],
   controllers: [ApplicationReviewController],
   providers: [
     ApplicationReviewQueryRepository,

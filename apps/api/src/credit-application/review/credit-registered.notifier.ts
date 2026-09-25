@@ -3,11 +3,11 @@ import { eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type { CreditRegisteredNotifier } from '@preztiaos/application';
 import { withTenantTxFor } from '../../tenancy/unit-of-work';
-import { WhatsappTextSender } from '../../conversations/text/whatsapp-text-sender';
+import { ChannelRoutingTextSender } from '../../messaging/channel-routing.text-sender';
 
 /**
  * Adaptador del puerto `CreditRegisteredNotifier`: cuando el coordinador aprueba el expediente y se
- * genera el crédito, avisa al cliente por WhatsApp que quedó REGISTRADO y se desembolsará en breve,
+ * genera el crédito, avisa al cliente por su canal (WhatsApp o Telegram) que quedó REGISTRADO y se desembolsará en breve,
  * ofreciéndole el teléfono de atención de la zona ante inconvenientes. La presentación (texto +
  * resolución del teléfono de la zona) es responsabilidad de infraestructura.
  *
@@ -17,8 +17,8 @@ import { WhatsappTextSender } from '../../conversations/text/whatsapp-text-sende
 @Injectable()
 export class CreditRegisteredWhatsappNotifier implements CreditRegisteredNotifier {
   private readonly logger = new Logger('WhatsApp:CreditRegistered');
-  // El sender es stateless (solo usa credenciales por número + fetch); se compone aquí para reusarlo.
-  private readonly sender = new WhatsappTextSender();
+  // Router por proveedor: el aviso sale por el canal (WhatsApp o Telegram) guardado en la solicitud.
+  constructor(private readonly sender: ChannelRoutingTextSender) {}
 
   async notifyRegistered(input: {
     tenantId: string;

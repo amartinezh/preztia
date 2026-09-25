@@ -27,7 +27,8 @@ import { CollectionNoteRepositoryAdapter } from './collection-note.repository';
 import { CollectionVisitRepositoryAdapter } from './collection-visit.repository';
 import { CollectionVisitAuditLogAdapter } from './collection-visit-audit.log';
 import { CollectionLogRepository } from './collection-log.repository';
-import { WhatsappTextSender } from '../conversations/text/whatsapp-text-sender';
+import { ChannelRoutingTextSender } from '../messaging/channel-routing.text-sender';
+import { MessagingModule } from '../messaging/messaging.module';
 import { LoggingTextSender } from '../conversations/text/logging-text-sender';
 import { ConversationMessageLog } from '../conversations/conversation-message.log';
 
@@ -39,6 +40,7 @@ import { ConversationMessageLog } from '../conversations/conversation-message.lo
  * `@nestjs/schedule` activa el envío automático; el controlador, el manual.
  */
 @Module({
+  imports: [MessagingModule],
   controllers: [CollectionsController],
   providers: [
     DueCreditsRepository,
@@ -79,13 +81,12 @@ import { ConversationMessageLog } from '../conversations/conversation-message.lo
       ) => new MarkCollectionVisitedHandler(overdue, notes, visits, audit),
     },
 
-    // Envío saliente reutilizado: el adaptador real decorado para registrar el transcript.
-    WhatsappTextSender,
+    // Envío saliente reutilizado: el router por proveedor decorado para registrar el transcript.
     ConversationMessageLog,
     {
       provide: LoggingTextSender,
-      inject: [WhatsappTextSender, ConversationMessageLog],
-      useFactory: (inner: WhatsappTextSender, log: ConversationMessageLog) =>
+      inject: [ChannelRoutingTextSender, ConversationMessageLog],
+      useFactory: (inner: OutboundTextSender, log: ConversationMessageLog) =>
         new LoggingTextSender(inner, log),
     },
 

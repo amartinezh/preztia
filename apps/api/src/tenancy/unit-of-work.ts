@@ -1,5 +1,6 @@
 import { createDb, schema, type Db } from '@preztiaos/db';
 import { eq, sql } from 'drizzle-orm';
+import { channelProviderOf } from '@preztiaos/domain';
 import { tenantStorage } from './tenant-context';
 import { decryptOptionalSecret } from '../shared/secret-cipher';
 
@@ -59,6 +60,52 @@ export async function resolveZonePathByWhatsappPhone(
 ): Promise<string | null> {
   const rows = (await db.execute(
     sql`SELECT resolve_zone_path_by_whatsapp_phone(${phoneNumberId})::text AS zone_path`,
+  )) as Array<{ zone_path: string | null }>;
+  return rows[0]?.zone_path ?? null;
+}
+
+/**
+ * Resuelve el tenant del canal de mensajería (`channelId`), sea cual sea su proveedor (ADR #40).
+ * Es el punto único que usan los adaptadores; el despacho por proveedor vive solo aquí.
+ */
+export async function resolveTenantByChannel(
+  channelId: string,
+): Promise<string | null> {
+  if (channelProviderOf(channelId) === 'TELEGRAM') {
+    return resolveTenantByTelegramChannel(channelId);
+  }
+  return resolveTenantByWhatsappPhone(channelId);
+}
+
+/** Resuelve el `zone_path` del canal de mensajería (cualquier proveedor). `null` si no está mapeado. */
+export async function resolveZonePathByChannel(
+  channelId: string,
+): Promise<string | null> {
+  if (channelProviderOf(channelId) === 'TELEGRAM') {
+    return resolveZonePathByTelegramChannel(channelId);
+  }
+  return resolveZonePathByWhatsappPhone(channelId);
+}
+
+/**
+ * Tenant de un bot de Telegram por su `channelId` (`tg:<bot_id>`). SECURITY DEFINER acotada, previa
+ * al contexto de tenant, igual que `resolveTenantByWhatsappPhone`.
+ */
+async function resolveTenantByTelegramChannel(
+  channelId: string,
+): Promise<string | null> {
+  const rows = (await db.execute(
+    sql`SELECT resolve_tenant_by_telegram_channel(${channelId}) AS tenant_id`,
+  )) as Array<{ tenant_id: string | null }>;
+  return rows[0]?.tenant_id ?? null;
+}
+
+/** `zone_path` de un bot de Telegram por su `channelId`. SECURITY DEFINER (previa al tenant). */
+async function resolveZonePathByTelegramChannel(
+  channelId: string,
+): Promise<string | null> {
+  const rows = (await db.execute(
+    sql`SELECT resolve_zone_path_by_telegram_channel(${channelId})::text AS zone_path`,
   )) as Array<{ zone_path: string | null }>;
   return rows[0]?.zone_path ?? null;
 }

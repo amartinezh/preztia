@@ -21,6 +21,7 @@ export * from "./borrower-list";
 export * from "./audit-log";
 export * from "./idempotency-key";
 export * from "./whatsapp-channel";
+export * from "./telegram-channel";
 export * from "./credit-application-rejection";
 export * from "./borrower-contact";
 export * from "./tenant-bank-account";

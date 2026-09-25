@@ -6,7 +6,7 @@ import {
   TenantAssistantConfigRepository,
 } from '@preztiaos/application';
 import {
-  resolveTenantByWhatsappPhone,
+  resolveTenantByChannel,
   withTenantTxFor,
 } from '../../tenancy/unit-of-work';
 import { decryptOptionalSecret } from '../../shared/secret-cipher';
@@ -23,11 +23,11 @@ export class TenantConfigDrizzleRepository implements TenantAssistantConfigRepos
   async findByChannelId(
     channelId: string,
   ): Promise<TenantAssistantConfig | null> {
-    const tenantId = await resolveTenantByWhatsappPhone(channelId);
+    const tenantId = await resolveTenantByChannel(channelId);
     if (!tenantId) {
       // El número no está mapeado a ningún tenant/zona: el asistente no responderá.
       this.logger.warn(
-        `Canal ${channelId} sin tenant asociado (whatsapp_channel)`,
+        `Canal ${channelId} sin tenant asociado (canal no mapeado)`,
       );
       return null;
     }

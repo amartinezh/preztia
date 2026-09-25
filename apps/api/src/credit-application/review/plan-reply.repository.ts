@@ -7,7 +7,7 @@ import type {
 } from '@preztiaos/application';
 import type { PlanOfferStatus } from '@preztiaos/domain';
 import {
-  resolveTenantByWhatsappPhone,
+  resolveTenantByChannel,
   withTenantTxFor,
 } from '../../tenancy/unit-of-work';
 
@@ -28,7 +28,7 @@ export class PlanReplyRepository implements PlanReplyStore {
     channelId: string;
     applicantPhone: string;
   }): Promise<ActiveOfferSnapshot | null> {
-    const tenantId = await resolveTenantByWhatsappPhone(input.channelId);
+    const tenantId = await resolveTenantByChannel(input.channelId);
     if (!tenantId) return null;
 
     return withTenantTxFor(tenantId, async (tx) => {

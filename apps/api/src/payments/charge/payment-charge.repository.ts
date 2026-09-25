@@ -6,7 +6,7 @@ import type {
   PaymentChargeSessionStore,
 } from '@preztiaos/application';
 import {
-  resolveTenantByWhatsappPhone,
+  resolveTenantByChannel,
   withTenantTxFor,
 } from '../../tenancy/unit-of-work';
 
@@ -22,7 +22,7 @@ export class PaymentChargeDrizzleRepository implements PaymentChargeSessionStore
     channelId: string;
     phone: string;
   }): Promise<OpenChargeSession | null> {
-    const tenantId = await resolveTenantByWhatsappPhone(input.channelId);
+    const tenantId = await resolveTenantByChannel(input.channelId);
     if (!tenantId) return null;
     return withTenantTxFor(tenantId, async (tx) => {
       const [row] = await tx

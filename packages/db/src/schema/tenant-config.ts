@@ -53,6 +53,21 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   visitOverdueThreshold: 3,
 };
 
+// Proveedores de mensajería habilitados en el tenant (ADR #40). Espejo de `MessagingChannelsSettings`
+// del dominio, que valida sus invariantes (≥ 1 habilitado; el preferido para cobranza, habilitado).
+export interface MessagingChannelsSettings {
+  readonly whatsappEnabled: boolean;
+  readonly telegramEnabled: boolean;
+  readonly preferredProactiveChannel: "WHATSAPP" | "TELEGRAM";
+}
+
+// Solo WhatsApp: es el comportamiento de todos los tenants anteriores a Telegram.
+export const DEFAULT_MESSAGING_CHANNELS: MessagingChannelsSettings = {
+  whatsappEnabled: true,
+  telegramEnabled: false,
+  preferredProactiveChannel: "WHATSAPP",
+};
+
 // Configuración por tenant. Una fila por empresa (tenant_id es la PK y la clave RLS).
 export const tenantConfig = pgTable(
   "tenant_config",
@@ -80,6 +95,11 @@ export const tenantConfig = pgTable(
       .$type<CollectionReminderSettings>()
       .notNull()
       .default(DEFAULT_COLLECTION_REMINDER_SETTINGS),
+    // Proveedores de mensajería (WhatsApp/Telegram) habilitados. Default = DEFAULT_MESSAGING_CHANNELS.
+    messagingChannels: jsonb("messaging_channels")
+      .$type<MessagingChannelsSettings>()
+      .notNull()
+      .default(DEFAULT_MESSAGING_CHANNELS),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

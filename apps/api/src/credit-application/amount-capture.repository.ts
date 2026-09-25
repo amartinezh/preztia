@@ -6,7 +6,7 @@ import type {
   AwaitingAmountApplication,
 } from '@preztiaos/application';
 import {
-  resolveTenantByWhatsappPhone,
+  resolveTenantByChannel,
   withTenantTxFor,
 } from '../tenancy/unit-of-work';
 
@@ -21,7 +21,7 @@ export class AmountCaptureRepository implements AmountCaptureStore {
     channelId: string;
     applicant: string;
   }): Promise<AwaitingAmountApplication | null> {
-    const tenantId = await resolveTenantByWhatsappPhone(input.channelId);
+    const tenantId = await resolveTenantByChannel(input.channelId);
     if (!tenantId) return null;
 
     return withTenantTxFor(tenantId, async (tx) => {

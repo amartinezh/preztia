@@ -9,3 +9,6 @@ coverage/
 .env.*
 !.env.example
 .DS_Store
+
+# Claude Code — permisos personales (no se versionan)
+.claude/settings.local.json

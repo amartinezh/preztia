@@ -5,7 +5,7 @@ import type {
   ChargeableCreditReader,
 } from '@preztiaos/application';
 import {
-  resolveTenantByWhatsappPhone,
+  resolveTenantByChannel,
   withTenantTxFor,
   type Tx,
 } from '../../tenancy/unit-of-work';
@@ -30,7 +30,7 @@ export class ChargeableCreditDrizzleReader implements ChargeableCreditReader {
     channelId: string;
     phone: string;
   }): Promise<ChargeableCredit | null> {
-    const tenantId = await resolveTenantByWhatsappPhone(input.channelId);
+    const tenantId = await resolveTenantByChannel(input.channelId);
     if (!tenantId) return null;
 
     return withTenantTxFor(tenantId, async (tx) => {

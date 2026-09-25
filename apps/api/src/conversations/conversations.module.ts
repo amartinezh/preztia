@@ -70,7 +70,9 @@ import { LocationDispatchAdapter } from './adapters/location-dispatch.adapter';
 import { ApplicantLocationRepository } from '../credit-application/applicant-location.repository';
 import { TenantConfigDrizzleRepository } from './text/tenant-config.repository';
 import { KnowledgeAssistantRouter } from './ai/knowledge-assistant.router';
-import { WhatsappTextSender } from './text/whatsapp-text-sender';
+import { ChannelRoutingTextSender } from '../messaging/channel-routing.text-sender';
+import { ChannelRoutingMediaDownloader } from '../messaging/channel-routing.media-downloader';
+import { MessagingModule } from '../messaging/messaging.module';
 import { LoggingTextSender } from './text/logging-text-sender';
 import { ConversationMessageLog } from './conversation-message.log';
 import { ConversationFailureLog } from './conversation-failure.log';
@@ -92,11 +94,10 @@ import { BrasilApiDddLookup } from '../credit-application/validation/brasilapi-d
 import { SerproCpfVerifier } from '../credit-application/validation/serpro-cpf.client';
 import { AiDocumentReviewer } from '../credit-application/document-reviewer';
 import { GeminiBusinessPhotoAnalyzer } from '../credit-application/ai/gemini-business-photo.analyzer';
-import { WhatsappMediaDownloader } from '../credit-application/whatsapp-media.downloader';
 import { MinioDocumentStorage } from '../credit-application/minio-document.storage';
 import { StructuralAntifraudService } from '../credit-application/antifraud.service';
 import { ProcessedInboundMessageDeduplicator } from '../credit-application/inbound-message-deduplicator';
-import { WhatsappTenantResolver } from '../credit-application/tenant-resolver';
+import { ChannelTenantResolver } from '../credit-application/tenant-resolver';
 import { CreditApplicationPendingDocumentReminder } from './text/pending-document-reminder.adapter';
 import { ApplicantJourneyRepository } from './applicant-journey.repository';
 import {
@@ -138,7 +139,7 @@ import {
  * los casos de uso se componen por inyección de dependencias (inversión de dependencias).
  */
 @Module({
-  imports: [PaymentsModule, PaymentPlanModule],
+  imports: [PaymentsModule, PaymentPlanModule, MessagingModule],
   controllers: [WhatsappWebhookController],
   providers: [
     // Captura del monto solicitado por WhatsApp (primer paso de la solicitud).
@@ -312,12 +313,11 @@ import {
     // Puertos del caso de uso de texto → adaptadores.
     { provide: CONFIG_REPOSITORY, useClass: TenantConfigDrizzleRepository },
     { provide: KNOWLEDGE_ASSISTANT, useClass: KnowledgeAssistantRouter },
-    // El envío de texto se decora para registrar el mensaje saliente en el transcript.
-    WhatsappTextSender,
+    // El envío de texto (router por proveedor) se decora para registrar el saliente en el transcript.
     {
       provide: OUTBOUND_TEXT_SENDER,
-      inject: [WhatsappTextSender, ConversationMessageLog],
-      useFactory: (inner: WhatsappTextSender, log: ConversationMessageLog) =>
+      inject: [ChannelRoutingTextSender, ConversationMessageLog],
+      useFactory: (inner: OutboundTextSender, log: ConversationMessageLog) =>
         new LoggingTextSender(inner, log),
     },
     {
@@ -393,14 +393,14 @@ import {
       provide: BUSINESS_PHOTO_VISION_ANALYZER,
       useClass: GeminiBusinessPhotoAnalyzer,
     },
-    { provide: MEDIA_DOWNLOADER, useClass: WhatsappMediaDownloader },
+    { provide: MEDIA_DOWNLOADER, useExisting: ChannelRoutingMediaDownloader },
     { provide: DOCUMENT_STORAGE, useClass: MinioDocumentStorage },
     { provide: ANTIFRAUD_SERVICE, useClass: StructuralAntifraudService },
     {
       provide: INBOUND_MESSAGE_DEDUPLICATOR,
       useClass: ProcessedInboundMessageDeduplicator,
     },
-    { provide: TENANT_RESOLVER, useClass: WhatsappTenantResolver },
+    { provide: TENANT_RESOLVER, useClass: ChannelTenantResolver },
 
     // Caso de uso: inicia/retoma la solicitud (implementa CreditApplicationStarter).
     {

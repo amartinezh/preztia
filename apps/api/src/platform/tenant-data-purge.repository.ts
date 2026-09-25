@@ -8,7 +8,7 @@ import { withPlatformTx } from './platform-uow';
  * foráneas reales del esquema (la mayoría de relaciones no tienen constraint), por eso el
  * orden es tolerante. Estas son las tablas TRANSACCIONALES de un tenant; NO se listan las
  * de CONFIGURACIÓN que se conservan (tenant, app_user, tenant_config, zone, zone_coordinator,
- * whatsapp_channel, tenant_bank_account, bank_credential, payment_plan,
+ * whatsapp_channel, telegram_channel, tenant_bank_account, bank_credential, payment_plan,
  * credit_document_requirement).
  *
  * Al agregar una tabla de negocio nueva, decide si es transaccional (agrégala aquí, en el
@@ -42,6 +42,7 @@ const PURGE_ORDER: readonly string[] = [
   'credit_application',
   // Conversaciones, clientes y varios (sin FKs duras entre sí).
   'conversation_message',
+  'telegram_chat_link', // vínculo chat de Telegram ⇄ teléfono (PII del cliente)
   'borrower_list_member',
   'borrower_list',
   'borrower_note',

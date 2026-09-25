@@ -2,8 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { schema } from '@preztiaos/db';
 import { type InboundMessage } from '@preztiaos/domain';
 import {
-  resolveTenantByWhatsappPhone,
-  resolveZonePathByWhatsappPhone,
+  resolveTenantByChannel,
+  resolveZonePathByChannel,
   withTenantTxFor,
 } from '../tenancy/unit-of-work';
 
@@ -35,9 +35,9 @@ export class ConversationFailureLog {
 
   async record(message: InboundMessage, error: unknown): Promise<void> {
     try {
-      const tenantId = await resolveTenantByWhatsappPhone(message.channelId);
+      const tenantId = await resolveTenantByChannel(message.channelId);
       if (!tenantId) return; // canal sin tenant: no hay dónde registrar
-      const zonePath = await resolveZonePathByWhatsappPhone(message.channelId);
+      const zonePath = await resolveZonePathByChannel(message.channelId);
       await withTenantTxFor(tenantId, async (tx) => {
         await tx.insert(schema.conversationFailure).values({
           tenantId,

@@ -4,7 +4,7 @@ import type {
   PlanOfferNotifier,
   ScheduledInstallment,
 } from '@preztiaos/application';
-import { WhatsappTextSender } from '../../conversations/text/whatsapp-text-sender';
+import { ChannelRoutingTextSender } from '../../messaging/channel-routing.text-sender';
 
 const FREQUENCY_LABEL: Record<PaymentPlan['frequency'], string> = {
   DAILY: 'diario',
@@ -15,13 +15,13 @@ const FREQUENCY_LABEL: Record<PaymentPlan['frequency'], string> = {
 
 /**
  * Adaptador del puerto `PlanOfferNotifier`: formatea la oferta (menú de planes / cronograma) y la
- * envía por WhatsApp reusando el `WhatsappTextSender` del contexto de Conversaciones (sin nuevo
+ * envía por el canal del cliente (WhatsApp o Telegram) con el router de mensajería (sin nuevo
  * cliente HTTP). La presentación (texto del mensaje) es responsabilidad de infraestructura.
  */
 @Injectable()
 export class PlanOfferWhatsappNotifier implements PlanOfferNotifier {
-  // El sender es stateless (solo usa env + fetch); se compone aquí para reusar su lógica de envío.
-  private readonly sender = new WhatsappTextSender();
+  // Router por proveedor: el aviso sale por el canal (WhatsApp o Telegram) guardado en la solicitud.
+  constructor(private readonly sender: ChannelRoutingTextSender) {}
 
   async sendPlanMenu(input: {
     channelId: string;

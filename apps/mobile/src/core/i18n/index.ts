@@ -680,6 +680,7 @@ const es = {
   "inbox.failureStage.DOCUMENT_INTAKE": "Recepción de documento",
   "inbox.failureStage.AUDIO_INTAKE": "Nota de voz",
   "inbox.failureStage.LOCATION_CAPTURE": "Ubicación",
+  "inbox.failureStage.CONTACT_VERIFICATION": "Verificación de contacto (Telegram)",
   "inbox.failureStage.UNKNOWN": "Desconocida",
   // Solicitudes: filtros + rechazos + canales
   "review.filter.all": "Todas",

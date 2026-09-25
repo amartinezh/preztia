@@ -13,7 +13,8 @@ import {
 import { ManualVerifyPaymentRepository } from './manual-verify-payment.repository';
 import { PaymentReceiptOriginalStorage } from './payment-receipt-original.storage';
 import { ConversationMessageLog } from '../conversations/conversation-message.log';
-import { WhatsappTextSender } from '../conversations/text/whatsapp-text-sender';
+import { ChannelRoutingTextSender } from '../messaging/channel-routing.text-sender';
+import { MessagingModule } from '../messaging/messaging.module';
 import { LoggingTextSender } from '../conversations/text/logging-text-sender';
 import { GeminiPaymentClassifier } from './ai/gemini-payment.classifier';
 import { CreditPortfolioDrizzleRepository } from './credit-portfolio.repository';
@@ -78,7 +79,7 @@ function reconciliationMaxAttempts(): number {
  * importa para enrutar el media entrante hacia SubmitPaymentReceiptHandler.
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, MessagingModule],
   controllers: [
     PaymentsController,
     MercadoPagoWebhookController,
@@ -178,7 +179,7 @@ function reconciliationMaxAttempts(): number {
         SETTLEMENT_SOURCE,
         IncomingCreditDrizzleRepository,
         PaymentReconciliationDrizzleRepository,
-        WhatsappTextSender,
+        ChannelRoutingTextSender,
         ConversationMessageLog,
         SettlementReviewSettingsReader,
       ],
@@ -186,7 +187,7 @@ function reconciliationMaxAttempts(): number {
         source: SettlementSource,
         credits: IncomingCreditDrizzleRepository,
         reconciliation: PaymentReconciliationDrizzleRepository,
-        sender: WhatsappTextSender,
+        sender: ChannelRoutingTextSender,
         log: ConversationMessageLog,
         settings: SettlementReviewSettingsReader,
       ) =>
@@ -199,9 +200,8 @@ function reconciliationMaxAttempts(): number {
         ),
     },
 
-    // Envío de WhatsApp con registro en el transcript (instancia propia del slice).
+    // Registro del transcript de los mensajes salientes (el envío lo hace el router de MessagingModule).
     ConversationMessageLog,
-    WhatsappTextSender,
     // El caso de uso se decora con la conciliación de settlement post-comprobante: si el
     // crédito real ya llegó (webhook de PicPay), el comprobante se confirma al instante.
     {
@@ -212,7 +212,7 @@ function reconciliationMaxAttempts(): number {
         PAYMENT_ANTIFRAUD_SERVICE,
         BANK_PAYMENT_VERIFIER,
         PAYMENT_RECEIPT_STORAGE,
-        WhatsappTextSender,
+        ChannelRoutingTextSender,
         ConversationMessageLog,
         RunSettlementReconciliationService,
       ],
@@ -222,7 +222,7 @@ function reconciliationMaxAttempts(): number {
         antifraud: PaymentAntifraudService,
         bank: BankPaymentVerifier,
         storage: PaymentReceiptStorage,
-        sender: WhatsappTextSender,
+        sender: ChannelRoutingTextSender,
         log: ConversationMessageLog,
         settle: RunSettlementReconciliationService,
       ) =>
@@ -244,14 +244,14 @@ function reconciliationMaxAttempts(): number {
         RECONCILIATION_REPOSITORY,
         TENANT_BANK_ACCOUNT_REPOSITORY,
         BANK_PAYMENT_VERIFIER,
-        WhatsappTextSender,
+        ChannelRoutingTextSender,
         ConversationMessageLog,
       ],
       useFactory: (
         repo: ReconciliationRepository,
         accounts: TenantBankAccountRepository,
         bank: BankPaymentVerifier,
-        sender: WhatsappTextSender,
+        sender: ChannelRoutingTextSender,
         log: ConversationMessageLog,
       ) =>
         new ReconcilePendingPaymentsHandler(
