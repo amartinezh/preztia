@@ -15,6 +15,7 @@ import {
 } from '@preztiaos/application';
 import { TenantConfigModule } from '../tenant-config/tenant-config.module';
 import { ConversationsModule } from '../conversations/conversations.module';
+import { MessagingModule } from '../messaging/messaging.module';
 import { MessagingChannelsRepository } from '../tenant-config/messaging-channels.repository';
 import { TelegramChannelController } from './telegram-channel.controller';
 import { TelegramChannelRepository } from './telegram-channel.repository';
@@ -33,14 +34,12 @@ import {
  * Cada puerto de la aplicación se enlaza con su adaptador (Bot API, Drizzle, entorno, CSPRNG).
  */
 @Module({
-  imports: [TenantConfigModule, ConversationsModule],
+  imports: [TenantConfigModule, ConversationsModule, MessagingModule],
   controllers: [TelegramChannelController, TelegramWebhookController],
   providers: [
     TelegramChannelRepository,
-    TelegramBotApiClient,
     TelegramWebhookEndpointConfig,
     RandomTelegramWebhookSecrets,
-    TelegramChatLinkRepository,
     TelegramContactPrompterAdapter,
 
     // Entrada: identificación del remitente por su teléfono verificado (gate de contacto).

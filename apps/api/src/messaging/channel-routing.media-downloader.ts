@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { DownloadedMedia, MediaDownloader } from '@preztiaos/application';
 import type { MediaRef } from '@preztiaos/domain';
 import { WhatsappMediaDownloader } from '../credit-application/whatsapp-media.downloader';
+import { TelegramMediaDownloader } from '../telegram/telegram-media.downloader';
 import { driverFor, type ChannelDrivers } from './channel-driver';
 
 /**
@@ -12,8 +13,11 @@ import { driverFor, type ChannelDrivers } from './channel-driver';
 export class ChannelRoutingMediaDownloader implements MediaDownloader {
   private readonly drivers: ChannelDrivers<MediaDownloader>;
 
-  constructor(whatsapp: WhatsappMediaDownloader) {
-    this.drivers = { WHATSAPP: whatsapp };
+  constructor(
+    whatsapp: WhatsappMediaDownloader,
+    telegram: TelegramMediaDownloader,
+  ) {
+    this.drivers = { WHATSAPP: whatsapp, TELEGRAM: telegram };
   }
 
   async download(media: MediaRef, channelId: string): Promise<DownloadedMedia> {

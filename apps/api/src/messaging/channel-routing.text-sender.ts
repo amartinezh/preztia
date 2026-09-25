@@ -4,6 +4,7 @@ import type {
   OutboundTextSender,
 } from '@preztiaos/application';
 import { WhatsappTextSender } from '../conversations/text/whatsapp-text-sender';
+import { TelegramTextSender } from '../telegram/telegram-text-sender';
 import { driverFor, type ChannelDrivers } from './channel-driver';
 
 /**
@@ -15,8 +16,8 @@ import { driverFor, type ChannelDrivers } from './channel-driver';
 export class ChannelRoutingTextSender implements OutboundTextSender {
   private readonly drivers: ChannelDrivers<OutboundTextSender>;
 
-  constructor(whatsapp: WhatsappTextSender) {
-    this.drivers = { WHATSAPP: whatsapp };
+  constructor(whatsapp: WhatsappTextSender, telegram: TelegramTextSender) {
+    this.drivers = { WHATSAPP: whatsapp, TELEGRAM: telegram };
   }
 
   async sendText(to: OutboundRecipient, body: string): Promise<void> {

@@ -140,4 +140,85 @@ describe('TelegramBotApiClient', () => {
     expect(error.cause).toBeUndefined();
     expect(error.stack ?? '').not.toContain(TOKEN);
   });
+
+  it('espera lo que Telegram pide ante un 429 y reintenta', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: false,
+            error_code: 429,
+            description: 'Too Many Requests: retry after 0',
+            parameters: { retry_after: 0 },
+          }),
+          { status: 429 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true, result: {} })),
+      );
+
+    await client.sendMessage(TOKEN, {
+      chatId: '1',
+      text: 'hola',
+      parseMode: 'HTML',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      chat_id: '1',
+      text: 'hola',
+      parse_mode: 'HTML',
+    });
+  });
+
+  it('no espera una penalización larga: la reporta con su retry_after', async () => {
+    telegramReplies(
+      {
+        ok: false,
+        error_code: 429,
+        description: 'Too Many Requests',
+        parameters: { retry_after: 600 },
+      },
+      429,
+    );
+
+    const error = await errorOf(
+      client.sendMessage(TOKEN, { chatId: '1', text: 'hola' }),
+    );
+
+    expect(error).toBeInstanceOf(TelegramApiError);
+    expect((error as TelegramApiError).retryAfterSeconds).toBe(600);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('obtiene la ruta del archivo y lo descarga sin exceder el límite', async () => {
+    telegramReplies({
+      ok: true,
+      result: { file_path: 'photos/f.jpg', file_size: 3 },
+    });
+    await expect(client.getFile(TOKEN, 'file-1')).resolves.toEqual({
+      filePath: 'photos/f.jpg',
+      fileSize: 3,
+    });
+
+    fetchMock.mockResolvedValue(new Response(new Uint8Array([1, 2, 3])));
+    await expect(
+      client.downloadFile(TOKEN, 'photos/f.jpg', 10),
+    ).resolves.toEqual(new Uint8Array([1, 2, 3]));
+    const [url] = fetchMock.mock.calls.at(-1) as [string];
+    expect(url).toBe(`https://api.telegram.org/file/bot${TOKEN}/photos/f.jpg`);
+  });
+
+  it('corta la descarga que excede el límite, sin filtrar el token', async () => {
+    fetchMock.mockResolvedValue(new Response(new Uint8Array(11)));
+
+    const error = await errorOf(
+      client.downloadFile(TOKEN, 'documents/x.pdf', 10),
+    );
+
+    expect(error).toBeInstanceOf(TelegramApiError);
+    expect(error.message).not.toContain(TOKEN);
+  });
 });

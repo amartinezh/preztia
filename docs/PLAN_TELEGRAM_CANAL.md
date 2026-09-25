@@ -1,6 +1,6 @@
 # Plan — Canal Telegram (driver adicional a WhatsApp, por zona)
 
-> **Estado:** Fase 0 ✅ · Fases 1–2 🟡 código listo, falta migración (0055 generada + 0056 RLS/funciones) · Fases 3–6 pendientes. **ADR propuesto:** #40.
+> **Estado:** Fase 0 ✅ · Fases 1–3 🟡 código listo, falta migración (0055 generada + 0056 RLS/funciones) · Fases 4–6 pendientes. **ADR propuesto:** #40.
 > **Alcance:** que un tenant pueda operar con **WhatsApp, Telegram o ambos**, configurados desde
 > Ajustes (habilitación por tenant) y en el panel de Zonas (un bot por zona, igual que un número de
 > WhatsApp por zona), con **paridad funcional completa**: originación (monto → documentos KYC →
@@ -473,6 +473,15 @@ descarga por prefijo; regresión: **toda la suite actual de WhatsApp sigue verde
 
 ---
 
+### Bitácora de la Fase 3 (código listo; depende de la migración de la Fase 1)
+
+- `TelegramTextSender`: teléfono → chat vinculado; `NOT_LINKED` / `BLOCKED` / `NO_BOT` como `TelegramRecipientUnreachableError` explícito, así que el mensaje NO se registra en el transcript como enviado. Un 403 marca `blocked_at`. Si Telegram no puede interpretar el HTML, se reenvía una vez en texto plano. Los textos de más de 4000 caracteres se parten por párrafo, línea o espacio.
+- `whatsappMarkupToTelegramHtml`: `*b*` `_i_` `~s~` `` `code` `` ` ```pre``` ` → HTML escapado. Solo convierte en límites de palabra (respeta `pix_key`, `2*3*4` y los correos) y no interpreta nada dentro del código.
+- `TelegramMediaDownloader`: `getFile` + descarga con tope de 20 MB (declarado y real). Si el documento no trae mime, se deduce por la extensión.
+- Cliente de la Bot API: ante un 429 espera el `retry_after` (hasta 30 s, 2 reintentos); una penalización más larga se reporta con `retryAfterSeconds`.
+- `MessagingModule` registra ambos drivers; el contenedor real resuelve `drivers = { WHATSAPP, TELEGRAM }`. Instrucciones del asistente redactadas sin nombrar un canal concreto.
+- Queda para la Fase 6 (R2): sugerir "enviar como archivo" en la solicitud de documentos KYC cuando el canal es Telegram, porque las fotos llegan recomprimidas.
+
 ### Bitácora de la Fase 2 (código listo; depende de la migración de la Fase 1)
 
 - Dominio: [telegram-contact.ts](../packages/domain/src/conversations/telegram-contact.ts) — `verifiedPhoneOf` (contacto PROPIO: `contact.user_id === from.id`; un contacto sin `user_id` también se rechaza; normaliza a E.164 sin `+`) y `telegramInboundMessageId` (`tg:<bot>:<chat>:<message_id>`).
@@ -480,7 +489,6 @@ descarga por prefijo; regresión: **toda la suite actual de WhatsApp sigue verde
 - Infra: `POST /webhooks/telegram/:hookId` (forma del id validada antes de la BD, secret comparado por SHA-256 + `timingSafeEqual`, 403 en todo caso no autenticado; tras autenticar, siempre 200); `toTelegramInbound` (solo chats privados, no bots; foto de mayor resolución); `TelegramChatLinkRepository`; `TelegramContactPrompterAdapter` (teclado `request_contact`). Los mensajes de verificación NO van al transcript (sin teléfono al que atribuirlos).
 - Fallos: un fallo técnico al vincular un contacto propio se registra con la etapa `CONTACT_VERIFICATION`; un contacto ajeno o inválido no es un fallo nuestro y no se atribuye.
 - Resuelto de paso: la purga de datos del tenant no borraba `conversation_failure` ni `credit_application_document_file`; esta última tiene una FK a `credit_application`, así que la purga fallaba entera para cualquier tenant con archivos KYC. Nueva guardia `tenant-data-purge.spec.ts`: toda tabla con `tenant_id` debe estar purgada o conservada explícitamente, en orden FK-seguro.
-- **Pendiente para la Fase 3:** las respuestas a un chat identificado siguen fallando en el envío (`driverFor` → "TELEGRAM sin integración"), y el fallo queda registrado en la bitácora. La Fase 3 registra el driver de Telegram en `MessagingModule`.
 
 ### Bitácora de la Fase 1 (código listo; falta `db:generate` + migración RLS)
 

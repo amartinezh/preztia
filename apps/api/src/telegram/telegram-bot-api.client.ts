@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { DomainError } from '@preztiaos/domain';
 import type {
   TelegramBotGateway,
@@ -18,6 +19,11 @@ const WEBHOOK_MAX_CONNECTIONS = 10;
 // Respuestas de la Bot API ante un token inválido (401) o mal formado (404).
 const INVALID_TOKEN_CODES = new Set([401, 404]);
 const MS_PER_SECOND = 1000;
+// Límite de envío (429): Telegram indica cuánto esperar (`retry_after`). Se espera y reintenta
+// solo si la espera es corta; una espera larga se reporta (el llamador decide, p. ej. el cron).
+const RATE_LIMIT_MAX_RETRIES = 2;
+const RATE_LIMIT_MAX_WAIT_SECONDS = 30;
+const RATE_LIMITED = 429;
 
 /** Error técnico de la Bot API. NUNCA lleva la URL (contiene el token) ni la causa original. */
 export class TelegramApiError extends Error {
@@ -25,6 +31,8 @@ export class TelegramApiError extends Error {
     readonly method: string,
     readonly errorCode: number | null,
     description: string,
+    /** Segundos que Telegram pide esperar ante un 429; null en cualquier otro fallo. */
+    readonly retryAfterSeconds: number | null = null,
   ) {
     super(
       `Telegram ${method} falló (${errorCode ?? 'sin respuesta'}): ${description}`,
@@ -52,6 +60,8 @@ export type TelegramReplyMarkup =
 export interface TelegramOutgoingMessage {
   readonly chatId: string;
   readonly text: string;
+  /** `HTML` para el texto ya traducido por `whatsappMarkupToTelegramHtml`; ausente = plano. */
+  readonly parseMode?: 'HTML';
   readonly replyMarkup?: TelegramReplyMarkup;
 }
 
@@ -60,6 +70,18 @@ interface BotApiResponse<T> {
   result?: T;
   error_code?: number;
   description?: string;
+  parameters?: { retry_after?: number };
+}
+
+interface GetFileResult {
+  file_path?: string;
+  file_size?: number;
+}
+
+/** Archivo alojado en Telegram listo para descargar (la ruta caduca en ~1 h). */
+export interface TelegramFileLocation {
+  readonly filePath: string;
+  readonly fileSize: number | null;
 }
 
 interface GetMeResult {
@@ -105,7 +127,7 @@ export class TelegramBotApiClient implements TelegramBotGateway {
     });
   }
 
-  /** Envía un mensaje de texto a un chat (texto plano; teclado opcional). */
+  /** Envía un mensaje de texto a un chat (plano o HTML; teclado opcional). */
   async sendMessage(
     botToken: string,
     message: TelegramOutgoingMessage,
@@ -113,8 +135,61 @@ export class TelegramBotApiClient implements TelegramBotGateway {
     await this.call<unknown>(botToken, 'sendMessage', {
       chat_id: message.chatId,
       text: message.text,
+      ...(message.parseMode ? { parse_mode: message.parseMode } : {}),
       ...(message.replyMarkup ? { reply_markup: message.replyMarkup } : {}),
     });
+  }
+
+  /** Ruta de descarga de un archivo recibido (paso 1 de 2). */
+  async getFile(
+    botToken: string,
+    fileId: string,
+  ): Promise<TelegramFileLocation> {
+    const file = await this.call<GetFileResult>(botToken, 'getFile', {
+      file_id: fileId,
+    });
+    if (!file.file_path) {
+      throw new TelegramApiError(
+        'getFile',
+        null,
+        'Telegram no devolvió la ruta del archivo',
+      );
+    }
+    return { filePath: file.file_path, fileSize: file.file_size ?? null };
+  }
+
+  /**
+   * Descarga el binario de un archivo (paso 2 de 2). Corta si excede `maxBytes`: la Bot API no
+   * entrega archivos de más de 20 MB y un binario mayor no se deja cargar en memoria.
+   */
+  async downloadFile(
+    botToken: string,
+    filePath: string,
+    maxBytes: number,
+  ): Promise<Uint8Array> {
+    let res: Response;
+    try {
+      res = await fetchWithRetry(
+        `${baseUrl()}/file/bot${botToken}/${filePath}`,
+        {
+          method: 'GET',
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        },
+      );
+    } catch {
+      throw new TelegramApiError('downloadFile', null, 'Telegram no respondió');
+    }
+    if (!res.ok)
+      throw new TelegramApiError(
+        'downloadFile',
+        res.status,
+        'descarga rechazada',
+      );
+    const declared = Number(res.headers.get('content-length') ?? 0);
+    if (declared > maxBytes) throw tooLarge();
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength > maxBytes) throw tooLarge();
+    return bytes;
   }
 
   async getWebhookInfo(botToken: string): Promise<TelegramWebhookInfo> {
@@ -134,21 +209,18 @@ export class TelegramBotApiClient implements TelegramBotGateway {
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<T> {
-    const body = await this.post<T>(botToken, method, params);
-    if (body.ok && body.result !== undefined) return body.result;
-
-    const code = body.error_code ?? null;
-    if (code !== null && INVALID_TOKEN_CODES.has(code)) {
-      throw new DomainError(
-        'Telegram rechazó el token del bot: revísalo en BotFather',
-        'TELEGRAM_INVALID_TOKEN',
-      );
+    for (let retry = 0; ; retry++) {
+      const body = await this.post<T>(botToken, method, params);
+      if (body.ok && body.result !== undefined) return body.result;
+      const waitSeconds = body.parameters?.retry_after ?? null;
+      const canWait =
+        body.error_code === RATE_LIMITED &&
+        waitSeconds !== null &&
+        waitSeconds <= RATE_LIMIT_MAX_WAIT_SECONDS &&
+        retry < RATE_LIMIT_MAX_RETRIES;
+      if (!canWait) throw failureOf(method, body);
+      await sleep(waitSeconds * MS_PER_SECOND);
     }
-    throw new TelegramApiError(
-      method,
-      code,
-      body.description ?? 'error desconocido',
-    );
   }
 
   private async post<T>(
@@ -174,6 +246,31 @@ export class TelegramBotApiClient implements TelegramBotGateway {
       throw new TelegramApiError(method, res.status, 'respuesta no JSON');
     }
   }
+}
+
+/** Error que corresponde a una respuesta fallida de la Bot API. */
+function failureOf(method: string, body: BotApiResponse<unknown>): Error {
+  const code = body.error_code ?? null;
+  if (code !== null && INVALID_TOKEN_CODES.has(code)) {
+    return new DomainError(
+      'Telegram rechazó el token del bot: revísalo en BotFather',
+      'TELEGRAM_INVALID_TOKEN',
+    );
+  }
+  return new TelegramApiError(
+    method,
+    code,
+    body.description ?? 'error desconocido',
+    body.parameters?.retry_after ?? null,
+  );
+}
+
+function tooLarge(): TelegramApiError {
+  return new TelegramApiError(
+    'downloadFile',
+    null,
+    'el archivo excede el tamaño permitido',
+  );
 }
 
 function baseUrl(): string {

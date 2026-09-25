@@ -36,6 +36,55 @@ export class TelegramChatLinkRepository implements TelegramChatLinkStore {
     });
   }
 
+  /**
+   * Chat vinculado al teléfono verificado en este bot (para enviarle mensajes), o `null` si ese
+   * teléfono nunca compartió su contacto con el bot. Informa si el usuario bloqueó el bot.
+   */
+  async chatForPhone(input: {
+    tenantId: string;
+    channelId: string;
+    phone: string;
+  }): Promise<{ chatId: string; blocked: boolean } | null> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const [row] = await tx
+        .select({
+          chatId: schema.telegramChatLink.chatId,
+          blockedAt: schema.telegramChatLink.blockedAt,
+        })
+        .from(schema.telegramChatLink)
+        .where(
+          and(
+            eq(schema.telegramChatLink.channelId, input.channelId),
+            eq(schema.telegramChatLink.phone, input.phone),
+          ),
+        )
+        .limit(1);
+      return row
+        ? { chatId: row.chatId, blocked: row.blockedAt !== null }
+        : null;
+    });
+  }
+
+  /** El usuario bloqueó el bot (403 al enviar): no se le vuelve a escribir hasta que regrese. */
+  async markBlocked(input: {
+    tenantId: string;
+    channelId: string;
+    chatId: string;
+  }): Promise<void> {
+    await withTenantTxFor(input.tenantId, async (tx) => {
+      const now = new Date();
+      await tx
+        .update(schema.telegramChatLink)
+        .set({ blockedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(schema.telegramChatLink.channelId, input.channelId),
+            eq(schema.telegramChatLink.chatId, input.chatId),
+          ),
+        );
+    });
+  }
+
   async linkPhone(input: TelegramChatRef & { phone: string }): Promise<void> {
     await withTenantTxFor(input.tenantId, async (tx) => {
       const now = new Date();
