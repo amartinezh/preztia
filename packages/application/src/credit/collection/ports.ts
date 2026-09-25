@@ -1,4 +1,4 @@
-// Puertos del slice de COBRANZA por WhatsApp. La capa de aplicación los define; la
+// Puertos del slice de COBRANZA por chat (WhatsApp o Telegram). La capa de aplicación los define; la
 // infraestructura (Drizzle/WhatsApp) los implementa (inversión de dependencias).
 
 /** Cliente a cobrar hoy, con todo lo que el caso de uso necesita para redactar y enviar. */
@@ -7,8 +7,12 @@ export interface CollectionReminderTarget {
   readonly firstName: string;
   /** Teléfono del cliente (destinatario, E.164 sin '+'). */
   readonly phone: string;
-  /** phone_number_id del canal desde el que se envía (el canal de la zona del crédito). */
-  readonly channelId: string;
+  /**
+   * Canal por el que se le puede escribir al cliente (WhatsApp o Telegram), elegido por la regla
+   * de dominio `chooseProactiveChannel`. `null` si no hay ninguno alcanzable (p. ej. tenant solo
+   * Telegram y el cliente nunca escribió al bot): el recordatorio se omite con motivo explícito.
+   */
+  readonly channelId: string | null;
   /** Cuota a cobrar hoy en unidades menores (entero); el read model la calcula en la zona horaria del tenant. */
   readonly dueMinor: number;
   readonly currency: string;
@@ -67,10 +71,13 @@ export interface SendReminderResult {
     | "NO_ACTIVE_CREDIT"
     | "NOTHING_DUE"
     | "NO_PIX_KEY"
+    | "NO_REACHABLE_CHANNEL"
     | "ALREADY_SENT_TODAY";
   readonly phone?: string;
   readonly dueMinor?: number;
   readonly currency?: string;
   /** Texto exacto enviado (para mostrarlo en la UI tras el envío manual). */
   readonly messagePreview?: string;
+  /** Canal por el que salió (solo si se envió). */
+  readonly channelId?: string;
 }

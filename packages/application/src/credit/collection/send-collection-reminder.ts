@@ -10,9 +10,10 @@ import type {
 } from "./ports";
 
 /**
- * Caso de uso: envía UN recordatorio de cobro por WhatsApp. Orquesta el read model de cartera,
- * la idempotencia del día, el redactor de dominio, el envío saliente (que además registra el
- * mensaje en el transcript) y la auditoría. No calcula reglas ni arma SQL: delega en cada puerto.
+ * Caso de uso: envía UN recordatorio de cobro por el canal alcanzable del cliente (WhatsApp o
+ * Telegram). Orquesta el read model de cartera, la idempotencia del día, el redactor de dominio,
+ * el envío saliente (que además registra el mensaje en el transcript) y la auditoría. No calcula
+ * reglas ni arma SQL: delega en cada puerto.
  *
  * Es el corazón común del envío MANUAL (un crédito, desde la UI de Cartera) y del AUTOMÁTICO
  * (cada objetivo del cron). La idempotencia garantiza un solo recordatorio por crédito y día.
@@ -66,6 +67,8 @@ export class SendCollectionReminderHandler {
       }
       return { sent: false, reason: "NO_PIX_KEY", ...summary };
     }
+    // Antes de reservar el día: un envío imposible no debe consumir la idempotencia.
+    if (!target.channelId) return { sent: false, reason: "NO_REACHABLE_CHANNEL", ...summary };
 
     const claimed = await this.idempotency.claimDailyReminder({
       tenantId,
@@ -92,6 +95,6 @@ export class SendCollectionReminderHandler {
       dueMinor: target.dueMinor,
       currency: target.currency,
     });
-    return { sent: true, messagePreview: body, ...summary };
+    return { sent: true, messagePreview: body, channelId: target.channelId, ...summary };
   }
 }

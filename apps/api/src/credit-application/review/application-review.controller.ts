@@ -36,8 +36,8 @@ import { ApplicationReviewQueryRepository } from './application-review-query.rep
 import { ApplicationDecisionRepository } from './application-decision.repository';
 import { DocumentOriginalStorage } from './document-original.storage';
 import { PlanOfferRepository } from './plan-offer.repository';
-import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
-import { CreditRegisteredWhatsappNotifier } from './credit-registered.notifier';
+import { PlanOfferMessagingNotifier } from './plan-offer.notifier';
+import { CreditRegisteredMessagingNotifier } from './credit-registered.notifier';
 import { ReExtractDocumentService } from './re-extract-document.service';
 
 const uuid = z.string().uuid();
@@ -65,8 +65,8 @@ export class ApplicationReviewController {
     private readonly planOffers: PlanOfferRepository,
     private readonly plans: PaymentPlanRepository,
     private readonly tenantConfig: TenantConfigRepository,
-    private readonly offerNotifier: PlanOfferWhatsappNotifier,
-    private readonly registeredNotifier: CreditRegisteredWhatsappNotifier,
+    private readonly offerNotifier: PlanOfferMessagingNotifier,
+    private readonly registeredNotifier: CreditRegisteredMessagingNotifier,
     private readonly reExtractService: ReExtractDocumentService,
   ) {
     // Fase 10: el otorgamiento toma los términos del plan negociado y exige aceptación del cliente

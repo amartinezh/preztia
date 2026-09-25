@@ -1,6 +1,6 @@
 # Plan — Canal Telegram (driver adicional a WhatsApp, por zona)
 
-> **Estado:** Fase 0 ✅ · Fases 1–3 🟡 código listo, falta migración (0055 generada + 0056 RLS/funciones) · Fases 4–6 pendientes. **ADR propuesto:** #40.
+> **Estado:** Fase 0 ✅ · Fases 1–4 🟡 código listo, falta migración (0055 generada + 0056 RLS/funciones) · Fases 5–6 pendientes. **ADR propuesto:** #40.
 > **Alcance:** que un tenant pueda operar con **WhatsApp, Telegram o ambos**, configurados desde
 > Ajustes (habilitación por tenant) y en el panel de Zonas (un bot por zona, igual que un número de
 > WhatsApp por zona), con **paridad funcional completa**: originación (monto → documentos KYC →
@@ -472,6 +472,17 @@ descarga por prefijo; regresión: **toda la suite actual de WhatsApp sigue verde
 | **6 · Endurecimiento** | Allowlist IPs, throttle/cola, `logs.sh`, deep link de invitación, docs (ARCHITECTURE ADR #40, DESIGN, SECURITY_AUDIT, DEPLOYMENT runbook BotFather) | Checklist de CLAUDE.md completo |
 
 ---
+
+### Bitácora de la Fase 4 (código listo; depende de la migración de la Fase 1)
+
+- Dominio: `chooseProactiveChannel` ([proactive-channel.ts](../packages/domain/src/conversations/proactive-channel.ts)). Orden: último canal por el que el cliente escribió → canal guardado en el agregado → canales de la zona con el proveedor preferido primero → número heredado del tenant. Solo cuentan los canales alcanzables de proveedores habilitados. Telegram es alcanzable solo con vínculo verificado y sin bloqueo.
+- Cobranza: el read model trae los candidatos en UN SQL por lote (`LATERAL` al último mensaje entrante, sin N+1). Se retira el `JOIN whatsapp_channel`, que duplicaba créditos si la zona tenía dos números. Un objetivo sin canal alcanzable se omite con el motivo `NO_REACHABLE_CHANNEL` ANTES de reservar la idempotencia del día (así no bloquea un reintento como `ALREADY_SENT_TODAY`). El envío manual ya no reporta ese caso como "sin crédito activo". El panel informa `reachableChannel` y el resultado del envío, el `channel` usado.
+- Avisos (oferta de plan, crédito registrado, pago confirmado): `ProactiveTextSender` resuelve el canal alcanzable con `ReachableChannelResolver` (mismo SQL de alcanzabilidad, `channelReachableSql`) y va por fuera del decorador de transcript, así el transcript registra el canal real. Sin canal: `NoReachableChannelError` (409 `NO_REACHABLE_CHANNEL`).
+- **Riesgo previo corregido:** el aviso "tu pago fue confirmado" se enviaba después de abonar la cartera y, si fallaba, abortaba el resto del lote de conciliación. Ahora es de mejor esfuerzo (`BestEffortTextSender`, con registro en el log).
+- Notificadores renombrados: `PlanOfferMessagingNotifier`, `CreditRegisteredMessagingNotifier`.
+- **Cambio de comportamiento para los tenants que solo usan WhatsApp:** el recordatorio sale por el último número al que el cliente escribió (si sigue vinculado), en lugar de siempre por el número de la zona. En la operación normal es el mismo número.
+- Validado contra PostgreSQL real (transacción revertida, rol `app` + RLS, código compilado): los 7 escenarios dan el canal esperado.
+- Fuera de alcance (anterior a esta fase): los mensajes de oferta de plan y de crédito registrado no quedan en el transcript. Ya era así antes de Telegram.
 
 ### Bitácora de la Fase 3 (código listo; depende de la migración de la Fase 1)
 

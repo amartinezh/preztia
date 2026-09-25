@@ -13,8 +13,8 @@ import { ApplicationReviewQueryRepository } from './application-review-query.rep
 import { ApplicationDecisionRepository } from './application-decision.repository';
 import { DocumentOriginalStorage } from './document-original.storage';
 import { PlanOfferRepository } from './plan-offer.repository';
-import { PlanOfferWhatsappNotifier } from './plan-offer.notifier';
-import { CreditRegisteredWhatsappNotifier } from './credit-registered.notifier';
+import { PlanOfferMessagingNotifier } from './plan-offer.notifier';
+import { CreditRegisteredMessagingNotifier } from './credit-registered.notifier';
 import { MessagingModule } from '../../messaging/messaging.module';
 import { ReExtractDocumentService } from './re-extract-document.service';
 import { AiDocumentReviewer } from '../document-reviewer';
@@ -47,8 +47,8 @@ import { TenantConfigModule } from '../../tenant-config/tenant-config.module';
     ApplicationDecisionRepository,
     DocumentOriginalStorage,
     PlanOfferRepository,
-    PlanOfferWhatsappNotifier,
-    CreditRegisteredWhatsappNotifier,
+    PlanOfferMessagingNotifier,
+    CreditRegisteredMessagingNotifier,
 
     // Re-extracción de IA pedida por el revisor + su pipeline de validación.
     AiDocumentReviewer,

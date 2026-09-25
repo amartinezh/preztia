@@ -1,9 +1,11 @@
 import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 
+import { messagingProvider } from "./tenant-config";
+
 const c = initContract();
 
-// Contrato de COBRANZA por WhatsApp (vista de Cartera/Gestión de Créditos). El historial del hilo
+// Contrato de COBRANZA por chat, WhatsApp o Telegram (vista de Cartera/Gestión de Créditos). El historial del hilo
 // se consulta con `getConversationThread` (contrato conversations-inbox); aquí va el panel de cobro
 // de un crédito y el disparo MANUAL del recordatorio. El envío AUTOMÁTICO lo hace el cron (sin HTTP).
 
@@ -21,6 +23,11 @@ export const creditCollectionPanel = z.object({
   currency: z.string(),
   /** ¿El tenant tiene llave PIX configurada? Sin ella no se puede enviar el recordatorio. */
   pixConfigured: z.boolean(),
+  /**
+   * Proveedor por el que saldría HOY el recordatorio (regla de canal alcanzable, ADR #40); null si
+   * el cliente no es alcanzable por ningún canal habilitado (p. ej. nunca escribió al bot).
+   */
+  reachableChannel: messagingProvider.nullable(),
 });
 export type CreditCollectionPanel = z.infer<typeof creditCollectionPanel>;
 
@@ -29,8 +36,16 @@ export type CreditCollectionPanel = z.infer<typeof creditCollectionPanel>;
 export const sendReminderOutput = z.object({
   sent: z.boolean(),
   reason: z
-    .enum(["NO_ACTIVE_CREDIT", "NOTHING_DUE", "NO_PIX_KEY", "ALREADY_SENT_TODAY"])
+    .enum([
+      "NO_ACTIVE_CREDIT",
+      "NOTHING_DUE",
+      "NO_PIX_KEY",
+      "NO_REACHABLE_CHANNEL",
+      "ALREADY_SENT_TODAY",
+    ])
     .nullable(),
+  /** Proveedor por el que salió el recordatorio (null si no se envió). */
+  channel: messagingProvider.nullable(),
   phone: z.string().nullable(),
   dueMinor: z.number().int().nullable(),
   currency: z.string().nullable(),

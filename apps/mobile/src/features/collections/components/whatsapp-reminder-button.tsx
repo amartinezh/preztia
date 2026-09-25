@@ -4,16 +4,22 @@ import type { SendReminderOutput } from "@preztiaos/contracts";
 import { useSendCollectionReminder } from "../api/queries";
 import { WhatsappLogo } from "./whatsapp-logo";
 
+// Nombre del canal por el que salió el recordatorio (el servidor elige el alcanzable).
+function channelName(result: SendReminderOutput): string {
+  return result.channel === "TELEGRAM" ? "Telegram" : "WhatsApp";
+}
+
 // Mensaje de resultado para el aviso tras tocar el botón en el listado.
 function feedback(result: SendReminderOutput): { title: string; message: string } {
   if (result.sent) {
-    return { title: "Enviado ✅", message: "El recordatorio de cobro salió por WhatsApp." };
+    return { title: "Enviado ✅", message: `El recordatorio de cobro salió por ${channelName(result)}.` };
   }
   const reason: Record<NonNullable<SendReminderOutput["reason"]>, string> = {
     ALREADY_SENT_TODAY: "Ya se envió un recordatorio a este cliente hoy.",
     NOTHING_DUE: "El cliente no tiene cuota por cobrar hoy.",
     NO_PIX_KEY: "Configura la llave PIX del tenant (Ajustes) para poder cobrar.",
     NO_ACTIVE_CREDIT: "El cliente no tiene un crédito activo o teléfono registrado.",
+    NO_REACHABLE_CHANNEL: "El cliente no es alcanzable por ningún canal habilitado (p. ej. nunca escribió al bot).",
   };
   return {
     title: "No se envió",

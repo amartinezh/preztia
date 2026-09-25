@@ -40,6 +40,7 @@ export * from "./conversations/conversation-outcome";
 export * from "./conversations/assistant";
 export * from "./conversations/messaging-channel";
 export * from "./conversations/telegram-contact";
+export * from "./conversations/proactive-channel";
 export * from "./antifraud/alert";
 export * from "./antifraud/scoring";
 export * from "./antifraud/normalize-name";

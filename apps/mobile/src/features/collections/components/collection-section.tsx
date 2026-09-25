@@ -7,7 +7,9 @@ import { useCreditCollection, useSendCollectionReminder } from "../api/queries";
 
 // Texto de retroalimentación tras el envío manual, según el resultado del caso de uso.
 function reminderFeedback(result: SendReminderOutput): string {
-  if (result.sent) return "✅ Recordatorio enviado por WhatsApp.";
+  if (result.sent) {
+    return `✅ Recordatorio enviado por ${result.channel === "TELEGRAM" ? "Telegram" : "WhatsApp"}.`;
+  }
   switch (result.reason) {
     case "ALREADY_SENT_TODAY":
       return "Ya se envió un recordatorio a este cliente hoy.";
@@ -17,6 +19,8 @@ function reminderFeedback(result: SendReminderOutput): string {
       return "Configura la llave PIX del tenant (Ajustes) para poder cobrar.";
     case "NO_ACTIVE_CREDIT":
       return "El cliente no tiene un crédito activo o teléfono registrado.";
+    case "NO_REACHABLE_CHANNEL":
+      return "El cliente no es alcanzable por ningún canal habilitado (p. ej. nunca escribió al bot).";
     default:
       return "No se pudo enviar el recordatorio.";
   }

@@ -24,6 +24,7 @@ import {
   type MarkCollectionVisitedOutput,
   type SendReminderOutput,
 } from '@preztiaos/contracts';
+import { channelProviderOf } from '@preztiaos/domain';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireReviewer } from '../auth/require-reviewer';
@@ -154,6 +155,7 @@ export class CollectionsController {
       dueMinor: result.dueMinor ?? null,
       currency: result.currency ?? null,
       messagePreview: result.messagePreview ?? null,
+      channel: result.channelId ? channelProviderOf(result.channelId) : null,
     };
   }
 

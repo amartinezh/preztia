@@ -62,7 +62,7 @@ import { PicPayChargeContextReader } from '../payments/banking/picpay/picpay-cha
 import { BorrowerAccountDrizzleReader } from './text/borrower-account.reader';
 import { PlanReplyRepository } from '../credit-application/review/plan-reply.repository';
 import { AmountCaptureRepository } from '../credit-application/amount-capture.repository';
-import { PlanOfferWhatsappNotifier } from '../credit-application/review/plan-offer.notifier';
+import { PlanOfferMessagingNotifier } from '../credit-application/review/plan-offer.notifier';
 import { PaymentPlanModule } from '../credit/plans/payment-plan.module';
 import { PaymentPlanRepository } from '../credit/plans/payment-plan.repository';
 import { AudioDispatchAdapter } from './adapters/audio-dispatch.adapter';
@@ -210,13 +210,13 @@ import {
 
     // Negociación del plan por WhatsApp (Fase 10): respuesta del cliente a la oferta.
     PlanReplyRepository,
-    PlanOfferWhatsappNotifier,
+    PlanOfferMessagingNotifier,
     {
       provide: RecordPlanReplyHandler,
       inject: [
         PlanReplyRepository,
         PaymentPlanRepository,
-        PlanOfferWhatsappNotifier,
+        PlanOfferMessagingNotifier,
         INBOUND_MESSAGE_DEDUPLICATOR,
       ],
       useFactory: (

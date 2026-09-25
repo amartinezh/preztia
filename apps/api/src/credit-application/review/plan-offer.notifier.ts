@@ -4,7 +4,7 @@ import type {
   PlanOfferNotifier,
   ScheduledInstallment,
 } from '@preztiaos/application';
-import { ChannelRoutingTextSender } from '../../messaging/channel-routing.text-sender';
+import { ProactiveTextSender } from '../../messaging/proactive-text-sender';
 
 const FREQUENCY_LABEL: Record<PaymentPlan['frequency'], string> = {
   DAILY: 'diario',
@@ -19,9 +19,10 @@ const FREQUENCY_LABEL: Record<PaymentPlan['frequency'], string> = {
  * cliente HTTP). La presentación (texto del mensaje) es responsabilidad de infraestructura.
  */
 @Injectable()
-export class PlanOfferWhatsappNotifier implements PlanOfferNotifier {
-  // Router por proveedor: el aviso sale por el canal (WhatsApp o Telegram) guardado en la solicitud.
-  constructor(private readonly sender: ChannelRoutingTextSender) {}
+export class PlanOfferMessagingNotifier implements PlanOfferNotifier {
+  // Envío proactivo: el aviso sale por el canal ALCANZABLE hoy (WhatsApp o Telegram), partiendo del
+  // guardado en la solicitud (ADR #40, D8).
+  constructor(private readonly sender: ProactiveTextSender) {}
 
   async sendPlanMenu(input: {
     channelId: string;

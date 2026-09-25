@@ -15,6 +15,9 @@ import { PaymentReceiptOriginalStorage } from './payment-receipt-original.storag
 import { ConversationMessageLog } from '../conversations/conversation-message.log';
 import { ChannelRoutingTextSender } from '../messaging/channel-routing.text-sender';
 import { MessagingModule } from '../messaging/messaging.module';
+import { ReachableChannelResolver } from '../messaging/reachable-channel.resolver';
+import { ProactiveTextSender } from '../messaging/proactive-text-sender';
+import { BestEffortTextSender } from '../messaging/best-effort-text-sender';
 import { LoggingTextSender } from '../conversations/text/logging-text-sender';
 import { GeminiPaymentClassifier } from './ai/gemini-payment.classifier';
 import { CreditPortfolioDrizzleRepository } from './credit-portfolio.repository';
@@ -78,6 +81,20 @@ function reconciliationMaxAttempts(): number {
  * bancaria por (país, banco) y antifraude de pagos. ConversationsModule lo
  * importa para enrutar el media entrante hacia SubmitPaymentReceiptHandler.
  */
+/**
+ * Avisos de pago confirmado (posteriores al abono): salen por el canal ALCANZABLE hoy (ADR #40, D8),
+ * quedan en el transcript con el canal real, y su fallo no aborta la conciliación (mejor esfuerzo).
+ */
+function confirmationNotices(
+  resolver: ReachableChannelResolver,
+  router: ChannelRoutingTextSender,
+  log: ConversationMessageLog,
+): BestEffortTextSender {
+  return new BestEffortTextSender(
+    new ProactiveTextSender(resolver, new LoggingTextSender(router, log)),
+  );
+}
+
 @Module({
   imports: [AuthModule, MessagingModule],
   controllers: [
@@ -182,6 +199,7 @@ function reconciliationMaxAttempts(): number {
         ChannelRoutingTextSender,
         ConversationMessageLog,
         SettlementReviewSettingsReader,
+        ReachableChannelResolver,
       ],
       useFactory: (
         source: SettlementSource,
@@ -190,12 +208,13 @@ function reconciliationMaxAttempts(): number {
         sender: ChannelRoutingTextSender,
         log: ConversationMessageLog,
         settings: SettlementReviewSettingsReader,
+        resolver: ReachableChannelResolver,
       ) =>
         new RunSettlementReconciliationService(
           source,
           credits,
           reconciliation,
-          new LoggingTextSender(sender, log),
+          confirmationNotices(resolver, sender, log),
           settings,
         ),
     },
@@ -246,6 +265,7 @@ function reconciliationMaxAttempts(): number {
         BANK_PAYMENT_VERIFIER,
         ChannelRoutingTextSender,
         ConversationMessageLog,
+        ReachableChannelResolver,
       ],
       useFactory: (
         repo: ReconciliationRepository,
@@ -253,12 +273,13 @@ function reconciliationMaxAttempts(): number {
         bank: BankPaymentVerifier,
         sender: ChannelRoutingTextSender,
         log: ConversationMessageLog,
+        resolver: ReachableChannelResolver,
       ) =>
         new ReconcilePendingPaymentsHandler(
           repo,
           accounts,
           bank,
-          new LoggingTextSender(sender, log),
+          confirmationNotices(resolver, sender, log),
           reconciliationMaxAttempts(),
         ),
     },

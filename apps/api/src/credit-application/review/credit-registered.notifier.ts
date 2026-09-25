@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type { CreditRegisteredNotifier } from '@preztiaos/application';
 import { withTenantTxFor } from '../../tenancy/unit-of-work';
-import { ChannelRoutingTextSender } from '../../messaging/channel-routing.text-sender';
+import { ProactiveTextSender } from '../../messaging/proactive-text-sender';
 
 /**
  * Adaptador del puerto `CreditRegisteredNotifier`: cuando el coordinador aprueba el expediente y se
@@ -15,10 +15,11 @@ import { ChannelRoutingTextSender } from '../../messaging/channel-routing.text-s
  * envío se registra pero NO se propaga (no revierte el crédito ni hace fallar la aprobación HTTP).
  */
 @Injectable()
-export class CreditRegisteredWhatsappNotifier implements CreditRegisteredNotifier {
-  private readonly logger = new Logger('WhatsApp:CreditRegistered');
-  // Router por proveedor: el aviso sale por el canal (WhatsApp o Telegram) guardado en la solicitud.
-  constructor(private readonly sender: ChannelRoutingTextSender) {}
+export class CreditRegisteredMessagingNotifier implements CreditRegisteredNotifier {
+  private readonly logger = new Logger('Messaging:CreditRegistered');
+  // Envío proactivo: el aviso sale por el canal ALCANZABLE hoy (WhatsApp o Telegram), partiendo del
+  // guardado en la solicitud (ADR #40, D8).
+  constructor(private readonly sender: ProactiveTextSender) {}
 
   async notifyRegistered(input: {
     tenantId: string;
@@ -36,7 +37,7 @@ export class CreditRegisteredWhatsappNotifier implements CreditRegisteredNotifie
         buildMessage(supportPhone),
       );
     } catch (error) {
-      // Cortesía posterior al desembolso: no debe tumbar la aprobación si WhatsApp falla.
+      // Cortesía posterior al desembolso: no debe tumbar la aprobación si el envío falla.
       this.logger.warn(
         `No se pudo avisar al cliente ${input.recipient} del crédito registrado: ${String(error)}`,
       );
