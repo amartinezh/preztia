@@ -22,7 +22,7 @@ export interface SettingsTabDef {
 export const SETTINGS_TABS: readonly SettingsTabDef[] = [
   { id: "general", label: "General", Component: GeneralTab },
   { id: "collection", label: "Cobranza", Component: CollectionReminderTab },
-  { id: "whatsapp", label: "WhatsApp / IA", Component: WhatsappTab },
+  { id: "whatsapp", label: "Canales / IA", Component: WhatsappTab },
   { id: "plans", label: "Planes", Component: PlansTab },
   { id: "bankAccounts", label: "Cuentas bancarias", Component: BankAccountsTab },
   { id: "users", label: "Usuarios", Component: UsersTab },

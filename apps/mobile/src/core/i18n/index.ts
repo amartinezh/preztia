@@ -134,7 +134,7 @@ const es = {
   "review.approve.reason": "Motivo de la decisión",
   "review.approve.planTerms": "Términos del plan aceptado",
   "review.approve.zone": "Zona (automática)",
-  "review.approve.zoneMissing": "No se pudo resolver la zona desde la línea de WhatsApp.",
+  "review.approve.zoneMissing": "No se pudo resolver la zona desde el canal (WhatsApp o Telegram).",
   "review.approve.borrower": "Cliente (deudor)",
   "review.approve.needBorrower": "Asigna un cliente (créalo o selecciónalo) para habilitar la aprobación.",
   "review.approve.fundingSource": "Desembolsar desde",
@@ -232,7 +232,7 @@ const es = {
   "zones.new.root": "Zona raíz (sin padre)",
   "zones.new.submit": "Crear zona",
   "zones.action.delete": "Eliminar",
-  "zones.action.whatsapp": "WhatsApp",
+  "zones.action.whatsapp": "Canales",
   // Teléfono de atención al cliente de la zona (se comparte con el cliente ante inconvenientes)
   "zones.support.label": "Teléfono de atención al cliente",
   "zones.support.hint":
@@ -241,7 +241,9 @@ const es = {
   "zones.support.save": "Guardar teléfono",
   "zones.support.saved": "Teléfono actualizado",
   // WhatsApp por zona (número + credenciales de Meta, ADMIN)
-  "zonesWa.title": "WhatsApp de la zona",
+  "zonesWa.title": "Canales de la zona",
+  "zonesWa.section": "WhatsApp",
+  "zonesWa.disabled": "WhatsApp está deshabilitado en Ajustes → Canales / IA.",
   "zonesWa.hint":
     "Vincula un número de WhatsApp a esta zona y configura sus credenciales de Meta. Los secretos se guardan cifrados y nunca se muestran; deja un campo vacío para conservar el valor actual.",
   "zonesWa.empty": "Esta zona no tiene ningún número de WhatsApp.",
@@ -272,6 +274,27 @@ const es = {
   "zonesWa.webhook.copyManual": "No se pudo copiar automáticamente: selecciona la URL y cópiala manualmente.",
   "zonesWa.shareHint":
     "Para compartir un número entre varias zonas, vincúlalo a la zona padre que las cubre: los mensajes se atribuyen a esa zona y los coordinadores de sus sub-zonas los ven.",
+  // Telegram por zona (bot + webhook automático, ADMIN)
+  "zonesTg.section": "Telegram",
+  "zonesTg.disabled": "Telegram está deshabilitado. Actívalo en Ajustes → Canales / IA para vincular un bot.",
+  "zonesTg.empty": "Esta zona no tiene bot de Telegram.",
+  "zonesTg.guide":
+    "1) En Telegram abre @BotFather y envía /newbot. 2) Copia el token que te entrega y pégalo aquí. 3) Recomendado: en @BotFather usa /setjoingroups → Disable, para que nadie lo agregue a grupos. La plataforma registra el webhook sola.",
+  "zonesTg.token": "Token del bot",
+  "zonesTg.token.hint": "Formato 123456789:AA… — se guarda cifrado y nunca se vuelve a mostrar.",
+  "zonesTg.link": "Vincular bot a esta zona",
+  "zonesTg.rotate": "Rotar token",
+  "zonesTg.rotate.hint": "Tras /revoke en @BotFather pega aquí el token nuevo del MISMO bot.",
+  "zonesTg.rotated": "Token actualizado y webhook re-registrado",
+  "zonesTg.unlink": "Desvincular bot",
+  "zonesTg.unlink.confirm": "¿Desvincular el bot? Dejará de recibir y enviar mensajes en esta zona.",
+  "zonesTg.verify": "Verificar conexión",
+  "zonesTg.webhook.ok": "Conectado",
+  "zonesTg.webhook.missing": "Sin webhook",
+  "zonesTg.verify.ok": "Conexión verificada",
+  "zonesTg.verify.reRegistered": "El webhook no apuntaba a la plataforma: se registró de nuevo.",
+  "zonesTg.verify.pending": "Mensajes en cola en Telegram",
+  "zonesTg.verify.lastError": "Último error de entrega",
   // IAM — cobradores y clientes
   "collectors.tab": "Cobradores",
   "collectors.title": "Cobradores",
@@ -524,7 +547,7 @@ const es = {
   "config.colorByOverdue": "Aplicar color por atraso",
   "config.commission": "Comisión (%)",
   "config.defaultLimit": "Cupo por defecto",
-  "config.clientChoosesPlan": "El cliente elige su plan por WhatsApp",
+  "config.clientChoosesPlan": "El cliente elige su plan por chat (WhatsApp o Telegram)",
   "config.allowAdminOverride": "Permitir crear crédito sin aceptación del cliente",
   "config.autoConfirmSettlement": "Conciliación automática de pagos",
   "config.autoConfirmSettlementHint":
@@ -580,12 +603,12 @@ const es = {
   "offer.plan": "Plan ofertado",
   "offer.principal": "Capital",
   "offer.expires": "La oferta vence",
-  "offer.offer": "Ofertar planes (WhatsApp)",
+  "offer.offer": "Ofertar planes (chat)",
   "offer.reoffer": "Re-ofertar planes",
   "offer.modalTitle": "Ofertar planes al cliente",
-  "offer.modalHint": "Indicá el monto del préstamo. El cliente recibirá la oferta por WhatsApp.",
+  "offer.modalHint": "Indicá el monto del préstamo. El cliente recibirá la oferta por su chat (WhatsApp o Telegram).",
   "offer.send": "Enviar oferta",
-  "offer.liveHint": "Esta pantalla se actualiza sola cuando el cliente responda por WhatsApp.",
+  "offer.liveHint": "Esta pantalla se actualiza sola cuando el cliente responda por chat.",
   // Panel / reportería
   "dashboard.title": "Panel",
   "dashboard.borrowers": "Clientes",
@@ -603,9 +626,9 @@ const es = {
   "reports.due": "Vence hoy",
   "reports.paid": "Pagó hoy",
   "accounts.export": "Exportar CSV",
-  // Bandeja de WhatsApp (vista 1)
-  "inbox.tab": "WhatsApp",
-  "inbox.title": "Comunicaciones WhatsApp",
+  // Bandeja de comunicaciones (WhatsApp y Telegram)
+  "inbox.tab": "Comunicaciones",
+  "inbox.title": "Comunicaciones",
   "inbox.search": "Buscar teléfono o texto",
   "inbox.withApplication": "Solo con solicitud",
   "inbox.empty": "Sin conversaciones",
@@ -624,7 +647,7 @@ const es = {
   "inbox.outcome.APPROVED": "Aprobadas",
   "inbox.outcome.REJECTED": "Rechazadas",
   "inbox.outcome.hint.ALL": "Todas las conversaciones del rango consultado.",
-  "inbox.outcome.hint.ONLY_INQUIRY": "Preguntaron por WhatsApp pero nunca abrieron una solicitud.",
+  "inbox.outcome.hint.ONLY_INQUIRY": "Preguntaron por chat pero nunca abrieron una solicitud.",
   "inbox.outcome.hint.TECHNICAL_FAILURE": "No pudieron terminar porque el sistema falló al atenderlos.",
   "inbox.outcome.hint.INCOMPLETE": "Abrieron la solicitud y quedó a medias (faltan documentos).",
   "inbox.outcome.hint.PENDING_APPROVAL": "Expediente completo esperando tu decisión.",
@@ -641,7 +664,7 @@ const es = {
   "inbox.filters.from": "Desde",
   "inbox.filters.to": "Hasta",
   "inbox.filters.datePlaceholder": "AAAA-MM-DD",
-  "inbox.filters.channel": "Canal (phone_number_id)",
+  "inbox.filters.channel": "Canal (phone_number_id de WhatsApp o tg:<bot> de Telegram)",
   "inbox.filters.zone": "Zona",
   "inbox.filters.allZones": "Todas las zonas",
   "inbox.filters.clear": "Limpiar filtros",
@@ -772,13 +795,25 @@ const es = {
   "review.section.toApprove": "Por aprobar",
   "review.section.inProgressHint": "Conversación en curso; faltan documentos",
   "review.section.toApproveHint": "Expediente completo; falta decidir",
-  "review.whatsapp": "Ver conversación de WhatsApp",
+  "review.whatsapp": "Ver conversación",
   // Ajustes: secciones
   "settings.section.account": "Cuenta",
   "settings.section.config": "Configuración operativa",
-  // Asistente de WhatsApp (base de conocimiento + IA)
-  "assistant.title": "Asistente de WhatsApp",
-  "assistant.hint": "Sin base de conocimiento y API key, el asistente no responde los mensajes.",
+  // Canales de mensajería del tenant (WhatsApp y/o Telegram)
+  "messaging.title": "Canales de mensajería",
+  "messaging.hint":
+    "Elige por dónde atiende y cobra tu empresa: WhatsApp, Telegram o ambos. Cada zona configura luego su número o su bot en el panel de Zonas.",
+  "messaging.whatsapp": "WhatsApp",
+  "messaging.telegram": "Telegram",
+  "messaging.preferred": "Canal preferido para cobranza",
+  "messaging.preferred.hint":
+    "Si el cliente es alcanzable por ambos y no ha escrito recientemente, los recordatorios salen por este canal. Por Telegram solo se alcanza a quien ya escribió al bot.",
+  "messaging.save": "Guardar canales",
+  "messaging.saved": "Canales actualizados.",
+  // Asistente del chat (base de conocimiento + IA)
+  "assistant.title": "Asistente del chat",
+  "assistant.hint":
+    "Atiende por WhatsApp y Telegram. Sin base de conocimiento y API key, el asistente no responde los mensajes.",
   "assistant.knowledgeBase": "Base de conocimiento",
   "assistant.knowledgeBase.placeholder": "Interés mensual, cuotas, requisitos, costos…",
   "assistant.provider": "Proveedor de IA",
@@ -829,6 +864,18 @@ const es = {
     "El saldo de la caja cambió después de este arqueo. Registra un arqueo nuevo y ajusta desde ahí.",
   "errors.cash.countAdjusted": "Este arqueo ya fue ajustado. El saldo ya refleja la corrección.",
   "errors.cash.noDiscrepancy": "La caja está cuadrada: no hay descuadre que ajustar.",
+  "errors.telegram.invalidToken":
+    "Telegram rechazó el token del bot. Cópialo de nuevo desde @BotFather (/mybots → tu bot → API Token).",
+  "errors.telegram.disabled": "Telegram no está habilitado. Actívalo en Ajustes → Canales / IA.",
+  "errors.telegram.botMismatch":
+    "Ese token es de otro bot. Para cambiar de bot, desvincula este y vincula el nuevo.",
+  "errors.telegram.publicUrlMissing":
+    "El servidor no tiene configurada su URL pública (PUBLIC_API_URL). Pídeselo al administrador de la plataforma.",
+  "errors.channels.required": "Debe quedar al menos un canal de mensajería habilitado.",
+  "errors.channels.preferredDisabled":
+    "El canal preferido para cobranza debe estar habilitado. Cámbialo en el mismo guardado.",
+  "errors.channels.unreachable":
+    "El cliente no es alcanzable por ningún canal habilitado (p. ej. nunca escribió al bot de Telegram)."
 } as const;
 
 export type MessageKey = keyof typeof es;

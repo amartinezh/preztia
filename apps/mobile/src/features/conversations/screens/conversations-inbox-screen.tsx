@@ -60,8 +60,8 @@ function toFilters(draft: FiltersDraft, outcome: OutcomeFilter): ConversationFil
 }
 
 /**
- * Consola de comunicaciones de WhatsApp (ADMIN del tenant y COORDINATOR de ruta, cada uno dentro
- * de su alcance de zonas). Responde a las tres preguntas de la operación sobre la cola:
+ * Consola de comunicaciones por chat, WhatsApp y Telegram (ADMIN del tenant y COORDINATOR de ruta,
+ * cada uno dentro de su alcance de zonas). Responde a las tres preguntas de la operación sobre la cola:
  *
  *  - **Cuántos y en qué quedaron** → estadística por desenlace, que es a la vez el filtro.
  *  - **Qué se dijo exactamente** → hilo completo con los fallos técnicos intercalados.

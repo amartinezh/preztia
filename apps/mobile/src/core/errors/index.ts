@@ -21,7 +21,14 @@ export type ErrorMessageKey =
   | "errors.plans.noDefault"
   | "errors.cash.staleCount"
   | "errors.cash.countAdjusted"
-  | "errors.cash.noDiscrepancy";
+  | "errors.cash.noDiscrepancy"
+  | "errors.telegram.invalidToken"
+  | "errors.telegram.disabled"
+  | "errors.telegram.botMismatch"
+  | "errors.telegram.publicUrlMissing"
+  | "errors.channels.required"
+  | "errors.channels.preferredDisabled"
+  | "errors.channels.unreachable";
 
 // Códigos de dominio del backend con mensaje accionable propio: más específico que el
 // genérico por status (ej. un 409 por falta de planes dice DÓNDE configurarlos).
@@ -31,6 +38,14 @@ const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
   STALE_COUNT: "errors.cash.staleCount",
   COUNT_ALREADY_ADJUSTED: "errors.cash.countAdjusted",
   NO_DISCREPANCY: "errors.cash.noDiscrepancy",
+  // Canales de mensajería (ADR #40)
+  TELEGRAM_INVALID_TOKEN: "errors.telegram.invalidToken",
+  TELEGRAM_DISABLED: "errors.telegram.disabled",
+  TELEGRAM_BOT_MISMATCH: "errors.telegram.botMismatch",
+  PUBLIC_API_URL_MISSING: "errors.telegram.publicUrlMissing",
+  MESSAGING_CHANNEL_REQUIRED: "errors.channels.required",
+  PREFERRED_CHANNEL_DISABLED: "errors.channels.preferredDisabled",
+  NO_REACHABLE_CHANNEL: "errors.channels.unreachable",
 };
 
 export class ApiError extends Error {

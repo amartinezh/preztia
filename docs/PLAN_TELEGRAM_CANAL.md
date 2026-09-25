@@ -1,6 +1,6 @@
 # Plan — Canal Telegram (driver adicional a WhatsApp, por zona)
 
-> **Estado:** Fase 0 ✅ · Fases 1–4 🟡 código listo, falta migración (0055 generada + 0056 RLS/funciones) · Fases 5–6 pendientes. **ADR propuesto:** #40.
+> **Estado:** Fases 0–5 ✅ código listo; migraciones 0055 (generada) y 0056 (RLS + funciones, a mano) escritas y validadas, SIN aplicar · Fase 6 pendiente. **ADR propuesto:** #40.
 > **Alcance:** que un tenant pueda operar con **WhatsApp, Telegram o ambos**, configurados desde
 > Ajustes (habilitación por tenant) y en el panel de Zonas (un bot por zona, igual que un número de
 > WhatsApp por zona), con **paridad funcional completa**: originación (monto → documentos KYC →
@@ -472,6 +472,17 @@ descarga por prefijo; regresión: **toda la suite actual de WhatsApp sigue verde
 | **6 · Endurecimiento** | Allowlist IPs, throttle/cola, `logs.sh`, deep link de invitación, docs (ARCHITECTURE ADR #40, DESIGN, SECURITY_AUDIT, DEPLOYMENT runbook BotFather) | Checklist de CLAUDE.md completo |
 
 ---
+
+### Bitácora de la Fase 5 (frontend) y migraciones
+
+- Migraciones: **0055** (generada: tablas, índices, `messaging_channels`, etapa `CONTACT_VERIFICATION`) y **0056_telegram_rls** a mano, en archivo numerado propio: RLS `ENABLE` + `FORCE` + `tenant_isolation` en las dos tablas, `GRANT` a `app`/`platform` y las funciones `resolve_tenant_by_telegram_channel`, `resolve_zone_path_by_telegram_channel` y `resolve_telegram_hook` (SECURITY DEFINER, `REVOKE PUBLIC`). El snapshot 0056 está encadenado (`prevId` = 0055); `drizzle-kit check` y `generate` (sin cambios) pasan. Se validaron de la 0052 a la 0056 en PostgreSQL real dentro de una transacción revertida: `relrowsecurity`/`relforcerowsecurity` activos, funciones operativas y el rol `app` sin ver filas de otro tenant. **Después de `db:migrate`, verificar con `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname LIKE 'telegram_%'`.**
+- Ajustes → pestaña **Canales / IA** (el id RBAC `whatsapp` se conserva): `MessagingChannelsCard` con los interruptores de WhatsApp y Telegram y el canal preferido (solo ofrece los habilitados y reacomoda el preferido al apagar uno).
+- Zonas → acción **Canales**: el modal agrupa el teléfono de atención, WhatsApp (sin cambios; se oculta si está deshabilitado) y la sección de Telegram ([zone-telegram-section.tsx](../apps/mobile/src/features/zones/screens/zone-telegram-section.tsx)): alta con el token (guía de BotFather), `@username` y enlace `t.me`, estado del webhook, **Verificar** (autocorrección, cola, último error), rotación del token y desvinculación con confirmación.
+- Bandeja: el canal aparece en cada fila y en cada burbuja del hilo (`channelId` en `inboxMessage`); títulos neutrales ("Comunicaciones").
+- Cobranza: el panel dice por qué canal saldrá el recordatorio y deshabilita el envío si no hay canal alcanzable. El botón del listado toma la identidad del tenant: verde WhatsApp, azul Telegram, o neutro con avión de papel si opera ambos.
+- Errores accionables para `TELEGRAM_INVALID_TOKEN`, `TELEGRAM_DISABLED`, `TELEGRAM_BOT_MISMATCH`, `PUBLIC_API_URL_MISSING` (el 503 ahora trae código), `MESSAGING_CHANNEL_REQUIRED`, `PREFERRED_CHANNEL_DISABLED` y `NO_REACHABLE_CHANNEL`.
+- Textos neutralizados donde aplican a ambos canales (oferta de plan, asistente, revisión, bandeja).
+- Verificado: typecheck, lint y test en todo el monorepo; `expo export --platform web` compila e incluye las pantallas nuevas. **No se probó visualmente** en navegador ni en un dispositivo.
 
 ### Bitácora de la Fase 4 (código listo; depende de la migración de la Fase 1)
 

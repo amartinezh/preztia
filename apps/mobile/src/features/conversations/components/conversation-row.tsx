@@ -1,5 +1,5 @@
 import { Pressable, View } from "react-native";
-import type { ConversationSummary } from "@preztiaos/contracts";
+import { messagingProviderOfChannel, type ConversationSummary } from "@preztiaos/contracts";
 import { Badge, Checkbox, Row, Stack, Text } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
@@ -23,6 +23,9 @@ export function ConversationRow({ item, selectable, selected, onToggle, onOpen }
   const { t } = useT();
   const preview = item.lastBody ?? `[${item.lastKind}]`;
   const traffic = `${item.messageCount} msg (${item.inboundCount}↓/${item.outboundCount}↑)`;
+  const channel = t(
+    messagingProviderOfChannel(item.channelId) === "TELEGRAM" ? "messaging.telegram" : "messaging.whatsapp",
+  );
 
   return (
     <Row
@@ -56,7 +59,7 @@ export function ConversationRow({ item, selectable, selected, onToggle, onOpen }
             {preview}
           </Text>
           <Text variant="caption" tone="muted">
-            {traffic} · {item.zonePath ?? "—"}
+            {traffic} · {channel} · {item.zonePath ?? "—"}
           </Text>
         </View>
       </Pressable>

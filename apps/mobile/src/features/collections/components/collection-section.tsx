@@ -27,9 +27,9 @@ function reminderFeedback(result: SendReminderOutput): string {
 }
 
 /**
- * Cobranza por WhatsApp en la vista de Cartera/Gestión de Créditos: muestra la cuota de HOY,
- * permite al coordinador disparar el recordatorio de forma manual e inmediata y renderiza el
- * historial del hilo de conversación con el cliente. El llamador decide la visibilidad por rol
+ * Cobranza por chat (WhatsApp o Telegram) en la vista de Cartera/Gestión de Créditos: muestra la
+ * cuota de HOY y por qué canal saldría el recordatorio, permite al coordinador dispararlo de forma
+ * manual e inmediata y renderiza el historial del hilo de conversación con el cliente. El llamador decide la visibilidad por rol
  * (`application:review`). Reutilizable en el detalle de cuenta y en el de cartera del crédito.
  */
 export function CollectionSection({ creditId }: { creditId: string }) {
@@ -48,13 +48,14 @@ export function CollectionSection({ creditId }: { creditId: string }) {
     );
   }
 
-  const { firstName, phone, phoneMasked, dueMinor, currency, pixConfigured } = panel.data;
-  const canSend = pixConfigured && dueMinor > 0;
+  const { firstName, phone, phoneMasked, dueMinor, currency, pixConfigured, reachableChannel } =
+    panel.data;
+  const canSend = pixConfigured && dueMinor > 0 && reachableChannel !== null;
 
   return (
     <Card>
       <Stack gap="sm">
-        <Text variant="heading">Cobranza por WhatsApp</Text>
+        <Text variant="heading">Cobranza por chat</Text>
         <Row className="justify-between">
           <Text variant="label" tone="muted">
             Cuota de hoy · {firstName}
@@ -75,6 +76,11 @@ export function CollectionSection({ creditId }: { creditId: string }) {
           block
           onPress={() => setHistoryOpen(true)}
         />
+        <Text variant="caption" tone="muted">
+          {reachableChannel
+            ? `El recordatorio saldrá por ${reachableChannel === "TELEGRAM" ? "Telegram" : "WhatsApp"}.`
+            : "El cliente no es alcanzable por ningún canal habilitado (p. ej. nunca escribió al bot)."}
+        </Text>
         {!pixConfigured ? (
           <Text variant="caption" tone="muted">
             Configura la llave PIX del tenant (Ajustes) para habilitar el cobro.
@@ -87,7 +93,7 @@ export function CollectionSection({ creditId }: { creditId: string }) {
         ) : null}
       </Stack>
 
-      {/* Hilo completo de WhatsApp en un modal con scroll (el Modal ya scrollea su cuerpo). */}
+      {/* Hilo completo del chat en un modal con scroll (el Modal ya scrollea su cuerpo). */}
       <Modal
         visible={historyOpen}
         onClose={() => setHistoryOpen(false)}

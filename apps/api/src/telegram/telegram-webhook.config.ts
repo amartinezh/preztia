@@ -20,9 +20,12 @@ export class TelegramWebhookEndpointConfig implements TelegramWebhookEndpoint {
   urlFor(hookId: string): string {
     const base = process.env.PUBLIC_API_URL?.trim().replace(/\/+$/, '');
     if (!base?.startsWith('https://')) {
-      throw new ServiceUnavailableException(
-        'El servidor no tiene configurada su URL pública HTTPS (PUBLIC_API_URL): no se puede registrar el webhook de Telegram',
-      );
+      throw new ServiceUnavailableException({
+        statusCode: 503,
+        code: 'PUBLIC_API_URL_MISSING',
+        message:
+          'El servidor no tiene configurada su URL pública HTTPS (PUBLIC_API_URL): no se puede registrar el webhook de Telegram',
+      });
     }
     return `${base}${WEBHOOK_PATH}${hookId}`;
   }

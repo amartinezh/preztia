@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   requiredDocumentType,
   type AssistantAiProvider,
+  type MessagingChannelsSettings,
+  type MessagingProviderContract,
   type DocumentRequirement,
   type RequiredDocumentTypeContract,
 } from "@preztiaos/contracts";
@@ -24,26 +26,113 @@ import { useT, type MessageKey } from "@/core/i18n";
 import {
   useAssistantConfig,
   useDocumentRequirements,
+  useMessagingChannels,
   useSetDocumentRequirements,
   useUpdateAssistantConfig,
+  useUpdateMessagingChannels,
 } from "../api/queries";
 
 /**
- * Tab WHATSAPP / IA (solo ADMIN): asistente (base de conocimiento + IA) y documentos requeridos del
- * crédito. Es una sección sensible que el Coordinador no ve (la pestaña ni aparece), por lo que aquí
- * los controles asumen edición. Los canales/credenciales de WhatsApp se configuran POR ZONA en el
- * panel de Zonas.
+ * Tab CANALES / IA (solo ADMIN): canales de mensajería habilitados (WhatsApp y/o Telegram), asistente
+ * (base de conocimiento + IA) y documentos requeridos del crédito. Es una sección sensible que el
+ * Coordinador no ve (la pestaña ni aparece), por lo que aquí los controles asumen edición. El número
+ * de WhatsApp o el bot de Telegram de cada zona se configuran en el panel de Zonas.
  */
 export function WhatsappTab() {
   return (
     <Stack gap="lg">
+      <MessagingChannelsCard />
       <AssistantConfigCard />
       <DocumentRequirementsCard />
     </Stack>
   );
 }
 
-/** Configuración del asistente de WhatsApp: base de conocimiento, proveedor de IA y API key. */
+/**
+ * Proveedores de mensajería del tenant (ADR #40): WhatsApp, Telegram o ambos, y el preferido para
+ * los recordatorios de cobranza. Los invariantes (≥ 1 habilitado; preferido habilitado) los valida
+ * el servidor; aquí el preferido solo ofrece los proveedores activos para no invitar al error.
+ */
+function MessagingChannelsCard() {
+  const { t } = useT();
+  const query = useMessagingChannels();
+  const update = useUpdateMessagingChannels();
+  const [draft, setDraft] = useState<MessagingChannelsSettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  if (query.isPending || !query.data) return <Spinner label={t("common.loading")} />;
+  const form = draft ?? query.data;
+
+  const set = (patch: Partial<MessagingChannelsSettings>) => {
+    const next = { ...form, ...patch };
+    // Si se apaga el preferido, se sugiere el otro proveedor para que el guardado sea válido.
+    if (next.preferredProactiveChannel === "TELEGRAM" && !next.telegramEnabled) {
+      next.preferredProactiveChannel = "WHATSAPP";
+    }
+    if (next.preferredProactiveChannel === "WHATSAPP" && !next.whatsappEnabled) {
+      next.preferredProactiveChannel = "TELEGRAM";
+    }
+    setDraft(next);
+    setSaved(false);
+  };
+
+  const preferredOptions: SelectOption<MessagingProviderContract>[] = [
+    ...(form.whatsappEnabled ? [{ value: "WHATSAPP" as const, label: t("messaging.whatsapp") }] : []),
+    ...(form.telegramEnabled ? [{ value: "TELEGRAM" as const, label: t("messaging.telegram") }] : []),
+  ];
+
+  const save = () => {
+    setError(null);
+    setSaved(false);
+    update.mutate(form, {
+      onSuccess: () => {
+        setSaved(true);
+        setDraft(null);
+      },
+      onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+    });
+  };
+
+  return (
+    <Card>
+      <Stack gap="sm">
+        <Text variant="heading">{t("messaging.title")}</Text>
+        <Text variant="caption" tone="muted">
+          {t("messaging.hint")}
+        </Text>
+        {error ? <Banner tone="danger" title={error} /> : null}
+        {saved ? <Banner tone="success" title={t("messaging.saved")} /> : null}
+
+        <Switch
+          value={form.whatsappEnabled}
+          onValueChange={(v) => set({ whatsappEnabled: v })}
+          label={t("messaging.whatsapp")}
+        />
+        <Switch
+          value={form.telegramEnabled}
+          onValueChange={(v) => set({ telegramEnabled: v })}
+          label={t("messaging.telegram")}
+        />
+
+        {preferredOptions.length > 1 ? (
+          <Field label={t("messaging.preferred")} hint={t("messaging.preferred.hint")}>
+            <Select
+              value={form.preferredProactiveChannel}
+              options={preferredOptions}
+              onChange={(v) => set({ preferredProactiveChannel: v })}
+              title={t("messaging.preferred")}
+            />
+          </Field>
+        ) : null}
+
+        <Button label={t("messaging.save")} loading={update.isPending} block onPress={save} />
+      </Stack>
+    </Card>
+  );
+}
+
+/** Configuración del asistente del chat: base de conocimiento, proveedor de IA y API key. */
 function AssistantConfigCard() {
   const { t } = useT();
   const query = useAssistantConfig();

@@ -7,6 +7,15 @@ const c = initContract();
 // Un bot atiende una zona y una zona tiene a lo sumo un bot. El ADMIN solo pega el token del bot:
 // el servidor lo valida (getMe) y registra el webhook en Telegram (setWebhook) sin pasos manuales.
 
+// Proveedor de un `channelId` para los clientes (ADR #40): Telegram usa `tg:<bot_id>`; el
+// phone_number_id de WhatsApp va sin prefijo. Espejo de `channelProviderOf` del dominio (los
+// clientes solo dependen de los contratos), sin su validación: aquí solo se decide qué mostrar.
+export const TELEGRAM_CHANNEL_PREFIX = "tg:";
+
+export function messagingProviderOfChannel(channelId: string): "WHATSAPP" | "TELEGRAM" {
+  return channelId.startsWith(TELEGRAM_CHANNEL_PREFIX) ? "TELEGRAM" : "WHATSAPP";
+}
+
 // Formato del token de BotFather: `<bot_id>:<secreto>`. Se valida la forma en la frontera; la
 // validez real la confirma Telegram (getMe) al guardar.
 const botToken = z

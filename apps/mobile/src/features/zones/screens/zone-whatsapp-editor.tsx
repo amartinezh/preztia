@@ -20,10 +20,12 @@ import { useT } from "@/core/i18n";
 import {
   useCreateChannel,
   useDeleteChannel,
+  useMessagingChannels,
   useUpdateChannelCredentials,
   useWhatsappChannels,
 } from "@/features/settings/api/queries";
 import { useUpdateZone } from "../api/queries";
+import { ZoneTelegramSection } from "./zone-telegram-section";
 
 type CredDraft = {
   accessToken: string;
@@ -68,9 +70,9 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /**
- * Editor de WhatsApp de UNA zona (ADMIN): lista los números vinculados a la zona y permite añadir un
- * número con sus credenciales de Meta o editar las credenciales existentes. Los secretos van
- * cifrados en la BD y jamás vuelven a la app: solo se muestra el estado (`has*`).
+ * Editor de CANALES de UNA zona (ADMIN): teléfono de atención, números de WhatsApp (credenciales de
+ * Meta) y bot de Telegram (ADR #40). Cada proveedor aparece según lo habilitado en Ajustes. Los
+ * secretos van cifrados en la BD y jamás vuelven a la app: solo se muestra su estado.
  */
 export function ZoneWhatsappEditor({
   visible,
@@ -83,7 +85,11 @@ export function ZoneWhatsappEditor({
 }) {
   const { t } = useT();
   const channels = useWhatsappChannels();
+  const messaging = useMessagingChannels();
   if (!zone) return null;
+  // Mientras carga la configuración se asume lo previo a Telegram (solo WhatsApp).
+  const whatsappEnabled = messaging.data?.whatsappEnabled ?? true;
+  const telegramEnabled = messaging.data?.telegramEnabled ?? false;
 
   const zoneChannels = (channels.data?.items ?? []).filter((c) => c.zoneId === zone.id);
 
@@ -93,28 +99,39 @@ export function ZoneWhatsappEditor({
         <Text variant="caption" tone="muted">
           {zone.name} · {zone.path}
         </Text>
-        <Text variant="caption" tone="muted">
-          {t("zonesWa.hint")}
-        </Text>
-
         <ZoneSupportPhoneCard zone={zone} />
 
-        {channels.isPending ? <Spinner label={t("common.loading")} /> : null}
-        {!channels.isPending && zoneChannels.length === 0 ? (
-          <Text tone="muted">{t("zonesWa.empty")}</Text>
-        ) : null}
+        <Text variant="heading">{t("zonesWa.section")}</Text>
+        {whatsappEnabled ? (
+          <>
+            <Text variant="caption" tone="muted">
+              {t("zonesWa.hint")}
+            </Text>
+            {channels.isPending ? <Spinner label={t("common.loading")} /> : null}
+            {!channels.isPending && zoneChannels.length === 0 ? (
+              <Text tone="muted">{t("zonesWa.empty")}</Text>
+            ) : null}
 
-        {zoneChannels.map((ch) => (
-          <ChannelCredentialsCard key={ch.id} channel={ch} />
-        ))}
+            {zoneChannels.map((ch) => (
+              <ChannelCredentialsCard key={ch.id} channel={ch} />
+            ))}
 
-        <AddChannelCard zoneId={zone.id} />
+            <AddChannelCard zoneId={zone.id} />
 
-        <WebhookSetupCard />
+            <WebhookSetupCard />
 
-        <Text variant="caption" tone="muted">
-          {t("zonesWa.shareHint")}
-        </Text>
+            <Text variant="caption" tone="muted">
+              {t("zonesWa.shareHint")}
+            </Text>
+          </>
+        ) : (
+          <Text variant="caption" tone="muted">
+            {t("zonesWa.disabled")}
+          </Text>
+        )}
+
+        <Text variant="heading">{t("zonesTg.section")}</Text>
+        <ZoneTelegramSection zone={zone} enabled={telegramEnabled} />
       </ScrollView>
     </Modal>
   );

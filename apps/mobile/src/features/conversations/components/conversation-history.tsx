@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { View } from "react-native";
-import type { ConversationThreadOutput } from "@preztiaos/contracts";
+import { messagingProviderOfChannel, type ConversationThreadOutput } from "@preztiaos/contracts";
 import { Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { useT, type MessageKey } from "@/core/i18n";
@@ -12,7 +12,7 @@ type ThreadEntry =
   | { kind: "failure"; at: string; value: ConversationThreadOutput["failures"][number] };
 
 /**
- * Historial de conversación de WhatsApp con un cliente, renderizado como hilo de chat continuo:
+ * Historial de conversación (WhatsApp y/o Telegram) con un cliente, renderizado como hilo continuo:
  * los mensajes ENTRANTES (lo que el cliente envía, incluidas fotos del comprobante) a la izquierda
  * y los SALIENTES (recordatorios de cobro automáticos y manuales) a la derecha. Lee el transcript
  * append-only `conversation_message` por teléfono (scopeado por zona en el servidor).
@@ -44,6 +44,7 @@ export function ConversationHistory({ phone }: { phone: string | null }) {
 }
 
 function MessageBubble({ entry }: { entry: ConversationThreadOutput["entries"][number] }) {
+  const { t } = useT();
   const inbound = entry.direction === "INBOUND";
   return (
     <View
@@ -52,7 +53,12 @@ function MessageBubble({ entry }: { entry: ConversationThreadOutput["entries"][n
       }`}
     >
       <Text variant="caption" tone="muted">
-        {entry.kind} · {formatTimestamp(entry.createdAt)}
+        {t(
+          messagingProviderOfChannel(entry.channelId) === "TELEGRAM"
+            ? "messaging.telegram"
+            : "messaging.whatsapp",
+        )}{" "}
+        · {entry.kind} · {formatTimestamp(entry.createdAt)}
       </Text>
       <Text variant="body">
         {entry.body ?? (entry.mimeType ? `[${entry.mimeType}]` : `[${entry.kind}]`)}

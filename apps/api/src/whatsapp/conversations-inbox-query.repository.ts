@@ -174,6 +174,7 @@ export class ConversationsInboxQueryRepository {
       const messages = await tx
         .select({
           direction: schema.conversationMessage.direction,
+          channelId: schema.conversationMessage.channelId,
           kind: schema.conversationMessage.kind,
           body: schema.conversationMessage.body,
           mimeType: schema.conversationMessage.mimeType,
@@ -213,6 +214,7 @@ export class ConversationsInboxQueryRepository {
         applicantPhone: input.phone,
         entries: messages.map((m) => ({
           direction: m.direction,
+          channelId: m.channelId,
           kind: m.kind,
           body: m.body ?? null,
           mimeType: m.mimeType ?? null,

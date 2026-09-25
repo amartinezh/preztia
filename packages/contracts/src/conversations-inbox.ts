@@ -164,6 +164,9 @@ export const conversationStatsQuery = conversationFilters.omit({ outcome: true }
 
 export const inboxMessage = z.object({
   direction: z.enum(["INBOUND", "OUTBOUND"]),
+  // Canal del mensaje (phone_number_id o `tg:<bot_id>`): un mismo cliente puede escribir por
+  // WhatsApp y por Telegram, y el hilo los intercala.
+  channelId: z.string(),
   kind: z.string(),
   body: z.string().nullable(),
   mimeType: z.string().nullable(),

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreateChannelInput,
+  CreateTelegramChannelInput,
+  UpdateMessagingChannelsInput,
   SetDocumentRequirementsInput,
   UpdateAssistantConfigInput,
   UpdateChannelInput,
@@ -16,6 +18,7 @@ export const settingsKeys = {
   assistant: () => [...settingsKeys.all, "assistant"] as const,
   documents: () => [...settingsKeys.all, "documents"] as const,
   collectionReminder: () => [...settingsKeys.all, "collection-reminder"] as const,
+  messaging: () => [...settingsKeys.all, "messaging-channels"] as const,
 };
 
 export function useOperationalSettings() {
@@ -129,5 +132,78 @@ export function useDeleteChannel() {
     mutationFn: async (id: string) =>
       unwrap(await api.deleteChannel({ headers: tenantHeader(), params: { id }, body: {} })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: channelKeys.all }),
+  });
+}
+
+// ── Canales de mensajería del tenant (WhatsApp y/o Telegram), ADMIN ─────────
+export function useMessagingChannels() {
+  return useQuery({
+    queryKey: settingsKeys.messaging(),
+    queryFn: async () => unwrap(await api.getMessagingChannels({ headers: tenantHeader() })),
+  });
+}
+
+export function useUpdateMessagingChannels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: UpdateMessagingChannelsInput) =>
+      unwrap(await api.updateMessagingChannels({ headers: tenantHeader(), body: patch })),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: settingsKeys.messaging() }),
+  });
+}
+
+// ── Bots de Telegram (bot → zona), ADMIN ────────────────────────────────────
+export const telegramKeys = { all: ["telegram-channels"] as const };
+
+export function useTelegramChannels() {
+  return useQuery({
+    queryKey: telegramKeys.all,
+    queryFn: async () => unwrap(await api.listTelegramChannels({ headers: tenantHeader() })),
+  });
+}
+
+export function useCreateTelegramChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateTelegramChannelInput) =>
+      unwrap(await api.createTelegramChannel({ headers: tenantHeader(), body: input })),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: telegramKeys.all }),
+  });
+}
+
+export function useRotateTelegramToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; botToken: string }) =>
+      unwrap(
+        await api.updateTelegramChannel({
+          headers: tenantHeader(),
+          params: { id: input.id },
+          body: { botToken: input.botToken },
+        }),
+      ),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: telegramKeys.all }),
+  });
+}
+
+export function useVerifyTelegramChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      unwrap(
+        await api.verifyTelegramChannel({ headers: tenantHeader(), params: { id }, body: {} }),
+      ),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: telegramKeys.all }),
+  });
+}
+
+export function useDeleteTelegramChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      unwrap(
+        await api.deleteTelegramChannel({ headers: tenantHeader(), params: { id }, body: {} }),
+      ),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: telegramKeys.all }),
   });
 }
