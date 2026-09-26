@@ -35,8 +35,20 @@ export interface CreditRepository {
       endDate: string;
     },
     schedule: readonly ScheduledInstallment[],
+    funding: DisbursementFunding,
     contact?: { phone: string },
   ): Promise<void>;
+}
+
+/**
+ * De dónde sale el dinero del crédito. Otorgar ES desembolsar: el repositorio debita la caja
+ * en la MISMA transacción que crea el crédito (sin saldo, o si la zona del crédito no puede
+ * usar esa caja, no queda crédito).
+ */
+export interface DisbursementFunding {
+  cashBoxId: string;
+  /** app_user que otorga (queda en el asiento del libro). */
+  grantedBy: string;
 }
 
 // Puerto opcional: política de crédito del cliente (cupo + bloqueo) y su saldo vigente. Cuando
@@ -59,6 +71,10 @@ export interface GrantCreditCommand {
   paymentPlanId?: string;
   /** Teléfono WhatsApp del deudor (E.164 sin '+'): habilita abonos por PIX. */
   borrowerPhone?: string;
+  /** Caja/cuenta de la que sale el desembolso. */
+  fundingCashBoxId: string;
+  /** app_user que otorga el crédito. */
+  grantedBy: string;
 }
 
 export class GrantCreditHandler {
@@ -95,6 +111,7 @@ export class GrantCreditHandler {
         endDate: dueDates[dueDates.length - 1]!,
       },
       scheduled,
+      { cashBoxId: cmd.fundingCashBoxId, grantedBy: cmd.grantedBy },
       cmd.borrowerPhone ? { phone: cmd.borrowerPhone } : undefined,
     );
     return { id, installments: schedule.length };

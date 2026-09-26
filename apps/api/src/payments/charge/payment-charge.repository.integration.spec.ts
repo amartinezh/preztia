@@ -12,7 +12,9 @@ import {
 const describeDb = hasDb() ? describe : describe.skip;
 
 const repo = new PaymentChargeDrizzleRepository();
-const CHANNEL = 'wapp-phone-1';
+// Canal propio por tenant: el phone_number_id es único globalmente y los tenants de prueba
+// conviven en la misma corrida (la limpieza es en afterAll).
+const channelOf = (tenantId: string): string => `wapp-${tenantId}`;
 
 describeDb('PaymentChargeDrizzleRepository (integración)', () => {
   const tenants: string[] = [];
@@ -26,7 +28,7 @@ describeDb('PaymentChargeDrizzleRepository (integración)', () => {
   async function seedChannel(tenantId: string): Promise<void> {
     await owner()`
       INSERT INTO tenant_config (tenant_id, whatsapp_phone_number_id, currency)
-      VALUES (${tenantId}, ${CHANNEL}, 'BRL')`;
+      VALUES (${tenantId}, ${channelOf(tenantId)}, 'BRL')`;
   }
 
   async function seedCredit(tenantId: string): Promise<string> {
@@ -46,6 +48,7 @@ describeDb('PaymentChargeDrizzleRepository (integración)', () => {
   it('abre una sesión y la resuelve por canal; una segunda apertura reemplaza la anterior', async () => {
     const tenant = newTenant();
     await seedChannel(tenant);
+    const CHANNEL = channelOf(tenant);
     const creditId = await seedCredit(tenant);
 
     await repo.openSession({
@@ -86,6 +89,7 @@ describeDb('PaymentChargeDrizzleRepository (integración)', () => {
   it('attachCharge crea el comprobante esperado (UNVERIFIED) y avanza la sesión a PENDING', async () => {
     const tenant = newTenant();
     await seedChannel(tenant);
+    const CHANNEL = channelOf(tenant);
     const creditId = await seedCredit(tenant);
 
     await repo.openSession({
@@ -139,6 +143,7 @@ describeDb('PaymentChargeDrizzleRepository (integración)', () => {
   it('markStatusByMerchantChargeId refleja PAID solo desde PENDING', async () => {
     const tenant = newTenant();
     await seedChannel(tenant);
+    const CHANNEL = channelOf(tenant);
     const creditId = await seedCredit(tenant);
     await repo.openSession({
       tenantId: tenant,

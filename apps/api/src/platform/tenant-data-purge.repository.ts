@@ -18,6 +18,7 @@ export const PURGE_ORDER: readonly string[] = [
   // Referencian pagos/créditos/caja/cuotas → van primero.
   'cash_transaction', // → cash_box, payment, expense
   'cash_count', // → cash_box
+  'collector_remittance', // → cash_box
   'bank_reconciliation', // → cash_box
   'fraud_assessment', // → payment
   'incoming_credit', // → payment

@@ -11,6 +11,7 @@ import {
 import { type AllocationResult, type PixReceiptData } from '@preztiaos/domain';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
+import { applyAllocationsTx } from './allocation-writer';
 import { recordFraudAssessmentTx } from './fraud-assessment.recorder';
 
 /**
@@ -308,38 +309,12 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
       currency: string;
     },
   ): Promise<void> {
-    for (const allocation of input.allocation.allocations) {
-      const updated = await tx
-        .update(schema.installment)
-        .set({
-          paidMinor: sql`${schema.installment.paidMinor} + ${allocation.amountMinor}`,
-          status: sql`case when ${schema.installment.paidMinor} + ${allocation.amountMinor} >= ${schema.installment.amountDueMinor} then 'PAID'::installment_status else 'PARTIALLY_PAID'::installment_status end`,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(schema.installment.id, allocation.installmentId),
-            sql`${schema.installment.paidMinor} + ${allocation.amountMinor} <= ${schema.installment.amountDueMinor}`,
-          ),
-        )
-        .returning({ id: schema.installment.id });
-      if (!updated.length) {
-        throw new Error(
-          `Conciliación rechazada: la cuota ${allocation.installmentId} ya no admite el monto`,
-        );
-      }
-    }
-
-    if (input.allocation.allocations.length) {
-      await tx.insert(schema.paymentAllocation).values(
-        input.allocation.allocations.map((a) => ({
-          tenantId: input.tenantId,
-          paymentId: input.paymentId,
-          installmentId: a.installmentId,
-          amountMinor: a.amountMinor,
-        })),
-      );
-    }
+    await applyAllocationsTx(tx, {
+      tenantId: input.tenantId,
+      paymentId: input.paymentId,
+      creditId: input.creditId,
+      allocations: input.allocation.allocations,
+    });
 
     if (input.allocation.creditSettled && input.creditId) {
       await tx

@@ -312,6 +312,17 @@ async function main() {
         assignedBy: ids.coordinator,
       },
     ]);
+
+    // 9) Caja de ruta del cobrador (zona Medellín): el efectivo que cobra entra aquí. Sin ella
+    //    el cobro en efectivo responde 409 NO_ROUTE_CASH_BOX.
+    await tx.insert(schema.cashBox).values({
+      tenantId: TENANT_ID,
+      type: 'CASH',
+      name: 'Caja de ruta cob1',
+      currency: CURRENCY,
+      assignedTo: ids.collector,
+      zoneId: ids.zoneChild,
+    });
   });
 
   await db.$client.end();

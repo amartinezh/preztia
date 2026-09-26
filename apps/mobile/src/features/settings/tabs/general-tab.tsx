@@ -127,6 +127,17 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
           />
         </Field>
         <Text variant="caption" tone="muted">{t("config.visitThresholdHint")}</Text>
+        <Field label={t("config.remittanceDeadline")}>
+          <Input
+            keyboardType="numeric"
+            editable={canEdit}
+            value={String(form.remittanceDeadlineHourLocal)}
+            onChangeText={(text) =>
+              set("remittanceDeadlineHourLocal", Math.min(23, Math.max(0, Math.round(Number(text) || 0))))
+            }
+          />
+        </Field>
+        <Text variant="caption" tone="muted">{t("config.remittanceDeadlineHint")}</Text>
         <Field label={t("config.commission")}>
           <Input
             keyboardType="numeric"

@@ -41,6 +41,11 @@ export interface OperationalSettings {
    * umbral con el que el mapa de cobro marca a un cliente como "crítico".
    */
   readonly visitOverdueThreshold: number;
+  /**
+   * Hora local (0–23) límite para que el cobrador rinda cuentas del efectivo cobrado en el día.
+   * Pasada esa hora sin declarar, la rendición aparece atrasada (control del coordinador).
+   */
+  readonly remittanceDeadlineHourLocal: number;
 }
 
 /** Vencimiento por defecto de la oferta de plan: un día (parametrizable por tenant). */
@@ -48,6 +53,9 @@ export const DEFAULT_PLAN_OFFER_TTL_HOURS = 24;
 
 /** Umbral por defecto de cuotas vencidas para agendar una visita del cobrador. */
 export const DEFAULT_VISIT_OVERDUE_THRESHOLD = 3;
+
+/** Hora local límite por defecto para rendir cuentas (20:00). */
+export const DEFAULT_REMITTANCE_DEADLINE_HOUR = 20;
 
 export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   rechargesEnabled: false,
@@ -63,6 +71,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   // Por defecto APAGADO: los pagos conciliados por settlement esperan aprobación humana.
   autoConfirmSettlement: false,
   visitOverdueThreshold: DEFAULT_VISIT_OVERDUE_THRESHOLD,
+  remittanceDeadlineHourLocal: DEFAULT_REMITTANCE_DEADLINE_HOUR,
 };
 
 /** Aplica un parche parcial sobre los ajustes actuales (inmutable; solo campos presentes). */

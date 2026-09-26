@@ -3,7 +3,11 @@ import { eq, sql } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import { assertCanPost, type CashTxKind } from '@preztiaos/domain';
 import { type Tx } from '../tenancy/unit-of-work';
-import { balanceOfBox } from './cash-ledger';
+import {
+  assertCreditCanUseBox,
+  attributionFor,
+  balanceOfBox,
+} from './cash-ledger';
 import { guardDomain } from './domain-guard';
 
 /** Traza al hecho de negocio que origina la salida (a lo sumo una poblada). */
@@ -33,6 +37,8 @@ export interface CashOutToPost {
  * El invariante de saldo lo enuncia el dominio (`assertCanPost`): si no alcanza, lanza y la
  * transacción completa se revierte (sin doble efecto, sin sobregiro). La idempotencia por origen
  * la garantizan los índices únicos parciales (`cash_tx_credit_idx`, `cash_tx_expense_idx`).
+ * Un desembolso solo sale de una caja que la zona del crédito puede usar (propia o superior),
+ * y el asiento sella su zona y cobrador (`attributionFor`).
  */
 export async function postCashOut(
   tx: Tx,
@@ -57,6 +63,9 @@ export async function postCashOut(
   if (!box.active)
     throw new ConflictException('La caja/cuenta de origen está inactiva');
 
+  const creditId = input.origin?.creditId;
+  if (creditId) await assertCreditCanUseBox(tx, creditId, box.id);
+
   const currentBalanceMinor = await balanceOfBox(tx, box.id);
   guardDomain(() =>
     assertCanPost({
@@ -71,6 +80,9 @@ export async function postCashOut(
     }),
   );
 
+  const { zoneId, collectorId } = await attributionFor(tx, box.id, {
+    creditId,
+  });
   const [posted] = await tx
     .insert(schema.cashTransaction)
     .values({
@@ -83,6 +95,8 @@ export async function postCashOut(
       reason: input.reason,
       creditId: input.origin?.creditId ?? null,
       expenseId: input.origin?.expenseId ?? null,
+      zoneId,
+      collectorId,
       createdBy: input.createdBy,
     })
     .returning({ id: schema.cashTransaction.id });

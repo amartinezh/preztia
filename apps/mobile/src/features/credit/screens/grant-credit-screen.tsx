@@ -29,6 +29,8 @@ import { useT } from "@/core/i18n";
 import { useBorrowersList, useCreateBorrower } from "@/features/borrowers/api/queries";
 import { usePaymentPlans } from "@/features/payment-plans/api/queries";
 import { useZonesList } from "@/features/zones/api/queries";
+import { useFundingBoxes } from "@/features/cash/api/boxes-queries";
+import { FundingBoxPicker, isFundingInsufficient } from "@/features/cash/components/funding-box-picker";
 import { useGrantCredit } from "../api/queries";
 
 type FieldErrors = Partial<Record<keyof GrantCreditInput, string>>;
@@ -75,6 +77,8 @@ export function GrantCreditScreen() {
   const [interestOverride, setInterestOverride] = useState<string | null>(null);
   const [installmentsOverride, setInstallmentsOverride] = useState<string | null>(null);
   const [frequencyOverride, setFrequencyOverride] = useState<PlanFrequency | null>(null);
+  // Caja/cuenta de la que sale el dinero (depende de la zona: se reinicia al cambiarla).
+  const [fundingCashBoxId, setFundingCashBoxId] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -122,11 +126,16 @@ export function GrantCreditScreen() {
   const overLimit =
     !!borrower && borrower.creditLimitMinor > 0 && principalMinor > borrower.creditLimitMinor;
   const blocked = !!borrower?.creditBlocked;
+  const fundingBoxes = useFundingBoxes(zoneId || null);
+  const selectedFundingBox =
+    (fundingBoxes.data?.items ?? []).find((b) => b.id === fundingCashBoxId) ?? null;
+  const fundsInsufficient = isFundingInsufficient(selectedFundingBox, principalMinor);
 
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
     if (!borrower) next.borrowerId = t("credit.new.borrower.required");
     if (!zoneId) next.zoneId = t("credit.new.zone.required");
+    if (!fundingCashBoxId) next.fundingCashBoxId = t("credit.new.funding.required");
     if (!Number.isFinite(principalNum) || principalNum <= 0)
       next.principalMinor = t("credit.new.principal.invalid");
     const installmentsNum = Math.trunc(Number(installments));
@@ -158,6 +167,7 @@ export function GrantCreditScreen() {
       interestPct: Number(interest) * PERCENT_TO_BASE_THOUSAND,
       installmentsCount: Math.trunc(Number(installments)),
       frequency,
+      fundingCashBoxId,
       ...(planId && planId !== CUSTOM_PLAN ? { paymentPlanId: planId } : {}),
     };
     const parsed = grantCreditInput.safeParse(candidate);
@@ -200,6 +210,7 @@ export function GrantCreditScreen() {
             options={zoneOptions}
             onChange={(v) => {
               setZoneId(v);
+              setFundingCashBoxId(null);
               setErrors((e) => ({ ...e, zoneId: undefined }));
             }}
             placeholder={t("credit.new.zone.placeholder")}
@@ -258,10 +269,26 @@ export function GrantCreditScreen() {
           />
         </Field>
 
+        {/* Otorgar es desembolsar: el dinero sale de esta caja/cuenta en la misma operación. */}
+        <FundingBoxPicker
+          zoneId={zoneId || null}
+          value={fundingCashBoxId}
+          onChange={(id) => {
+            setFundingCashBoxId(id);
+            setErrors((e) => ({ ...e, fundingCashBoxId: undefined }));
+          }}
+          amountMinor={principalMinor}
+        />
+        {errors.fundingCashBoxId ? (
+          <Text variant="caption" tone="danger">
+            {errors.fundingCashBoxId}
+          </Text>
+        ) : null}
+
         <Button
           label={t("credit.new.submit")}
           loading={grant.isPending}
-          disabled={blocked}
+          disabled={blocked || fundsInsufficient}
           block
           onPress={onSubmit}
         />

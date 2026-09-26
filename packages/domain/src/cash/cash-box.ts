@@ -13,7 +13,8 @@ export type CashTxKind =
   | "EXPENSE"
   | "TRANSFER"
   | "ADJUSTMENT"
-  | "UNIDENTIFIED";
+  | "UNIDENTIFIED"
+  | "DEBT_CLOSURE";
 
 /** Asiento ya registrado, reducido a lo que importa para el saldo. */
 export interface LedgerEntry {
@@ -40,11 +41,12 @@ export function boxBalanceMinor(entries: readonly LedgerEntry[]): number {
   );
 }
 
-/** ¿Esta naturaleza de movimiento exige siempre un motivo? Los retiros sí. */
+/** ¿Esta naturaleza de movimiento exige siempre un motivo? Retiros y cierres de deuda sí. */
 function requiresReason(type: CashBoxType, kind: CashTxKind): boolean {
   // Caja Menor (efectivo): TODO movimiento exige detalle/motivo.
   // Retiro: exige motivo en cualquier caja (conciliación frente a la realidad).
-  return type === "CASH" || kind === "WITHDRAWAL";
+  // Cierre de deuda del cobrador: exige justificar la nómina o la condonación.
+  return type === "CASH" || kind === "WITHDRAWAL" || kind === "DEBT_CLOSURE";
 }
 
 /**

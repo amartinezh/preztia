@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import {
   allocatePayment,
@@ -8,6 +8,8 @@ import {
   type PortfolioInstallment,
 } from '@preztiaos/domain';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
+import { applyAllocationsTx } from './allocation-writer';
+import { postCashPaymentToRouteBox } from '../cash/payment-box-router';
 
 export interface CashPaymentResult {
   id: string;
@@ -19,8 +21,9 @@ export interface CashPaymentResult {
 /**
  * Registra un abono en EFECTIVO (cobro de ruta) de forma ATÓMICA e IDEMPOTENTE.
  * Reusa el dominio puro `allocatePayment` (cascada a la cuota más antigua) y persiste
- * pago + asignaciones + actualización de cuotas + evento de auditoría en una sola
- * transacción. Devuelve `null` si el crédito no existe.
+ * pago + asignaciones + actualización de cuotas + asiento PAYMENT_IN en la caja de ruta de
+ * quien cobró + evento de auditoría en una sola transacción. Devuelve `null` si el crédito
+ * no existe.
  */
 @Injectable()
 export class CashPaymentDrizzleRepository {
@@ -29,6 +32,8 @@ export class CashPaymentDrizzleRepository {
     creditId: string;
     amountMinor: number;
     idempotencyKey: string | null;
+    /** app_user que recibió el efectivo (su caja de ruta lo recibe). */
+    receivedBy: string;
   }): Promise<CashPaymentResult | null> {
     return withTenantTxFor(input.tenantId, async (tx) => {
       // 1. Idempotencia: si esta clave ya materializó un abono, devolver su resultado
@@ -85,39 +90,24 @@ export class CashPaymentDrizzleRepository {
         .returning({ id: schema.payment.id });
       const paymentId = inserted.id;
 
-      // 5. Aplicar las asignaciones con guardia de concurrencia (paid ≤ due) e
-      //    insertar las filas auditables de asignación.
-      for (const allocation of result.allocations) {
-        const updated = await tx
-          .update(schema.installment)
-          .set({
-            paidMinor: sql`${schema.installment.paidMinor} + ${allocation.amountMinor}`,
-            status: sql`case when ${schema.installment.paidMinor} + ${allocation.amountMinor} >= ${schema.installment.amountDueMinor} then 'PAID'::installment_status else 'PARTIALLY_PAID'::installment_status end`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(schema.installment.id, allocation.installmentId),
-              sql`${schema.installment.paidMinor} + ${allocation.amountMinor} <= ${schema.installment.amountDueMinor}`,
-            ),
-          )
-          .returning({ id: schema.installment.id });
-        if (!updated.length) {
-          throw new Error(
-            `Abono rechazado: la cuota ${allocation.installmentId} ya no admite el monto (operación concurrente)`,
-          );
-        }
-      }
-      if (result.allocations.length) {
-        await tx.insert(schema.paymentAllocation).values(
-          result.allocations.map((a) => ({
-            tenantId: input.tenantId,
-            paymentId,
-            installmentId: a.installmentId,
-            amountMinor: a.amountMinor,
-          })),
-        );
-      }
+      // El efectivo entra al libro en la caja de ruta de quien cobró (sin caja → 409, todo
+      // se revierte: no queda abono sin dinero en caja).
+      await postCashPaymentToRouteBox(tx, {
+        tenantId: input.tenantId,
+        paymentId,
+        receivedBy: input.receivedBy,
+        amountMinor: input.amountMinor,
+        currency: credit.currency,
+      });
+
+      // 5. Aplicar las asignaciones con guardia de concurrencia (paid ≤ due), con su
+      //    desglose capital/interés, e insertar las filas auditables de asignación.
+      await applyAllocationsTx(tx, {
+        tenantId: input.tenantId,
+        paymentId,
+        creditId: input.creditId,
+        allocations: result.allocations,
+      });
 
       // 6. Traza append-only del movimiento de dinero (auditabilidad financiera).
       await tx.insert(schema.paymentEvent).values({

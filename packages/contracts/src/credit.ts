@@ -47,6 +47,9 @@ export const grantCreditInput = z.object({
   frequency: planFrequency.optional(),
   // Teléfono WhatsApp del deudor (E.164 sin '+'): habilita el abono de pagos PIX.
   borrowerPhone: z.string().regex(/^\d{8,15}$/).optional(),
+  // Caja/cuenta de la que SALE el dinero: otorgar es desembolsar (el libro lo debita en la
+  // misma transacción; sin saldo no hay crédito).
+  fundingCashBoxId: z.string().uuid(),
 });
 export type GrantCreditInput = z.infer<typeof grantCreditInput>;
 

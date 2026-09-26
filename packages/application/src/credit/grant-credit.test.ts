@@ -4,6 +4,7 @@ import type { ScheduleFrequency } from "@preztiaos/domain";
 import {
   GrantCreditHandler,
   type CreditRepository,
+  type DisbursementFunding,
   type ScheduledInstallment,
 } from "./grant-credit";
 
@@ -12,14 +13,16 @@ class FakeCreditRepository implements CreditRepository {
   saved: {
     credit: Parameters<CreditRepository["save"]>[0];
     schedule: readonly ScheduledInstallment[];
+    funding: DisbursementFunding;
     contact: { phone: string } | undefined;
   }[] = [];
   async save(
     credit: Parameters<CreditRepository["save"]>[0],
     schedule: readonly ScheduledInstallment[],
+    funding: DisbursementFunding,
     contact?: { phone: string },
   ) {
-    this.saved.push({ credit, schedule, contact });
+    this.saved.push({ credit, schedule, funding, contact });
   }
 }
 
@@ -31,6 +34,8 @@ const baseCommand = {
   interestPct: 200, // 20% en base-mil
   installmentsCount: 20,
   currency: "COP",
+  fundingCashBoxId: "55555555-5555-5555-5555-555555555555",
+  grantedBy: "66666666-6666-6666-6666-666666666666",
 };
 
 describe("GrantCreditHandler", () => {
@@ -62,5 +67,17 @@ describe("GrantCreditHandler", () => {
     const { credit } = repo.saved[0]!;
     expect(credit.paymentPlanId).toBeNull();
     expect(credit.frequency).toBe("DAILY");
+  });
+
+  it("entrega al repositorio la caja de origen y quién otorga: otorgar es desembolsar", async () => {
+    const repo = new FakeCreditRepository();
+    const handler = new GrantCreditHandler(repo);
+
+    await handler.execute(baseCommand);
+
+    expect(repo.saved[0]!.funding).toEqual({
+      cashBoxId: baseCommand.fundingCashBoxId,
+      grantedBy: baseCommand.grantedBy,
+    });
   });
 });

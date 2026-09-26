@@ -33,6 +33,7 @@ export * from "./fraud-assessment";
 export * from "./cash-box";
 export * from "./cash-transaction";
 export * from "./cash-count";
+export * from "./collector-remittance";
 export * from "./bank-reconciliation";
 export * from "./app-user";
 export * from "./tenant";

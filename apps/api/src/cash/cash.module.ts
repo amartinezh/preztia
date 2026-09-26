@@ -16,14 +16,23 @@ import { BankBalanceProviderRegistry } from './banking/bank-balance.registry';
 import { InterBalanceClient } from './banking/inter/inter-balance.client';
 import { InterBalanceProvider } from './banking/inter/inter-balance.provider';
 import { BANK_BALANCE_PROVIDER } from './cash.tokens';
+import { RemittanceController } from './remittance.controller';
+import { RemittanceDrizzleRepository } from './remittance.repository';
+import { RemittanceQueryRepository } from './remittance-query.repository';
 
 /**
  * Módulo de CAJA: gastos (maker-checker), reporte diario (P&L), y el manejo de cajas/cuentas
  * bancarias (clasificación, libro mayor, transferencias, dashboard, arqueo y conciliación bancaria
- * en línea). El libro de cajas es la única fuente de verdad del dinero. Bajo `app` + RLS y JwtGuard.
+ * en línea) y la rendición de cuentas del cobrador. El libro de cajas es la única fuente de verdad
+ * del dinero. Bajo `app` + RLS y JwtGuard.
  */
 @Module({
-  controllers: [CashController, CashBoxController, BankAccountController],
+  controllers: [
+    CashController,
+    CashBoxController,
+    BankAccountController,
+    RemittanceController,
+  ],
   providers: [
     ExpenseDrizzleRepository,
     CashQueryRepository,
@@ -35,6 +44,8 @@ import { BANK_BALANCE_PROVIDER } from './cash.tokens';
     PicPayAuthClient,
     CashCountDrizzleRepository,
     BankReconciliationDrizzleRepository,
+    RemittanceDrizzleRepository,
+    RemittanceQueryRepository,
 
     // Conciliación bancaria por (país, entidad). PUNTO DE EXTENSIÓN: para conciliar un banco
     // nuevo se registra su adaptador con la clave "PAÍS:BANCO" (igual que BANK_PAYMENT_VERIFIER).

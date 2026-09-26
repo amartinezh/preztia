@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import type { GrantCreditInput } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
+import { cashBoxKeys } from "@/features/cash/api/boxes-queries";
 
 const PAGE_SIZE = 20;
 
@@ -39,6 +40,8 @@ export function useGrantCredit() {
       unwrap(await api.grantCredit({ headers: tenantHeader(), body: input })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: creditKeys.list() });
+      // Otorgar desembolsa: el saldo de la caja de origen bajó.
+      void qc.invalidateQueries({ queryKey: cashBoxKeys.all });
     },
   });
 }

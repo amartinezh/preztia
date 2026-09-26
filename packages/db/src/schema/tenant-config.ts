@@ -19,6 +19,7 @@ export interface OperationalSettings {
   readonly allowAdminOverride: boolean; // Permitir crear crédito sin aceptación del cliente
   readonly autoConfirmSettlement: boolean; // Conciliar y abonar automáticamente los matches de settlement (default OFF)
   readonly visitOverdueThreshold: number; // Cuotas vencidas para agendar visita del cobrador (y umbral "crítico" del mapa)
+  readonly remittanceDeadlineHourLocal: number; // Hora local (0–23) límite para que el cobrador rinda cuentas
 }
 
 // Configuración del recordatorio de cobro por WhatsApp (Cron por tenant). La hora es LOCAL del
@@ -51,6 +52,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   allowAdminOverride: true,
   autoConfirmSettlement: false,
   visitOverdueThreshold: 3,
+  remittanceDeadlineHourLocal: 20,
 };
 
 // Proveedores de mensajería habilitados en el tenant (ADR #40). Espejo de `MessagingChannelsSettings`

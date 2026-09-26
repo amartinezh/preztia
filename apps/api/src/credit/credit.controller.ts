@@ -74,13 +74,14 @@ export class CreditController {
     const tenant = requireTenant(tenantId);
     // Otorgar crédito ES la operación de desembolso: mismo listón que aprobar un expediente
     // (ADMIN/COORDINATOR). El COLLECTOR opera la ruta de cobro, no origina deuda.
-    requireReviewer(authorization);
+    const reviewer = requireReviewer(authorization);
     const dto = grantCreditInput.parse(body); // validación con zod en la frontera
     // La moneda la fija el servidor según la configuración del tenant, no el cliente.
     return this.handler.execute({
       ...dto,
       tenantId: tenant,
       currency: await resolveTenantCurrency(tenant),
+      grantedBy: reviewer.userId,
     });
   }
 

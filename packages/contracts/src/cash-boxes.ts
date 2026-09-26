@@ -21,6 +21,7 @@ export const cashTxKind = z.enum([
   "TRANSFER",
   "ADJUSTMENT",
   "UNIDENTIFIED",
+  "DEBT_CLOSURE",
 ]);
 
 // --- Cuentas bancarias ------------------------------------------------------
@@ -138,6 +139,8 @@ export const cashBox = z.object({
   bankAccountId: z.string().uuid().nullable(),
   /** Cobrador dueño de la caja de ruta; null = caja de oficina/menor o no asignada. */
   assignedTo: z.string().uuid().nullable(),
+  /** Zona dueña de la caja; null = caja del tenant (la usa cualquier zona). */
+  zoneId: z.string().uuid().nullable(),
   active: z.boolean(),
   createdAt: z.string(),
 });
@@ -153,6 +156,8 @@ export const createCashBoxInput = z
     name: z.string().trim().min(1).max(80),
     bankAccountId: z.string().uuid().optional(),
     assignedTo: z.string().uuid().optional(),
+    // Zona dueña; ausente = caja del tenant. La usan la zona y sus zonas hijas.
+    zoneId: z.string().uuid().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.type === "BANK" && !v.bankAccountId) {
@@ -167,12 +172,14 @@ export const createCashBoxInput = z
   });
 export type CreateCashBoxInput = z.infer<typeof createCashBoxInput>;
 
-// Editar caja: nombre/estado y reasignación de cobrador (assignedTo: null lo desvincula).
-// El tipo y la cuenta son inmutables: protegen el libro mayor.
+// Editar caja: nombre/estado, reasignación de cobrador y de zona (null desvincula).
+// El tipo y la cuenta son inmutables: protegen el libro mayor. Cambiar la zona no altera
+// los asientos ya registrados (cada uno selló su zona al postearse).
 export const updateCashBoxInput = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   active: z.boolean().optional(),
   assignedTo: z.string().uuid().nullable().optional(),
+  zoneId: z.string().uuid().nullable().optional(),
 });
 export type UpdateCashBoxInput = z.infer<typeof updateCashBoxInput>;
 
@@ -288,6 +295,32 @@ export const cashDashboardOutput = z.object({
   unidentifiedMinor: z.number().int(),
 });
 export type CashDashboardOutput = z.infer<typeof cashDashboardOutput>;
+
+// Cajas/cuentas de las que una zona puede sacar dinero (desembolsos): las del tenant, las de la
+// zona y las de sus zonas superiores, activas y con su saldo. La regla la aplica el servidor.
+export const fundingBoxesQuery = z.object({ zoneId: z.string().uuid() });
+export const fundingBox = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  type: cashBoxType,
+  currency: z.string(),
+  balanceMinor: z.number().int(),
+});
+export type FundingBox = z.infer<typeof fundingBox>;
+export const listFundingBoxesOutput = z.object({ items: z.array(fundingBox) });
+
+// Caja de ruta del usuario autenticado (efectivo en su poder). null = no puede recibir efectivo.
+export const myCashBoxOutput = z.object({
+  box: z
+    .object({
+      id: z.string().uuid(),
+      name: z.string(),
+      currency: z.string(),
+      balanceMinor: z.number().int(),
+    })
+    .nullable(),
+});
+export type MyCashBoxOutput = z.infer<typeof myCashBoxOutput>;
 
 // --- Arqueo y conciliación bancaria (Req 7) ---------------------------------
 
@@ -455,6 +488,21 @@ export const cashBoxesContract = c.router({
     headers: tenantHeaders,
     responses: { 200: cashDashboardOutput },
     summary: "Dashboard financiero: saldo total y por caja",
+  },
+  listFundingBoxes: {
+    method: "GET",
+    path: "/cash/funding-boxes",
+    headers: tenantHeaders,
+    query: fundingBoxesQuery,
+    responses: { 200: listFundingBoxesOutput },
+    summary: "Cajas/cuentas que una zona puede usar para desembolsar (propias, superiores y del tenant)",
+  },
+  getMyCashBox: {
+    method: "GET",
+    path: "/me/cash-box",
+    headers: tenantHeaders,
+    responses: { 200: myCashBoxOutput },
+    summary: "Caja de ruta del usuario autenticado y su saldo (efectivo en su poder)",
   },
 
   // Arqueo y conciliación (Req 7).

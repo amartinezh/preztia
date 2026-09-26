@@ -27,6 +27,7 @@ export const cashTxDirection = pgEnum("cash_tx_direction", ["IN", "OUT"]);
 //  TRANSFER     → movimiento entre cajas (dos asientos con el mismo transfer_group_id).
 //  ADJUSTMENT   → ajuste por arqueo/conciliación (el historial no se edita: se ajusta).
 //  UNIDENTIFIED → ingreso que no se pudo conciliar → caja TRANSIT.
+//  DEBT_CLOSURE → cierre (solo ADMIN) de la deuda del cobrador en su caja de ruta.
 export const cashTxKind = pgEnum("cash_tx_kind", [
   "PAYMENT_IN",
   "DISBURSEMENT",
@@ -35,7 +36,12 @@ export const cashTxKind = pgEnum("cash_tx_kind", [
   "TRANSFER",
   "ADJUSTMENT",
   "UNIDENTIFIED",
+  "DEBT_CLOSURE",
 ]);
+
+// Cómo se cerró la deuda del cobrador: PAYROLL = recuperada por nómina (no afecta la utilidad);
+// WRITE_OFF = condonada (pérdida del período).
+export const debtClosureType = pgEnum("debt_closure_type", ["PAYROLL", "WRITE_OFF"]);
 
 // Libro mayor APPEND-ONLY de la caja (auditabilidad financiera). El saldo de cada caja
 // es Σ de sus asientos firmados por `direction`; nunca un campo mutable. La migración
@@ -65,14 +71,30 @@ export const cashTransaction = pgTable(
     cashCountId: uuid("cash_count_id").references(() => cashCount.id),
     // Las dos patas de una transferencia comparten transfer_group_id (Σ = 0).
     transferGroupId: uuid("transfer_group_id"),
+    // Atribución SELLADA al postear (no se recalcula): zona del hecho de negocio (crédito,
+    // gasto) o, si no hay, la de la caja; y cobrador dueño de la caja de ruta. Así la foto de
+    // una liquidación no cambia si el crédito o la caja se reasignan después. Sin FK (RLS).
+    zoneId: uuid("zone_id"),
+    collectorId: uuid("collector_id"),
+    // Obligatorio si y solo si kind = DEBT_CLOSURE (garantizado por CHECK).
+    debtClosureType: debtClosureType("debt_closure_type"),
     // Quién registró el asiento (app_user); sin FK, igual que actor_id de audit_log.
     // NULL = asiento generado por el sistema (ruteo automático de un pago PIX / conciliación).
     createdBy: uuid("created_by"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Reloj real AL INSERTAR (clock_timestamp), no el inicio de la transacción (now()): como todo
+    // asiento a una caja se inserta bajo su advisory lock, el orden de created_at coincide con el
+    // orden de los candados. La rendición del cobrador se apoya en eso para que "posterior al
+    // corte" no pierda un cobro concurrente.
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
   },
   (t) => ({
     byBoxIdx: index("cash_tx_box_created_idx").on(t.cashBoxId, t.createdAt),
     byTenantIdx: index("cash_tx_tenant_created_idx").on(t.tenantId, t.createdAt),
+    // Liquidación por zona y rendición por cobrador: rangos de fecha por dimensión.
+    byZoneIdx: index("cash_tx_zone_created_idx").on(t.zoneId, t.createdAt),
+    byCollectorIdx: index("cash_tx_collector_created_idx").on(t.collectorId, t.createdAt),
     // Un pago se rutea a UNA sola caja (PAYMENT_IN o UNIDENTIFIED): idempotencia de dinero.
     byPaymentIdx: uniqueIndex("cash_tx_payment_idx")
       .on(t.paymentId)
@@ -90,5 +112,11 @@ export const cashTransaction = pgTable(
       .on(t.cashCountId)
       .where(sql`cash_count_id is not null`),
     positive: check("cash_tx_amount_positive_chk", sql`amount_minor > 0`),
+    // Se compara como TEXTO: un valor de enum recién agregado (ALTER TYPE … ADD VALUE) no puede
+    // usarse en la misma transacción de migración; así esta migración aplica en un solo paso.
+    debtClosureTyped: check(
+      "cash_tx_debt_closure_type_chk",
+      sql`(kind::text = 'DEBT_CLOSURE') = (debt_closure_type is not null)`,
+    ),
   }),
 );

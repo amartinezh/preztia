@@ -303,6 +303,15 @@ async function main() {
         name: 'Fondos en Tránsito',
         currency: CURRENCY,
       },
+      {
+        // Caja de ruta del cobrador (zona Medellín): recibe el efectivo que cobra en calle.
+        tenantId: TENANT_ID,
+        type: 'CASH',
+        name: 'Caja de ruta cob1',
+        currency: CURRENCY,
+        assignedTo: ids.collector,
+        zoneId: ids.zoneChild,
+      },
     ]);
 
     // 7) Plan de pago por defecto: sin él, "Ofertar planes" da 409 (no hay plan

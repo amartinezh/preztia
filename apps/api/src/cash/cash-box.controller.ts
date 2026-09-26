@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -16,6 +17,7 @@ import {
   adjustCashBalanceInput,
   cashCountInput,
   createCashBoxInput,
+  fundingBoxesQuery,
   listCashTransactionsQuery,
   registerCashMovementInput,
   registerWithdrawalInput,
@@ -26,6 +28,8 @@ import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireAdmin } from '../auth/require-admin';
 import { requireRole } from '../auth/require-role';
+import { requireReviewer } from '../auth/require-reviewer';
+import { zoneScopePredicate } from '../iam/zone-scope';
 import { Idempotent } from '../observability/idempotent.decorator';
 import { CashBoxDrizzleRepository } from './cash-box.repository';
 import { CashQueryRepository } from './cash-query.repository';
@@ -221,6 +225,42 @@ export class CashBoxController {
     requireRole(auth, DATA_PLANE_ROLES);
     return this.queries.getCashDashboard({
       tenantId: tenant,
+      currency: await resolveTenantCurrency(tenant),
+    });
+  }
+
+  // Cajas de las que una zona puede desembolsar: quien otorga/aprueba (ADMIN/COORDINATOR),
+  // acotado a su subárbol de zonas.
+  @Get('cash/funding-boxes')
+  async fundingBoxes(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+    @Query() query: Record<string, string>,
+  ) {
+    const tenant = requireTenant(tenantId);
+    const reviewer = requireReviewer(auth);
+    const { zoneId } = fundingBoxesQuery.parse(query);
+    const items = await this.queries.listFundingBoxes({
+      tenantId: tenant,
+      zoneId,
+      zoneScope: zoneScopePredicate(reviewer),
+    });
+    if (!items) throw new NotFoundException('Zona no encontrada');
+    return { items };
+  }
+
+  // Caja de ruta propia (efectivo en poder del usuario): el móvil la consulta antes de cobrar
+  // en efectivo, porque la cola offline descarta los rechazos de negocio.
+  @Get('me/cash-box')
+  async myCashBox(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    const session = requireRole(auth, DATA_PLANE_ROLES);
+    return this.queries.findMyCashBox({
+      tenantId: tenant,
+      userId: session.userId,
       currency: await resolveTenantCurrency(tenant),
     });
   }

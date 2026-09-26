@@ -19,9 +19,13 @@ import type {
   DailyReport,
   Expense,
   ExpenseStatus,
+  FundingBox,
+  MyCashBoxOutput,
 } from '@preztiaos/contracts';
 import type { CashTxDirection, CashTxKind } from '@preztiaos/domain';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { findRouteBox } from './payment-box-router';
+import { balanceOfBox } from './cash-ledger';
 
 // Suma firmada de un libro mayor: IN suma, OUT resta. Reutilizada por el dashboard.
 const signedSum = sql<number>`COALESCE(SUM(CASE WHEN ${schema.cashTransaction.direction} = 'IN' THEN ${schema.cashTransaction.amountMinor} ELSE -${schema.cashTransaction.amountMinor} END), 0)`;
@@ -387,6 +391,85 @@ export class CashQueryRepository {
         clientsWithPayments: Number(cobrado?.clients ?? 0),
         activeCredits: Number(active?.value ?? 0),
         pendingExpenses: Number(pending?.value ?? 0),
+      };
+    });
+  }
+
+  /**
+   * Cajas/cuentas activas (CASH/BANK, sin cobrador) de las que la zona puede desembolsar, con su saldo: las
+   * del tenant (sin zona) y las de la zona o sus ancestros (`caja.path @> zona.path`). Es la
+   * misma regla que aplica `assertZoneCanUseBox` al postear; aquí solo se ofrece la lista.
+   * `zoneScope` acota al coordinador a zonas de su subárbol: fuera de alcance ⇒ null (404).
+   */
+  async listFundingBoxes(input: {
+    tenantId: string;
+    zoneId: string;
+    zoneScope: SQL | undefined;
+  }): Promise<FundingBox[] | null> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const [zone] = await tx
+        .select({ path: schema.zone.path })
+        .from(schema.zone)
+        .where(and(eq(schema.zone.id, input.zoneId), input.zoneScope))
+        .limit(1);
+      if (!zone) return null;
+
+      const boxZone = sql`(SELECT z.path FROM zone z WHERE z.id = ${schema.cashBox.zoneId})`;
+      const rows = await tx
+        .select({
+          id: schema.cashBox.id,
+          name: schema.cashBox.name,
+          type: schema.cashBox.type,
+          currency: schema.cashBox.currency,
+          balanceMinor: signedSum,
+        })
+        .from(schema.cashBox)
+        .leftJoin(
+          schema.cashTransaction,
+          eq(schema.cashTransaction.cashBoxId, schema.cashBox.id),
+        )
+        .where(
+          and(
+            eq(schema.cashBox.active, true),
+            sql`${schema.cashBox.type} <> 'TRANSIT'`,
+            // Las cajas de ruta son el efectivo del cobrador (su rendición): no fondean créditos.
+            sql`${schema.cashBox.assignedTo} IS NULL`,
+            or(
+              sql`${schema.cashBox.zoneId} IS NULL`,
+              sql`${boxZone} @> ${zone.path}::ltree`,
+            ),
+          ),
+        )
+        .groupBy(schema.cashBox.id)
+        .orderBy(schema.cashBox.name);
+      return rows.map((row) => ({
+        ...row,
+        balanceMinor: Number(row.balanceMinor),
+      }));
+    });
+  }
+
+  /** Caja de ruta del usuario (efectivo en su poder) en la moneda del tenant, con su saldo. */
+  async findMyCashBox(input: {
+    tenantId: string;
+    userId: string;
+    currency: string;
+  }): Promise<MyCashBoxOutput> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const boxId = await findRouteBox(tx, input.userId, input.currency);
+      if (!boxId) return { box: null };
+      const [box] = await tx
+        .select({ id: schema.cashBox.id, name: schema.cashBox.name })
+        .from(schema.cashBox)
+        .where(eq(schema.cashBox.id, boxId))
+        .limit(1);
+      return {
+        box: {
+          id: box.id,
+          name: box.name,
+          currency: input.currency,
+          balanceMinor: await balanceOfBox(tx, boxId),
+        },
       };
     });
   }

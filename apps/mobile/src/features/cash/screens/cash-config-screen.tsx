@@ -31,6 +31,7 @@ import { can } from "@/core/auth/authorization";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useUsersList } from "@/features/users/api/queries";
+import { useZonesList } from "@/features/zones/api/queries";
 import {
   useBankAccounts,
   useCashBoxes,
@@ -571,6 +572,14 @@ function CashBoxesSection() {
   ).map((u) => ({ value: u.id, label: u.email }));
   const collectorLabel = (id: string | null) =>
     id ? collectorOptions.find((c) => c.value === id)?.label ?? id : null;
+  const zones = useZonesList();
+  const zoneOptions: SelectOption<string>[] = (zones.data?.items ?? []).map((z) => ({
+    value: z.id,
+    label: z.name,
+    hint: z.path,
+  }));
+  const zoneLabel = (id: string | null) =>
+    id ? zoneOptions.find((z) => z.value === id)?.label ?? id : t("cash.boxes.zone.tenant");
 
   return (
     <Stack gap="sm">
@@ -584,6 +593,9 @@ function CashBoxesSection() {
               <Stack gap="xs" className="flex-1 pr-3">
                 <Text variant="label">{b.name}</Text>
                 <Text variant="caption" tone="muted">{t(`cash.boxes.type.${b.type}`)}</Text>
+                <Text variant="caption" tone="muted">
+                  {t("cash.boxes.zone")}: {zoneLabel(b.zoneId)}
+                </Text>
                 {b.type === "CASH" && b.assignedTo ? (
                   <Text variant="caption" tone="muted">
                     {t("cash.boxes.collector")}: {collectorLabel(b.assignedTo)}
@@ -606,6 +618,7 @@ function CashBoxesSection() {
           box={editor.box}
           accountOptions={accountOptions}
           collectorOptions={collectorOptions}
+          zoneOptions={zoneOptions}
           onClose={() => setEditor(null)}
         />
       ) : null}
@@ -617,11 +630,13 @@ function CashBoxModal({
   box,
   accountOptions,
   collectorOptions,
+  zoneOptions,
   onClose,
 }: {
   box?: CashBox;
   accountOptions: SelectOption<string>[];
   collectorOptions: SelectOption<string>[];
+  zoneOptions: SelectOption<string>[];
   onClose: () => void;
 }) {
   const { t } = useT();
@@ -632,6 +647,8 @@ function CashBoxModal({
   const [type, setType] = useState<CashBoxType>(box?.type ?? "CASH");
   const [accountId, setAccountId] = useState(box?.bankAccountId ?? "");
   const [collectorId, setCollectorId] = useState(box?.assignedTo ?? "");
+  // "" = caja del tenant (sin zona): la usan todas las zonas.
+  const [zoneId, setZoneId] = useState(box?.zoneId ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const typeOptions: SelectOption<CashBoxType>[] = [
@@ -643,6 +660,10 @@ function CashBoxModal({
   const collectorChoices: SelectOption<string>[] = [
     { value: "", label: t("cash.boxes.selectCollector") },
     ...collectorOptions,
+  ];
+  const zoneChoices: SelectOption<string>[] = [
+    { value: "", label: t("cash.boxes.zone.tenant") },
+    ...zoneOptions,
   ];
 
   const onError = (err: unknown) =>
@@ -656,6 +677,7 @@ function CashBoxModal({
           id: box.id,
           name: name.trim(),
           ...(box.type === "CASH" ? { assignedTo: collectorId || null } : {}),
+          ...(box.type !== "TRANSIT" ? { zoneId: zoneId || null } : {}),
         },
         { onSuccess: onClose, onError },
       );
@@ -667,6 +689,7 @@ function CashBoxModal({
         name: name.trim(),
         ...(type === "BANK" && accountId ? { bankAccountId: accountId } : {}),
         ...(type === "CASH" && collectorId ? { assignedTo: collectorId } : {}),
+        ...(type !== "TRANSIT" && zoneId ? { zoneId } : {}),
       },
       { onSuccess: onClose, onError },
     );
@@ -695,6 +718,12 @@ function CashBoxModal({
               onChange={setAccountId}
               placeholder={t("cash.boxes.selectAccount")}
             />
+          </Field>
+        ) : null}
+        {type !== "TRANSIT" ? (
+          // La zona hija también usa esta caja; sin zona, la usan todas.
+          <Field label={t("cash.boxes.zone")} hint={t("cash.boxes.zone.hint")}>
+            <Select value={zoneId || ""} options={zoneChoices} onChange={(v) => setZoneId(v)} />
           </Field>
         ) : null}
         {type === "CASH" ? (

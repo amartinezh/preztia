@@ -23,7 +23,7 @@ import type {
   UpdateCashBoxInput,
 } from '@preztiaos/contracts';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
-import { balanceOfBox } from './cash-ledger';
+import { attributionFor, balanceOfBox } from './cash-ledger';
 import { guardDomain } from './domain-guard';
 import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
@@ -43,6 +43,7 @@ function toBoxView(row: typeof schema.cashBox.$inferSelect): CashBox {
     currency: row.currency,
     bankAccountId: row.bankAccountId,
     assignedTo: row.assignedTo,
+    zoneId: row.zoneId,
     active: row.active,
     createdAt: row.createdAt.toISOString(),
   };
@@ -66,6 +67,16 @@ async function assertAssignableCollector(
       'El cobrador asignado no existe o no es un cobrador activo',
     );
   }
+}
+
+/** La zona dueña de la caja debe existir en el tenant (RLS acota el tenant dentro de la tx). */
+async function assertZoneExists(tx: Tx, zoneId: string): Promise<void> {
+  const [zone] = await tx
+    .select({ id: schema.zone.id })
+    .from(schema.zone)
+    .where(eq(schema.zone.id, zoneId))
+    .limit(1);
+  if (!zone) throw new NotFoundException('Zona no encontrada');
 }
 
 /** Un asiento a postear contra una caja (la naturaleza la decide el caso de uso). */
@@ -132,6 +143,7 @@ export class CashBoxDrizzleRepository {
       // Una caja de ruta exige un cobrador válido (el CHECK ya garantiza que sea CASH).
       if (input.assignedTo)
         await assertAssignableCollector(tx, input.assignedTo);
+      if (input.zoneId) await assertZoneExists(tx, input.zoneId);
       try {
         const [row] = await tx
           .insert(schema.cashBox)
@@ -143,6 +155,7 @@ export class CashBoxDrizzleRepository {
             bankAccountId: input.type === 'BANK' ? input.bankAccountId! : null,
             assignedTo:
               input.type === 'CASH' ? (input.assignedTo ?? null) : null,
+            zoneId: input.zoneId ?? null,
           })
           .returning();
         return toBoxView(row);
@@ -175,6 +188,7 @@ export class CashBoxDrizzleRepository {
         }
         await assertAssignableCollector(tx, patch.assignedTo);
       }
+      if (patch.zoneId) await assertZoneExists(tx, patch.zoneId);
       const [row] = await tx
         .update(schema.cashBox)
         .set({ ...patch, updatedAt: new Date() })
@@ -228,11 +242,16 @@ export class CashBoxDrizzleRepository {
         }),
       );
 
+      const { zoneId, collectorId } = await attributionFor(tx, box.id, {
+        paymentId: cmd.paymentId,
+      });
       const [row] = await tx
         .insert(schema.cashTransaction)
         .values({
           tenantId: cmd.tenantId,
           cashBoxId: box.id,
+          zoneId,
+          collectorId,
           direction: cmd.direction,
           kind: cmd.kind,
           amountMinor: cmd.amountMinor,
@@ -301,11 +320,14 @@ export class CashBoxDrizzleRepository {
       });
       assertCanPost({ type: box.type, currentBalanceMinor, intent });
 
+      const { zoneId, collectorId } = await attributionFor(tx, box.id);
       const [row] = await tx
         .insert(schema.cashTransaction)
         .values({
           tenantId: cmd.tenantId,
           cashBoxId: box.id,
+          zoneId,
+          collectorId,
           direction: intent.direction,
           kind: intent.kind,
           amountMinor: intent.amountMinor,
@@ -321,76 +343,91 @@ export class CashBoxDrizzleRepository {
 
   /** Transfiere entre dos cajas en una transacción (dos asientos balanceados, Σ = 0). */
   async transfer(cmd: TransferCommand): Promise<{ transferGroupId: string }> {
-    if (cmd.fromBoxId === cmd.toBoxId) {
-      throw new BadRequestException(
-        'Las cajas de origen y destino deben ser distintas',
-      );
-    }
-    return withTenantTxFor(cmd.tenantId, async (tx) => {
-      // Bloqueo ordenado por id para evitar interbloqueos entre transferencias cruzadas.
-      const [firstId, secondId] = [cmd.fromBoxId, cmd.toBoxId].sort();
-      await lockBox(tx, firstId);
-      await lockBox(tx, secondId);
-
-      const from = await loadBox(tx, cmd.fromBoxId);
-      const to = await loadBox(tx, cmd.toBoxId);
-      if (!from || !to) throw new NotFoundException('Caja no encontrada');
-      if (!from.active || !to.active)
-        throw new ConflictException('Alguna caja está inactiva');
-      if (from.currency !== to.currency) {
-        throw new ConflictException(
-          'No se puede transferir entre cajas de distinta moneda',
-        );
-      }
-
-      const { out, in: incoming } = guardDomain(() =>
-        buildTransfer({ amountMinor: cmd.amountMinor, reason: cmd.reason }),
-      );
-      const fromBalance = await balanceOfBox(tx, from.id);
-      guardDomain(() =>
-        assertCanPost({
-          type: from.type,
-          currentBalanceMinor: fromBalance,
-          intent: out,
-        }),
-      );
-      // El asiento IN al destino nunca depende de su saldo (solo suma).
-      guardDomain(() =>
-        assertCanPost({
-          type: to.type,
-          currentBalanceMinor: 0,
-          intent: incoming,
-        }),
-      );
-
-      const transferGroupId = randomUUID();
-      await tx.insert(schema.cashTransaction).values([
-        {
-          tenantId: cmd.tenantId,
-          cashBoxId: from.id,
-          direction: 'OUT',
-          kind: 'TRANSFER',
-          amountMinor: cmd.amountMinor,
-          currency: from.currency,
-          reason: cmd.reason,
-          transferGroupId,
-          createdBy: cmd.createdBy,
-        },
-        {
-          tenantId: cmd.tenantId,
-          cashBoxId: to.id,
-          direction: 'IN',
-          kind: 'TRANSFER',
-          amountMinor: cmd.amountMinor,
-          currency: to.currency,
-          reason: cmd.reason,
-          transferGroupId,
-          createdBy: cmd.createdBy,
-        },
-      ]);
-      return { transferGroupId };
-    });
+    return withTenantTxFor(cmd.tenantId, (tx) => postTransferTx(tx, cmd));
   }
+}
+
+/**
+ * Transferencia entre dos cajas DENTRO de la transacción del llamador (dos asientos balanceados,
+ * Σ = 0). La reutilizan la transferencia manual y la recepción de la rendición del cobrador.
+ */
+export async function postTransferTx(
+  tx: Tx,
+  cmd: TransferCommand,
+): Promise<{ transferGroupId: string }> {
+  if (cmd.fromBoxId === cmd.toBoxId) {
+    throw new BadRequestException(
+      'Las cajas de origen y destino deben ser distintas',
+    );
+  }
+  // Bloqueo ordenado por id para evitar interbloqueos entre transferencias cruzadas.
+  const [firstId, secondId] = [cmd.fromBoxId, cmd.toBoxId].sort();
+  await lockBox(tx, firstId);
+  await lockBox(tx, secondId);
+
+  const from = await loadBox(tx, cmd.fromBoxId);
+  const to = await loadBox(tx, cmd.toBoxId);
+  if (!from || !to) throw new NotFoundException('Caja no encontrada');
+  if (!from.active || !to.active)
+    throw new ConflictException('Alguna caja está inactiva');
+  if (from.currency !== to.currency) {
+    throw new ConflictException(
+      'No se puede transferir entre cajas de distinta moneda',
+    );
+  }
+
+  const { out, in: incoming } = guardDomain(() =>
+    buildTransfer({ amountMinor: cmd.amountMinor, reason: cmd.reason }),
+  );
+  const fromBalance = await balanceOfBox(tx, from.id);
+  guardDomain(() =>
+    assertCanPost({
+      type: from.type,
+      currentBalanceMinor: fromBalance,
+      intent: out,
+    }),
+  );
+  // El asiento IN al destino nunca depende de su saldo (solo suma).
+  guardDomain(() =>
+    assertCanPost({
+      type: to.type,
+      currentBalanceMinor: 0,
+      intent: incoming,
+    }),
+  );
+
+  const transferGroupId = randomUUID();
+  // Cada pata se atribuye a SU caja: la entrega de un cobrador sale de su caja de ruta
+  // (su zona y su nombre) y entra a la caja de oficina (la zona de la oficina).
+  const fromAttribution = await attributionFor(tx, from.id);
+  const toAttribution = await attributionFor(tx, to.id);
+  await tx.insert(schema.cashTransaction).values([
+    {
+      tenantId: cmd.tenantId,
+      cashBoxId: from.id,
+      ...fromAttribution,
+      direction: 'OUT',
+      kind: 'TRANSFER',
+      amountMinor: cmd.amountMinor,
+      currency: from.currency,
+      reason: cmd.reason,
+      transferGroupId,
+      createdBy: cmd.createdBy,
+    },
+    {
+      tenantId: cmd.tenantId,
+      cashBoxId: to.id,
+      ...toAttribution,
+      direction: 'IN',
+      kind: 'TRANSFER',
+      amountMinor: cmd.amountMinor,
+      currency: to.currency,
+      reason: cmd.reason,
+      transferGroupId,
+      createdBy: cmd.createdBy,
+    },
+  ]);
+  return { transferGroupId };
 }
 
 /** Toma un advisory lock transaccional por caja y devuelve su fila (serializa el posteo). */

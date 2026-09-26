@@ -96,6 +96,7 @@ export class PaymentsController {
       creditId: id,
       amountMinor,
       idempotencyKey: idempotencyKey ?? null,
+      receivedBy: session.userId,
     });
     if (!result) throw new NotFoundException('Crédito no encontrado');
     return result;

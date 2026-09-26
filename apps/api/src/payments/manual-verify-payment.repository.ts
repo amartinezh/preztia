@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import {
   allocatePayment,
@@ -11,6 +11,7 @@ import {
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { recordFraudAssessmentTx } from './fraud-assessment.recorder';
 import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
+import { applyAllocationsTx } from './allocation-writer';
 
 export interface ManualVerifyResult {
   id: string;
@@ -86,38 +87,13 @@ export class ManualVerifyPaymentRepository {
         Money.of(amountMinor, pay.currency),
       );
 
-      // Aplica las asignaciones con guardia de concurrencia (paid ≤ due).
-      for (const allocation of result.allocations) {
-        const updated = await tx
-          .update(schema.installment)
-          .set({
-            paidMinor: sql`${schema.installment.paidMinor} + ${allocation.amountMinor}`,
-            status: sql`case when ${schema.installment.paidMinor} + ${allocation.amountMinor} >= ${schema.installment.amountDueMinor} then 'PAID'::installment_status else 'PARTIALLY_PAID'::installment_status end`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(schema.installment.id, allocation.installmentId),
-              sql`${schema.installment.paidMinor} + ${allocation.amountMinor} <= ${schema.installment.amountDueMinor}`,
-            ),
-          )
-          .returning({ id: schema.installment.id });
-        if (!updated.length) {
-          throw new Error(
-            `Abono rechazado: la cuota ${allocation.installmentId} ya no admite el monto (operación concurrente)`,
-          );
-        }
-      }
-      if (result.allocations.length) {
-        await tx.insert(schema.paymentAllocation).values(
-          result.allocations.map((a) => ({
-            tenantId: input.tenantId,
-            paymentId: pay.id,
-            installmentId: a.installmentId,
-            amountMinor: a.amountMinor,
-          })),
-        );
-      }
+      // Aplica las asignaciones con guardia de concurrencia (paid ≤ due) y su desglose.
+      await applyAllocationsTx(tx, {
+        tenantId: input.tenantId,
+        paymentId: pay.id,
+        creditId: pay.creditId,
+        allocations: result.allocations,
+      });
 
       await tx
         .update(schema.payment)

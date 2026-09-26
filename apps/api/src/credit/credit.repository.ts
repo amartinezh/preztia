@@ -1,7 +1,16 @@
-import { CreditRepository, ScheduledInstallment } from '@preztiaos/application';
+import {
+  CreditRepository,
+  DisbursementFunding,
+  ScheduledInstallment,
+} from '@preztiaos/application';
 import { ScheduleFrequency } from '@preztiaos/domain';
 import { schema } from '@preztiaos/db';
 import { withTenantTx } from '../tenancy/unit-of-work';
+import { postCashOut } from '../cash/cash-out-poster';
+
+// Motivo del asiento de desembolso de un otorgamiento directo.
+const DIRECT_DISBURSEMENT_REASON =
+  'Desembolso de crédito (otorgamiento directo)';
 
 export class CreditDrizzleRepository implements CreditRepository {
   async save(
@@ -20,6 +29,7 @@ export class CreditDrizzleRepository implements CreditRepository {
       endDate: string;
     },
     installments: readonly ScheduledInstallment[],
+    funding: DisbursementFunding,
     contact?: { phone: string },
   ): Promise<void> {
     await withTenantTx(async (tx) => {
@@ -48,6 +58,18 @@ export class CreditDrizzleRepository implements CreditRepository {
           amountDueMinor: i.amountDueMinor,
         })),
       );
+
+      // El dinero SALE de la caja/cuenta origen en la misma transacción: el crédito nace
+      // fondeado. Sin saldo, o si la zona del crédito no puede usar la caja, todo se revierte.
+      await postCashOut(tx, {
+        tenantId: c.tenantId,
+        cashBoxId: funding.cashBoxId,
+        kind: 'DISBURSEMENT',
+        amountMinor: c.principalMinor,
+        reason: DIRECT_DISBURSEMENT_REASON,
+        createdBy: funding.grantedBy,
+        origin: { creditId: c.id },
+      });
 
       // Vínculo deudor ↔ teléfono: permite abonar los pagos PIX que lleguen por
       // WhatsApp. Si el teléfono ya existía, se reasigna al deudor actual.

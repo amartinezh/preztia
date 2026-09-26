@@ -7,6 +7,7 @@ import { useT } from "@/core/i18n";
 import { CashScreen } from "./cash-screen";
 import { CashBoxesScreen } from "./cash-boxes-screen";
 import { CashMovementsScreen } from "./cash-movements-screen";
+import { RemittancesBoardScreen } from "@/features/remittances/screens/remittances-board-screen";
 
 type Segment = { key: string; label: string; render: () => ReactNode };
 
@@ -39,6 +40,11 @@ export function DineroHubScreen() {
       key: "movimientos",
       label: t("dinero.segment.movements"),
       render: () => <CashMovementsScreen />,
+    },
+    {
+      key: "rendiciones",
+      label: t("dinero.segment.remittances"),
+      render: () => <RemittancesBoardScreen />,
     },
   ];
 

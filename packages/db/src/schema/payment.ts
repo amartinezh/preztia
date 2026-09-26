@@ -9,6 +9,7 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { installment } from "./installment";
@@ -101,9 +102,20 @@ export const paymentAllocation = pgTable(
       .notNull()
       .references(() => installment.id),
     amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    // Desglose proporcional del abono (regla de dominio `splitAllocations`), persistido al
+    // aplicarlo para que la liquidación nunca lo recalcule. NULL = abono anterior al desglose.
+    principalMinor: bigint("principal_minor", { mode: "number" }),
+    interestMinor: bigint("interest_minor", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
+    // Ambos o ninguno; si están, capital + interés = abono y ninguno negativo.
+    split: check(
+      "payment_allocation_split_chk",
+      sql`(${t.principalMinor} is null and ${t.interestMinor} is null)
+       or (${t.principalMinor} >= 0 and ${t.interestMinor} >= 0
+           and ${t.principalMinor} + ${t.interestMinor} = ${t.amountMinor})`,
+    ),
     // Un pago abona una sola vez a una misma cuota.
     byPaymentInstallmentIdx: uniqueIndex("payment_allocation_payment_installment_idx").on(
       t.paymentId,

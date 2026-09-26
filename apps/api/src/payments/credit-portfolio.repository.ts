@@ -1,15 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import {
   type ActiveCreditPortfolio,
   type CreditPortfolioRepository,
   type PaymentOutcome,
 } from '@preztiaos/application';
-import { type PaymentAllocation } from '@preztiaos/domain';
-import { type Tx } from '../tenancy/unit-of-work';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
+import { applyAllocationsTx } from './allocation-writer';
 import {
   phase1Status,
   recordFraudAssessmentTx,
@@ -133,12 +132,12 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
         reasons: p.fraudReasons ?? [],
       });
 
-      await this.applyAllocations(
-        tx,
-        p.tenantId,
+      await applyAllocationsTx(tx, {
+        tenantId: p.tenantId,
         paymentId,
-        outcome.allocations,
-      );
+        creditId: p.creditId,
+        allocations: outcome.allocations,
+      });
 
       if (outcome.creditSettled && p.creditId) {
         await tx
@@ -170,50 +169,5 @@ export class CreditPortfolioDrizzleRepository implements CreditPortfolioReposito
         });
       }
     });
-  }
-
-  /**
-   * Aplica los abonos con incrementos atómicos acotados: si otra operación ya
-   * abonó la cuota por encima de lo esperado, la condición no matchea y la
-   * transacción completa se revierte (nunca un saldo corrupto en silencio).
-   */
-  private async applyAllocations(
-    tx: Tx,
-    tenantId: string,
-    paymentId: string,
-    allocations: readonly PaymentAllocation[],
-  ): Promise<void> {
-    for (const allocation of allocations) {
-      const updated = await tx
-        .update(schema.installment)
-        .set({
-          paidMinor: sql`${schema.installment.paidMinor} + ${allocation.amountMinor}`,
-          status: sql`case when ${schema.installment.paidMinor} + ${allocation.amountMinor} >= ${schema.installment.amountDueMinor} then 'PAID'::installment_status else 'PARTIALLY_PAID'::installment_status end`,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(schema.installment.id, allocation.installmentId),
-            sql`${schema.installment.paidMinor} + ${allocation.amountMinor} <= ${schema.installment.amountDueMinor}`,
-          ),
-        )
-        .returning({ id: schema.installment.id });
-      if (!updated.length) {
-        throw new Error(
-          `Abono rechazado: la cuota ${allocation.installmentId} ya no admite el monto (operación concurrente)`,
-        );
-      }
-    }
-
-    if (allocations.length) {
-      await tx.insert(schema.paymentAllocation).values(
-        allocations.map((a) => ({
-          tenantId,
-          paymentId,
-          installmentId: a.installmentId,
-          amountMinor: a.amountMinor,
-        })),
-      );
-    }
   }
 }

@@ -18,6 +18,8 @@ import { authState } from "@/core/auth/auth-state";
 import { env } from "@/core/env";
 import { isApiError, normalizeHttpError } from "@/core/errors";
 import { creditKeys } from "@/features/credit/api/queries";
+import { cashBoxKeys } from "@/features/cash/api/boxes-queries";
+import { remittanceKeys } from "@/features/remittances/api/queries";
 
 const PAGE_SIZE = 20;
 
@@ -189,6 +191,9 @@ export function useRegisterCashPayment() {
     onSuccess: (_res, { creditId }) => {
       void qc.invalidateQueries({ queryKey: paymentKeys.list(creditId) });
       void qc.invalidateQueries({ queryKey: creditKeys.portfolio(creditId) });
+      // El cobro entró a la caja de ruta: saldos, "efectivo en poder" y la rendición cambian.
+      void qc.invalidateQueries({ queryKey: cashBoxKeys.all });
+      void qc.invalidateQueries({ queryKey: remittanceKeys.all });
     },
   });
 }

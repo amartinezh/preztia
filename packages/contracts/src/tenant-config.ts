@@ -26,6 +26,8 @@ export const operationalSettings = z.object({
   // visitar, el cliente reaparece cuando la mora crece otro umbral (3 → 6 → 9 …). También es el
   // umbral con el que el mapa de cobro marca a un cliente como "crítico".
   visitOverdueThreshold: z.number().int().min(1).max(60),
+  // Hora local (0–23) límite para que el cobrador rinda cuentas del efectivo del día.
+  remittanceDeadlineHourLocal: z.number().int().min(0).max(23),
 });
 export type OperationalSettings = z.infer<typeof operationalSettings>;
 

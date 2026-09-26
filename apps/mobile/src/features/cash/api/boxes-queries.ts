@@ -37,6 +37,8 @@ const PAGE_SIZE = 20;
 export const cashBoxKeys = {
   all: ["cash-boxes"] as const,
   dashboard: () => [...cashBoxKeys.all, "dashboard"] as const,
+  funding: (zoneId: string) => [...cashBoxKeys.all, "funding", zoneId] as const,
+  mine: () => [...cashBoxKeys.all, "mine"] as const,
   boxes: () => [...cashBoxKeys.all, "boxes"] as const,
   accounts: () => [...cashBoxKeys.all, "accounts"] as const,
   transactions: (f: TransactionFilters) =>
@@ -52,7 +54,8 @@ export interface TransactionFilters {
     | "EXPENSE"
     | "TRANSFER"
     | "ADJUSTMENT"
-    | "UNIDENTIFIED";
+    | "UNIDENTIFIED"
+    | "DEBT_CLOSURE";
   direction?: "IN" | "OUT";
   /** Cobrador dueño de la caja (su efectivo de ruta). */
   collectorId?: string;
@@ -71,6 +74,26 @@ export function useCashDashboard() {
     queryKey: cashBoxKeys.dashboard(),
     queryFn: async () =>
       unwrap(await api.getCashDashboard({ headers: tenantHeader() })),
+  });
+}
+
+/** Cajas/cuentas que la zona puede usar para desembolsar (el servidor aplica la regla). */
+export function useFundingBoxes(zoneId: string | null) {
+  return useQuery({
+    queryKey: cashBoxKeys.funding(zoneId ?? ""),
+    enabled: !!zoneId,
+    queryFn: async () =>
+      unwrap(
+        await api.listFundingBoxes({ headers: tenantHeader(), query: { zoneId: zoneId! } }),
+      ),
+  });
+}
+
+/** Caja de ruta del usuario autenticado (efectivo en su poder); `box: null` si no tiene. */
+export function useMyCashBox() {
+  return useQuery({
+    queryKey: cashBoxKeys.mine(),
+    queryFn: async () => unwrap(await api.getMyCashBox({ headers: tenantHeader() })),
   });
 }
 
@@ -209,6 +232,7 @@ export function useCreateCashBox() {
       name: string;
       bankAccountId?: string;
       assignedTo?: string;
+      zoneId?: string;
     }) =>
       unwrap(
         await api.createCashBox({
@@ -218,6 +242,7 @@ export function useCreateCashBox() {
             name: input.name,
             ...(input.bankAccountId ? { bankAccountId: input.bankAccountId } : {}),
             ...(input.assignedTo ? { assignedTo: input.assignedTo } : {}),
+            ...(input.zoneId ? { zoneId: input.zoneId } : {}),
           },
         }),
       ),
@@ -225,7 +250,7 @@ export function useCreateCashBox() {
   });
 }
 
-/** Edita una caja: nombre y/o cobrador (assignedTo: null lo desvincula). */
+/** Edita una caja: nombre, cobrador y/o zona (null desvincula). */
 export function useUpdateCashBox() {
   const invalidate = useInvalidateCash();
   return useMutation({
@@ -233,6 +258,7 @@ export function useUpdateCashBox() {
       id: string;
       name?: string;
       assignedTo?: string | null;
+      zoneId?: string | null;
     }) =>
       unwrap(
         await api.updateCashBox({
@@ -241,6 +267,7 @@ export function useUpdateCashBox() {
           body: {
             ...(input.name !== undefined ? { name: input.name } : {}),
             ...(input.assignedTo !== undefined ? { assignedTo: input.assignedTo } : {}),
+            ...(input.zoneId !== undefined ? { zoneId: input.zoneId } : {}),
           },
         }),
       ),

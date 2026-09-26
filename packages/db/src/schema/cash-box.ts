@@ -34,6 +34,10 @@ export const cashBox = pgTable(
     // Solo aplica a cajas CASH (garantizado por el CHECK). NULL = caja de oficina/menor.
     // Sin FK, igual que created_by/performed_by (RLS aísla por tenant).
     assignedTo: uuid("assigned_to"),
+    // Zona dueña de la caja; NULL = caja del tenant. Una zona puede usar las cajas de su
+    // propia zona y de sus ancestros (la zona hija trabaja con las cuentas del padre).
+    // Sin FK, igual que el resto de referencias a zona (RLS aísla por tenant).
+    zoneId: uuid("zone_id"),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
