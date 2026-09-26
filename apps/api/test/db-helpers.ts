@@ -31,6 +31,9 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
   // fraud_assessment e incoming_credit referencian payment: se borran antes que payment.
   await sql`DELETE FROM fraud_assessment WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM incoming_credit WHERE tenant_id = ${tenantId}`;
+  // Órdenes de consignación: la bitácora antes que la orden; ambas antes de las cajas.
+  await sql`DELETE FROM field_order_event WHERE tenant_id = ${tenantId}`;
+  await sql`DELETE FROM field_order WHERE tenant_id = ${tenantId}`;
   // payment_charge (sesión de cobro) referencia payment: se borra antes que payment.
   await sql`DELETE FROM payment_charge WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM payment WHERE tenant_id = ${tenantId}`;

@@ -20,6 +20,9 @@ import { BANK_BALANCE_PROVIDER } from './cash.tokens';
 import { RemittanceController } from './remittance.controller';
 import { RemittanceDrizzleRepository } from './remittance.repository';
 import { RemittanceQueryRepository } from './remittance-query.repository';
+import { DepositOrderController } from './deposit-order.controller';
+import { DepositOrderDrizzleRepository } from './deposit-order.repository';
+import { DepositOrderQueryRepository } from './deposit-order-query.repository';
 
 /**
  * Módulo de CAJA: gastos (maker-checker), reporte diario (P&L), y el manejo de cajas/cuentas
@@ -33,6 +36,7 @@ import { RemittanceQueryRepository } from './remittance-query.repository';
     CashBoxController,
     BankAccountController,
     RemittanceController,
+    DepositOrderController,
   ],
   providers: [
     ExpenseDrizzleRepository,
@@ -48,6 +52,8 @@ import { RemittanceQueryRepository } from './remittance-query.repository';
     BankReconciliationDrizzleRepository,
     RemittanceDrizzleRepository,
     RemittanceQueryRepository,
+    DepositOrderDrizzleRepository,
+    DepositOrderQueryRepository,
 
     // Conciliación bancaria por (país, entidad). PUNTO DE EXTENSIÓN: para conciliar un banco
     // nuevo se registra su adaptador con la clave "PAÍS:BANCO" (igual que BANK_PAYMENT_VERIFIER).

@@ -20,6 +20,7 @@ import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { ExpenseRequestForm } from "@/features/cash/components/expenses/expense-request-form";
+import { DepositOrdersPanel } from "@/features/deposit-orders/components/deposit-orders-panel";
 import { ExpensesPanel } from "@/features/cash/components/expenses/expenses-panel";
 import { useMyRemittance, useMyRemittanceHistory, useSubmitRemittance } from "../api/queries";
 import {
@@ -91,6 +92,9 @@ export function MyCashScreen() {
             )}
           </>
         )}
+
+        <Text variant="heading">{t("deposit.title")}</Text>
+        <DepositOrdersPanel mode="mine" />
 
         <Text variant="heading">{t("cash.expenses.mineTitle")}</Text>
         <ExpenseRequestForm />

@@ -3,14 +3,15 @@ import * as ImagePicker from "expo-image-picker";
 import { Button, Row, Stack, Text } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
-import type { PickedReceipt } from "../../api/queries";
+import type { PickedFile } from "@/core/api/multipart";
 
 const PREVIEW_SIZE = 160;
 // Compresión moderada: el recibo sigue legible y la subida es liviana en datos móviles.
 const PHOTO_QUALITY = 0.6;
 
 /**
- * Comprobante del gasto: foto con la cámara o desde la galería (en web, el selector de archivos).
+ * Comprobante (gasto, consignación): foto con la cámara o desde la galería (en web, el selector de
+ * archivos).
  * Muestra una vista previa; el servidor valida tipo y tamaño. Si se niega el permiso de cámara, lo
  * informa sin romper el formulario (la galería sigue disponible).
  */
@@ -19,8 +20,8 @@ export function ReceiptPicker({
   onChange,
   onError,
 }: {
-  value: PickedReceipt | null;
-  onChange: (receipt: PickedReceipt) => void;
+  value: PickedFile | null;
+  onChange: (receipt: PickedFile) => void;
   onError: (message: string) => void;
 }) {
   const { t } = useT();

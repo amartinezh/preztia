@@ -1,6 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { createHash } from 'node:crypto';
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { and, eq, type SQL } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type {
@@ -8,12 +6,7 @@ import type {
   StoredExpenseReceipt,
 } from '@preztiaos/application';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
-import {
-  buildMinioClient,
-  decryptAtRest,
-  encryptAtRest,
-  ensureBucket,
-} from '../shared/minio-encrypted-storage';
+import { EncryptedFileBucket } from '../shared/encrypted-file-bucket';
 
 /** Binario del comprobante descifrado, listo para que el revisor lo vea. */
 export interface ExpenseReceiptOriginal {
@@ -28,9 +21,7 @@ export interface ExpenseReceiptOriginal {
  */
 @Injectable()
 export class MinioExpenseReceiptStorage implements ExpenseReceiptStorage {
-  private readonly client = buildMinioClient();
-  private readonly bucket = process.env.MINIO_BUCKET_KYC ?? 'kyc-documents';
-  private bucketReady?: Promise<void>;
+  private readonly files = new EncryptedFileBucket();
 
   async store(input: {
     tenantId: string;
@@ -38,20 +29,11 @@ export class MinioExpenseReceiptStorage implements ExpenseReceiptStorage {
     bytes: Uint8Array;
     mimeType: string;
   }): Promise<StoredExpenseReceipt> {
-    if (!this.bucketReady)
-      this.bucketReady = ensureBucket(this.client, this.bucket);
-    await this.bucketReady;
-
-    const sha256 = createHash('sha256').update(input.bytes).digest('hex');
     const storageKey = `expenses/${input.tenantId}/${input.expenseId}`;
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: storageKey,
-        Body: encryptAtRest(input.bytes),
-        ContentType: input.mimeType,
-        Metadata: { sha256 },
-      }),
+    const { sha256 } = await this.files.put(
+      storageKey,
+      input.bytes,
+      input.mimeType,
     );
     return { storageKey, mimeType: input.mimeType, sha256 };
   }
@@ -79,15 +61,8 @@ export class MinioExpenseReceiptStorage implements ExpenseReceiptStorage {
     if (!row?.storageKey) {
       throw new NotFoundException('El gasto no tiene comprobante');
     }
-    const object = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: row.storageKey }),
-    );
-    const sealed = await object.Body?.transformToByteArray();
-    if (!sealed) {
-      throw new NotFoundException('No se pudo leer el comprobante almacenado');
-    }
     return {
-      bytes: decryptAtRest(sealed),
+      bytes: await this.files.get(row.storageKey),
       mimeType: row.mimeType ?? 'application/octet-stream',
     };
   }

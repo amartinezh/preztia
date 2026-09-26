@@ -34,6 +34,7 @@ import { requireTenant } from '../auth/require-tenant';
 import { requireRole, type Session } from '../auth/require-role';
 import { zoneScopePredicate } from '../iam/zone-scope';
 import { MinioExpenseReceiptStorage } from './expense-receipt.storage';
+import { fileOrEmpty, type UploadedFileLike } from '../shared/uploaded-file';
 import { Idempotent } from '../observability/idempotent.decorator';
 import { ExpenseDrizzleRepository } from './expense.repository';
 import { CashQueryRepository } from './cash-query.repository';
@@ -44,12 +45,6 @@ const uuid = z.string().uuid();
 const DATA_PLANE_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
 // Revisar gastos es del socio/coordinador (maker-checker).
 const MANAGER_ROLES = ['ADMIN', 'COORDINATOR'] as const;
-
-/** Lo mínimo que se usa del archivo que entrega multer (sin depender de @types/multer). */
-interface UploadedReceipt {
-  readonly buffer: Buffer;
-  readonly mimetype: string;
-}
 
 /**
  * Alcance sobre los gastos: el cobrador solo ve los suyos; el coordinador, los de su subárbol de
@@ -120,7 +115,7 @@ export class CashController {
     @Headers('x-tenant-id') tenantId: string | undefined,
     @Headers('authorization') authorization: string | undefined,
     @Body() body: unknown,
-    @UploadedFile() receipt: UploadedReceipt | undefined,
+    @UploadedFile() receipt: UploadedFileLike | undefined,
   ) {
     const tenant = requireTenant(tenantId);
     const session = requireRole(authorization, DATA_PLANE_ROLES);
@@ -130,10 +125,7 @@ export class CashController {
       requestedBy: session.userId,
       description: dto.description,
       amountMinor: dto.amountMinor,
-      receipt: {
-        bytes: receipt?.buffer ?? new Uint8Array(),
-        mimeType: receipt?.mimetype ?? '',
-      },
+      receipt: fileOrEmpty(receipt),
     });
   }
 

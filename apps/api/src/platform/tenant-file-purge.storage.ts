@@ -12,6 +12,7 @@ const DELETE_BATCH = 1000;
  *   - `${tenantId}/…`          → documentos KYC de solicitudes
  *   - `payments/${tenantId}/…` → comprobantes de pago
  *   - `expenses/${tenantId}/…` → comprobantes de gastos
+ *   - `deposits/${tenantId}/…` → comprobantes de consignaciones
  * Es "best-effort" y va FUERA de la transacción de BD: registra fallos pero no los propaga
  * (un objeto huérfano no tiene referencias y no rompe la integridad).
  */
@@ -27,6 +28,7 @@ export class MinioTenantFilePurger implements TenantFilePurger {
       `${tenantId}/`,
       `payments/${tenantId}/`,
       `expenses/${tenantId}/`,
+      `deposits/${tenantId}/`,
     ]) {
       deleted += await this.deletePrefix(prefix);
     }

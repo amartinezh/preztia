@@ -21,7 +21,9 @@ export const PURGE_ORDER: readonly string[] = [
   'collector_remittance', // → cash_box
   'bank_reconciliation', // → cash_box
   'fraud_assessment', // → payment
-  'incoming_credit', // → payment
+  'incoming_credit', // → payment, field_order
+  'field_order_event', // → field_order
+  'field_order', // → cash_box (ruta y destino)
   'payment_charge', // → payment, credit
   'payment_allocation', // → payment, installment
   'payment_event', // → payment

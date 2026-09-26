@@ -1,8 +1,8 @@
-import { Platform } from "react-native";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EXPENSE_RECEIPT_FIELD, type ExpenseStatus } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
+import { appendPickedFile, type PickedFile } from "@/core/api/multipart";
 import { cashBoxKeys } from "./boxes-queries";
 import { remittanceKeys } from "@/features/remittances/api/queries";
 
@@ -38,17 +38,9 @@ export function useExpensesList(status?: ExpenseStatus) {
   });
 }
 
-/** Foto/PDF elegido en el dispositivo (resultado del image picker). */
-export interface PickedReceipt {
-  uri: string;
-  mimeType: string;
-  fileName: string;
-}
+/** Comprobante elegido para el gasto. */
+export type PickedReceipt = PickedFile;
 
-/**
- * Arma el multipart de la solicitud. En web el archivo es un Blob real (se lee de su objectURL);
- * en nativo, React Native sube el archivo local a partir de `{ uri, name, type }`.
- */
 async function toExpenseForm(input: {
   description: string;
   amountMinor: number;
@@ -57,16 +49,7 @@ async function toExpenseForm(input: {
   const form = new FormData();
   form.append("description", input.description);
   form.append("amountMinor", String(input.amountMinor));
-  if (Platform.OS === "web") {
-    const blob = await (await fetch(input.receipt.uri)).blob();
-    form.append(EXPENSE_RECEIPT_FIELD, new File([blob], input.receipt.fileName, { type: input.receipt.mimeType }));
-  } else {
-    form.append(EXPENSE_RECEIPT_FIELD, {
-      uri: input.receipt.uri,
-      name: input.receipt.fileName,
-      type: input.receipt.mimeType,
-    } as unknown as Blob);
-  }
+  await appendPickedFile(form, EXPENSE_RECEIPT_FIELD, input.receipt);
   return form;
 }
 

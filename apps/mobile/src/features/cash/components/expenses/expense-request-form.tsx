@@ -5,7 +5,7 @@ import { Banner, Button, Card, Field, Input, majorToMinor, Stack, Text } from "@
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useCreateExpense, type PickedReceipt } from "../../api/queries";
-import { ReceiptPicker } from "./receipt-picker";
+import { ReceiptPicker } from "@/components/receipt-picker";
 
 /** Solicitud de gasto: concepto, monto y comprobante obligatorio. */
 export function ExpenseRequestForm() {

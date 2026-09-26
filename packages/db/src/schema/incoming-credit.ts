@@ -7,9 +7,12 @@ import {
   timestamp,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { tenantBankAccount } from "./tenant-bank-account";
 import { payment } from "./payment";
+import { fieldOrder } from "./field-order";
 
 // Crédito real liberado por la fuente de liquidación (una fila del settlement_report). Es el
 // GROUND TRUTH de la Fase 2: un comprobante (payment) solo se confirma si matchea un crédito de
@@ -39,6 +42,9 @@ export const incomingCredit = pgTable(
     settlementDate: timestamp("settlement_date", { withTimezone: true }).notNull(),
     // Pago que consumió este crédito; NULL = aún disponible. Un crédito → un pago.
     consumedByPaymentId: uuid("consumed_by_payment_id").references(() => payment.id),
+    // Orden de consignación del cobrador que consumió este crédito: el depósito NO es el pago de un
+    // cliente, así que la conciliación de pagos debe ignorarlo (sin doble ingreso). Uno u otro.
+    consumedByFieldOrderId: uuid("consumed_by_field_order_id").references(() => fieldOrder.id),
     // Fila cruda de la fuente (trazabilidad); sin secretos.
     raw: jsonb("raw"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -50,5 +56,14 @@ export const incomingCredit = pgTable(
     byAccountIdx: index("incoming_credit_account_idx").on(t.bankAccountId, t.consumedByPaymentId),
     // Verificación per-PIX (PicPay): localizar un crédito por su endToEndId.
     byE2EIdx: index("incoming_credit_tenant_e2e_idx").on(t.tenantId, t.endToEndId),
+    // Una orden consume a lo sumo un crédito.
+    byFieldOrderIdx: uniqueIndex("incoming_credit_field_order_idx")
+      .on(t.consumedByFieldOrderId)
+      .where(sql`consumed_by_field_order_id is not null`),
+    // Un crédito es de un pago O de una consignación, nunca de ambos.
+    singleConsumer: check(
+      "incoming_credit_single_consumer_chk",
+      sql`consumed_by_payment_id is null or consumed_by_field_order_id is null`,
+    ),
   }),
 );

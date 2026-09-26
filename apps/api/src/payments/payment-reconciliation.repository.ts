@@ -168,12 +168,18 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         .select({
           id: schema.incomingCredit.id,
           consumedByPaymentId: schema.incomingCredit.consumedByPaymentId,
+          consumedByFieldOrderId: schema.incomingCredit.consumedByFieldOrderId,
         })
         .from(schema.incomingCredit)
         .where(eq(schema.incomingCredit.sourceId, input.creditSourceId))
         .for('update')
         .limit(1);
-      if (!credit || credit.consumedByPaymentId !== null) {
+      // Libre = no lo tomó un pago NI una consignación del cobrador (sin doble ingreso).
+      if (
+        !credit ||
+        credit.consumedByPaymentId !== null ||
+        credit.consumedByFieldOrderId !== null
+      ) {
         return { confirmed: false };
       }
 
@@ -251,12 +257,18 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         .select({
           id: schema.incomingCredit.id,
           consumedByPaymentId: schema.incomingCredit.consumedByPaymentId,
+          consumedByFieldOrderId: schema.incomingCredit.consumedByFieldOrderId,
         })
         .from(schema.incomingCredit)
         .where(eq(schema.incomingCredit.sourceId, input.creditSourceId))
         .for('update')
         .limit(1);
-      if (!credit || credit.consumedByPaymentId !== null) {
+      // Libre = no lo tomó un pago NI una consignación del cobrador (sin doble ingreso).
+      if (
+        !credit ||
+        credit.consumedByPaymentId !== null ||
+        credit.consumedByFieldOrderId !== null
+      ) {
         return { reserved: false };
       }
 

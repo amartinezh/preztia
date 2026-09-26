@@ -1,5 +1,6 @@
 export * from "./shared/money";
 export * from "./shared/business-time";
+export * from "./shared/receipt-file";
 export * from "./borrowers/borrower";
 export * from "./borrowers/change-request";
 export * from "./borrowers/borrower-list";
@@ -30,6 +31,7 @@ export * from "./cash/expense";
 export * from "./cash/cash-box";
 export * from "./cash/ledger-attribution";
 export * from "./cash/remittance";
+export * from "./cash/deposit-order";
 export * from "./cash/cash-count";
 export * from "./cash/bank-reconciliation";
 export * from "./credit/payment/payment-review";

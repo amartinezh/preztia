@@ -3,6 +3,7 @@
 
 import { ConflictError, DomainError } from "../shared/money";
 import { assertZoneCanUseBox } from "./ledger-attribution";
+import { assertValidReceiptFile, RECEIPT_MAX_BYTES, RECEIPT_MIME_TYPES } from "../shared/receipt-file";
 
 export type ExpenseStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -45,28 +46,10 @@ export function reviewExpense(input: {
   return { status, rejectionReason: reason };
 }
 
-/** Tamaño máximo del comprobante (foto o PDF) de un gasto: 8 MB. */
-export const EXPENSE_RECEIPT_MAX_BYTES = 8 * 1024 * 1024;
-
-/** Tipos admitidos: fotos (incluida HEIC de iPhone) y PDF. */
-export const EXPENSE_RECEIPT_MIME_TYPES: readonly string[] = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "application/pdf",
-];
-
-/** El comprobante es obligatorio: no vacío, de un tipo admitido y dentro del tamaño máximo. */
-export function assertValidExpenseReceipt(input: { mimeType: string; sizeBytes: number }): void {
-  if (input.sizeBytes <= 0) throw new DomainError("El comprobante del gasto es obligatorio");
-  if (input.sizeBytes > EXPENSE_RECEIPT_MAX_BYTES) {
-    throw new DomainError("El comprobante supera el tamaño máximo (8 MB)");
-  }
-  if (!EXPENSE_RECEIPT_MIME_TYPES.includes(input.mimeType)) {
-    throw new DomainError("El comprobante debe ser una foto (JPG, PNG, WEBP, HEIC) o un PDF");
-  }
-}
+/** El comprobante del gasto sigue la regla común de comprobantes (foto o PDF, ≤ 8 MB). */
+export const EXPENSE_RECEIPT_MAX_BYTES = RECEIPT_MAX_BYTES;
+export const EXPENSE_RECEIPT_MIME_TYPES = RECEIPT_MIME_TYPES;
+export const assertValidExpenseReceipt = assertValidReceiptFile;
 
 /**
  * ¿De qué caja puede salir el dinero del gasto? De una caja de oficina o banco que la zona del gasto

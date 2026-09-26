@@ -445,7 +445,8 @@ export class CashQueryRepository {
         .limit(1);
       if (!zone) return null;
 
-      const boxZone = sql`(SELECT z.path FROM zone z WHERE z.id = ${schema.cashBox.zoneId})`;
+      // `cash_box.zone_id` explícito: no depender de que Drizzle califique la columna (ver routeBoxesOf).
+      const boxZone = sql`(SELECT z.path FROM zone z WHERE z.id = cash_box.zone_id)`;
       const rows = await tx
         .select({
           id: schema.cashBox.id,
@@ -517,7 +518,9 @@ async function routeBoxesOf(
       userId: schema.cashBox.assignedTo,
       id: schema.cashBox.id,
       name: schema.cashBox.name,
-      balanceMinor: sql<string>`(SELECT ${signedSum} FROM cash_transaction WHERE cash_transaction.cash_box_id = ${schema.cashBox.id})`,
+      // `cash_box.id` explícito: en una consulta de una sola tabla Drizzle omite el prefijo y `"id"`
+      // se resolvería contra cash_transaction dentro de la subconsulta (saldo siempre 0).
+      balanceMinor: sql<string>`(SELECT ${signedSum} FROM cash_transaction WHERE cash_transaction.cash_box_id = cash_box.id)`,
     })
     .from(schema.cashBox)
     .where(

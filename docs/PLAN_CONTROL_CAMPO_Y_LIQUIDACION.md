@@ -10,11 +10,12 @@
 > precisamente por recalcular caja por su cuenta y divergir del libro
 > ([PLAN_TESORERIA_UNICA_FUENTE.md](PLAN_TESORERIA_UNICA_FUENTE.md)). Este plan no la resucita.
 >
-> **Estado:** diseño acordado con el usuario (2026-09-25). **Fases 1 y 2 implementadas y verificadas**
-> contra Postgres real (migraciones 0057–0059 aplicadas en local; integración 49/49). **Fase 3
-> implementada** (verde en build + typecheck + lint + test); **falta** `pnpm db:generate` +
-> `pnpm db:migrate` (columnas de `expense`) y `pnpm --filter api test:integration`
-> (`expense.integration.spec.ts`). Nada aplicado aún en producción.
+> **Estado:** diseño acordado con el usuario (2026-09-25). **Fases 1–3 implementadas y verificadas**
+> contra Postgres real (migraciones 0057–0060 aplicadas en local; integración 56/56). **Fase 4
+> implementada** (verde en build + typecheck + lint + test); **falta** `pnpm db:generate`, la
+> migración RLS a mano de `field_order` y `field_order_event`, `pnpm db:migrate` y
+> `pnpm --filter api test:integration` (`deposit-order.integration.spec.ts`). Nada aplicado aún en
+> producción.
 > **ADR:** #41 registrado en [ARCHITECTURE.md](ARCHITECTURE.md) (ver §9).
 
 ---
@@ -379,7 +380,7 @@ Escenario: Cierre de deuda solo por el ADMIN
   Y cerrar más de la deuda arrastrada responde 409 DEBT_EXCEEDED
 ```
 
-### Fase 3 — Solicitudes de gasto v2 ✅ (implementada, migración pendiente)
+### Fase 3 — Solicitudes de gasto v2 ✅
 
 - Esquema: `zone_id`, `rejection_reason`, `receipt_document_id`, `paid_from_cash_box_id`.
 - Contrato: la solicitud exige comprobante (subida cifrada a MinIO); rechazar exige motivo; aprobar
@@ -429,7 +430,7 @@ Escenario: Alcance
   Y un coordinador de "Norte" no lo ve ni lo puede revisar (404)
 ```
 
-### Fase 4 — Órdenes de consignación
+### Fase 4 — Órdenes de consignación ✅ (implementada, migración pendiente)
 
 - `field_order` + `field_order_event` (append-only) con la máquina de §5.2.
 - El coordinador ve el **efectivo en la calle por cobrador** y emite la orden (monto ≤ saldo de la
@@ -439,6 +440,47 @@ Escenario: Alcance
   movimiento bancario queda **consumido** por la orden (excluido del ruteo de pagos, G6).
 - Comentarios y objeciones en la bitácora; historial para ambos lados.
 - **Aceptación:** I7; una orden disputada conserva todo su historial.
+- **Decisiones de implementación:**
+  - `field_order` (kind `DEPOSIT`; la Fase 5 agrega su propio `route_stop`) + `field_order_event`
+    **append-only** (RLS + `REVOKE UPDATE, DELETE`): `ISSUED`, `SEEN`, `REPORTED`, `DISPUTED`,
+    `VERIFIED`, `CANCELLED`, `COMMENT`, con actor, fecha/hora y mensaje.
+  - La orden fija la **cuenta destino** (caja BANK que la zona del cobrador puede usar); el cobrador
+    reporta monto, fecha/hora, referencia y **foto obligatoria**.
+  - **Anti doble ingreso (G6):** `incoming_credit.consumed_by_field_order_id` (CHECK: nunca
+    consumido por pago y por orden a la vez). Los 4 puntos que buscan créditos "libres" para
+    conciliar pagos exigen ahora que tampoco los haya consumido una orden.
+  - La trazabilidad al libro es `field_order.transfer_group_id` (el `TRANSFER` ruta → banco); no hace
+    falta `cash_transaction.field_order_id`.
+  - Comprobantes: base común cifrada (`EncryptedFileBucket`) reutilizada por gastos y consignaciones.
+
+```gherkin
+Escenario: El coordinador ordena consignar el efectivo acumulado
+  Dado un cobrador de "Norte" con 300.000 en su caja de ruta
+  Cuando el coordinador ordena consignar 250.000 a la cuenta PIX "Inter Norte"
+  Entonces al cobrador le aparece la orden con fecha y hora de solicitud
+  Y ordenar más que el efectivo en su poder responde 409 DEPOSIT_EXCEEDS_CASH
+
+Escenario: El cobrador reporta con comprobante
+  Cuando el cobrador abre la orden
+  Entonces queda "vista" en la bitácora
+  Cuando reporta 250.000 depositados hoy 15:20 con foto del comprobante
+  Entonces queda REPORTADA; sin foto responde 400
+
+Escenario: Verificación contra el banco sin doble ingreso
+  Dado un ingreso de 250.000 en la cuenta "Inter Norte" traído por la sincronización bancaria
+  Cuando el coordinador verifica la orden enlazando ese ingreso
+  Entonces la caja de ruta baja 250.000 y la cuenta "Inter Norte" sube 250.000 (TRANSFER)
+  Y ese ingreso queda consumido por la orden: la conciliación de pagos ya no lo ofrece
+  Y enlazar un ingreso de otra cuenta, de otro monto o ya consumido responde 409
+
+Escenario: Objeción y aclaración
+  Cuando el coordinador objeta con "El comprobante no es legible"
+  Entonces la orden queda OBJETADA y el cobrador puede reportar de nuevo
+  Y todo el hilo (reportes, objeción, comentarios) queda en la bitácora
+
+Escenario: Alcance
+  Entonces el cobrador solo ve sus órdenes y un coordinador de otra zona no las ve (404)
+```
 
 ### Fase 5 — Órdenes de ruta
 

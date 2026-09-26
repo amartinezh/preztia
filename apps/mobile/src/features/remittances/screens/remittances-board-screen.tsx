@@ -31,6 +31,7 @@ import {
   useRemittanceHistory,
 } from "../api/queries";
 import { ObligationBadge, RemittanceHistoryItem } from "../components/remittance-parts";
+import { IssueDepositModal } from "@/features/deposit-orders/components/issue-deposit-modal";
 
 /**
  * Tablero de RENDICIONES (ADMIN/COORDINATOR, acotado por zonas en el servidor): quién no ha
@@ -43,6 +44,7 @@ export function RemittancesBoardScreen() {
   const [withDebt, setWithDebt] = useState(false);
   const [receiving, setReceiving] = useState<RemittanceBoardRow | null>(null);
   const [closing, setClosing] = useState<RemittanceBoardRow | null>(null);
+  const [ordering, setOrdering] = useState<RemittanceBoardRow | null>(null);
   const board = useRemittanceBoard(withDebt);
   const rows = board.data?.pages.flatMap((p) => p.items) ?? [];
   // Moneda del tenant (la del libro) y nombres de cobrador para encabezar el historial.
@@ -65,6 +67,7 @@ export function RemittancesBoardScreen() {
             canCloseDebt={role === "ADMIN"}
             onReceive={() => setReceiving(row)}
             onCloseDebt={() => setClosing(row)}
+            onOrderDeposit={() => setOrdering(row)}
           />
         ))}
         {board.hasNextPage ? (
@@ -82,6 +85,7 @@ export function RemittancesBoardScreen() {
 
       {receiving ? <ReceiveModal row={receiving} onClose={() => setReceiving(null)} /> : null}
       {closing ? <CloseDebtModal row={closing} onClose={() => setClosing(null)} /> : null}
+      {ordering ? <IssueDepositModal row={ordering} onClose={() => setOrdering(null)} /> : null}
     </Screen>
   );
 }
@@ -91,11 +95,13 @@ function BoardCard({
   canCloseDebt,
   onReceive,
   onCloseDebt,
+  onOrderDeposit,
 }: {
   row: RemittanceBoardRow;
   canCloseDebt: boolean;
   onReceive: () => void;
   onCloseDebt: () => void;
+  onOrderDeposit: () => void;
 }) {
   const { t } = useT();
   const open = row.openRemittance;
@@ -131,6 +137,9 @@ function BoardCard({
         ) : null}
         <Row gap="sm" className="flex-wrap">
           {open ? <Button label={t("remittance.receive.action")} size="sm" onPress={onReceive} /> : null}
+          {row.cashInHandMinor > 0 ? (
+            <Button label={t("deposit.issue.action")} size="sm" variant="secondary" onPress={onOrderDeposit} />
+          ) : null}
           {canCloseDebt && row.carriedDebtMinor > 0 && !open ? (
             <Button label={t("remittance.debt.action")} size="sm" variant="secondary" onPress={onCloseDebt} />
           ) : null}

@@ -115,6 +115,8 @@ export class IncomingCreditDrizzleRepository {
           and(
             eq(schema.incomingCredit.bankAccountId, input.bankAccountId),
             isNull(schema.incomingCredit.consumedByPaymentId),
+            // Un depósito del cobrador (consumido por su orden) no es el pago de un cliente.
+            isNull(schema.incomingCredit.consumedByFieldOrderId),
           ),
         );
       return rows.map((row) => ({
@@ -172,6 +174,7 @@ export class IncomingCreditDrizzleRepository {
           and(
             eq(schema.incomingCredit.sourceId, input.sourceId),
             isNull(schema.incomingCredit.consumedByPaymentId),
+            isNull(schema.incomingCredit.consumedByFieldOrderId),
           ),
         )
         .returning({ id: schema.incomingCredit.id });
