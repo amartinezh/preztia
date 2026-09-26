@@ -208,6 +208,12 @@ describeDb('Fase 6 — liquidación por períodos (integración)', () => {
       collectedMinor: 60_000,
       closingCashMinor: 60_000,
     });
+    // La actividad de campo del período llega a la foto (sin paradas ni rendiciones aún).
+    expect(live.snapshot.collectors[0].performance).toMatchObject({
+      stopsDispatched: 0,
+      remittancesSubmitted: 0,
+      effectiveVisitRatePerMille: null,
+    });
   });
 
   it('el coordinador de otra zona no ve cajas ni cobradores de Norte', async () => {

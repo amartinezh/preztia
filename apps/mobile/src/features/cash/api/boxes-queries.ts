@@ -64,6 +64,17 @@ export interface TransactionFilters {
   /** Rango de fechas (datetime ISO inclusivo): desde el inicio y hasta el fin del día. */
   from?: string;
   to?: string;
+  /** Corte EXCLUSIVO (< before): el detalle de una liquidación calza con su [inicio, fin). */
+  before?: string;
+  /** Zona sellada en el asiento. */
+  zoneId?: string;
+}
+
+/** Filtros del libro como parámetros de consulta (solo los presentes). */
+export function transactionQuery(filters: TransactionFilters): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(filters).filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== ""),
+  );
 }
 
 // --- Lecturas ---------------------------------------------------------------
@@ -125,13 +136,7 @@ export function useCashTransactions(filters: TransactionFilters = {}) {
           query: {
             page: pageParam,
             pageSize: PAGE_SIZE,
-            ...(filters.cashBoxId ? { cashBoxId: filters.cashBoxId } : {}),
-            ...(filters.kind ? { kind: filters.kind } : {}),
-            ...(filters.direction ? { direction: filters.direction } : {}),
-            ...(filters.collectorId ? { collectorId: filters.collectorId } : {}),
-            ...(filters.borrowerId ? { borrowerId: filters.borrowerId } : {}),
-            ...(filters.from ? { from: filters.from } : {}),
-            ...(filters.to ? { to: filters.to } : {}),
+            ...transactionQuery(filters),
           },
         }),
       ),

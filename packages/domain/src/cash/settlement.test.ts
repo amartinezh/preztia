@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildSettlement,
+  collectorPerformance,
   conceptOf,
   scopeSettlement,
   SETTLEMENT_CONCEPTS,
@@ -143,5 +144,34 @@ describe("scopeSettlement", () => {
     expect(scoped.collectors).toHaveLength(1);
     expect(scoped.totals.openingMinor).toBe(1_020_000);
     expect(scoped.result.newCreditsCount).toBe(0);
+  });
+});
+
+describe("collectorPerformance", () => {
+  it("calcula tasa de visitas efectivas y promedios de respuesta", () => {
+    expect(
+      collectorPerformance({
+        collectorId: "ana",
+        stopsDispatched: 10,
+        stopsResolved: 8,
+        stopsPaid: 6,
+        resolveMinutesTotal: 800,
+        depositsIssued: 2,
+        depositsVerified: 1,
+        depositReportMinutesTotal: 90,
+        depositsReported: 2,
+        remittancesSubmitted: 5,
+        remittancesLate: 1,
+      }),
+    ).toMatchObject({ effectiveVisitRatePerMille: 750, avgResolveMinutes: 100, avgDepositReportMinutes: 45 });
+  });
+
+  it("sin actividad no inventa tasas ni promedios", () => {
+    expect(collectorPerformance(undefined)).toMatchObject({
+      stopsDispatched: 0,
+      effectiveVisitRatePerMille: null,
+      avgResolveMinutes: null,
+      avgDepositReportMinutes: null,
+    });
   });
 });

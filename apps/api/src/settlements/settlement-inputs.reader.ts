@@ -1,9 +1,10 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import {
   DEFAULT_OPERATIONAL_SETTINGS,
   settlementSettingsOf,
   type CashBoxType,
   type CashTxDirection,
+  type CollectorActivity,
   type CashTxKind,
   type DebtClosureType,
   type OperationalSettings,
@@ -30,6 +31,7 @@ export interface SettlementInputs {
   readonly zones: SettlementZoneRef[];
   readonly collectors: SettlementCollectorRef[];
   readonly portfolio: PortfolioByZone[];
+  readonly activity: CollectorActivity[];
 }
 
 type Row = Record<string, unknown>;
@@ -69,14 +71,15 @@ export async function readSettlementInputs(
   tx: Tx,
   range: SettlementRange,
 ): Promise<SettlementInputs> {
-  const [boxes, flows, zones, collectors, portfolio] = [
+  const [boxes, flows, zones, collectors, portfolio, activity] = [
     await readBoxes(tx, range.startsAt),
     await readFlows(tx, range),
     await readZones(tx),
     await readCollectors(tx),
     await readPortfolio(tx, range),
+    await readCollectorActivity(tx, range),
   ];
-  return { boxes, flows, zones, collectors, portfolio };
+  return { boxes, flows, zones, collectors, portfolio, activity };
 }
 
 async function readBoxes(
@@ -212,5 +215,69 @@ async function readPortfolio(
     dueInPeriodMinor: num(r.due_in_period),
     collectedOnPortfolioMinor: num(r.collected),
     overdueAtCutMinor: num(r.overdue),
+  }));
+}
+
+/**
+ * Actividad de campo por cobrador en el rango: paradas (despachadas, liquidadas, con pago y
+ * minutos de respuesta), consignaciones (ordenadas, verificadas, minutos hasta reportar) y
+ * rendiciones (declaradas y cuántas tarde). Una consulta por fuente, agregada por cobrador.
+ */
+async function readCollectorActivity(
+  tx: Tx,
+  range: SettlementRange,
+): Promise<CollectorActivity[]> {
+  const starts = range.startsAt.toISOString();
+  const ends = range.endsAt.toISOString();
+  // Fragmentos parametrizados (sin sql.raw): la columna es un literal fijo del código.
+  const within = (col: SQL) =>
+    sql`${col} >= ${starts}::timestamptz AND ${col} < ${ends}::timestamptz`;
+  const rows = (await tx.execute(sql`
+    WITH stops AS (
+      SELECT collector_id,
+             count(*) FILTER (WHERE ${within(sql`dispatched_at`)}) AS dispatched,
+             count(*) FILTER (WHERE status = 'RESOLVED' AND ${within(sql`resolved_at`)}) AS resolved,
+             count(*) FILTER (WHERE outcome = 'PAID' AND ${within(sql`resolved_at`)}) AS paid,
+             COALESCE(SUM(EXTRACT(EPOCH FROM (resolved_at - dispatched_at)) / 60)
+               FILTER (WHERE status = 'RESOLVED' AND ${within(sql`resolved_at`)}), 0) AS resolve_minutes
+      FROM route_stop GROUP BY collector_id
+    ), deposits AS (
+      SELECT collector_id,
+             count(*) FILTER (WHERE ${within(sql`issued_at`)}) AS issued,
+             count(*) FILTER (WHERE status = 'VERIFIED' AND ${within(sql`verified_at`)}) AS verified,
+             count(*) FILTER (WHERE ${within(sql`reported_at`)}) AS reported,
+             COALESCE(SUM(EXTRACT(EPOCH FROM (reported_at - issued_at)) / 60)
+               FILTER (WHERE ${within(sql`reported_at`)}), 0) AS report_minutes
+      FROM field_order GROUP BY collector_id
+    ), remittances AS (
+      SELECT collector_id,
+             count(*) FILTER (WHERE ${within(sql`submitted_at`)}) AS submitted,
+             count(*) FILTER (WHERE ${within(sql`submitted_at`)} AND due_at IS NOT NULL AND submitted_at > due_at) AS late
+      FROM collector_remittance GROUP BY collector_id
+    )
+    SELECT c.collector_id,
+           COALESCE(stops.dispatched, 0) AS dispatched, COALESCE(stops.resolved, 0) AS resolved,
+           COALESCE(stops.paid, 0) AS paid, COALESCE(stops.resolve_minutes, 0) AS resolve_minutes,
+           COALESCE(deposits.issued, 0) AS issued, COALESCE(deposits.verified, 0) AS verified,
+           COALESCE(deposits.reported, 0) AS reported, COALESCE(deposits.report_minutes, 0) AS report_minutes,
+           COALESCE(remittances.submitted, 0) AS submitted, COALESCE(remittances.late, 0) AS late
+    FROM (SELECT collector_id FROM stops UNION SELECT collector_id FROM deposits
+          UNION SELECT collector_id FROM remittances) c
+    LEFT JOIN stops ON stops.collector_id = c.collector_id
+    LEFT JOIN deposits ON deposits.collector_id = c.collector_id
+    LEFT JOIN remittances ON remittances.collector_id = c.collector_id
+  `)) as unknown as Row[];
+  return rows.map((r) => ({
+    collectorId: String(r.collector_id),
+    stopsDispatched: num(r.dispatched),
+    stopsResolved: num(r.resolved),
+    stopsPaid: num(r.paid),
+    resolveMinutesTotal: num(r.resolve_minutes),
+    depositsIssued: num(r.issued),
+    depositsVerified: num(r.verified),
+    depositReportMinutesTotal: num(r.report_minutes),
+    depositsReported: num(r.reported),
+    remittancesSubmitted: num(r.submitted),
+    remittancesLate: num(r.late),
   }));
 }

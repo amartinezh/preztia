@@ -10,9 +10,14 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import type { SQL } from 'drizzle-orm';
 import { z } from 'zod';
+import type { CashTransactionRow } from '@preztiaos/contracts';
+import { toCsv } from '../shared/csv';
 import {
   adjustCashBalanceInput,
   cashCountInput,
@@ -27,7 +32,7 @@ import {
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireAdmin } from '../auth/require-admin';
-import { requireRole } from '../auth/require-role';
+import { requireRole, type Session } from '../auth/require-role';
 import { requireReviewer } from '../auth/require-reviewer';
 import { zoneScopePredicate } from '../iam/zone-scope';
 import { Idempotent } from '../observability/idempotent.decorator';
@@ -189,34 +194,50 @@ export class CashBoxController {
     @Query() query: Record<string, string>,
   ) {
     const tenant = requireTenant(tenantId);
-    // El libro mayor del tenant es tesorería: el cobrador no lo ve.
-    requireRole(auth, MANAGER_ROLES);
-    const {
-      page,
-      pageSize,
-      cashBoxId,
-      kind,
-      direction,
-      userId,
-      collectorId,
-      borrowerId,
-      from,
-      to,
-    } = listCashTransactionsQuery.parse(query);
+    // El libro mayor es tesorería: el cobrador no lo ve; el coordinador, solo su subárbol.
+    const session = requireRole(auth, MANAGER_ROLES);
+    const { page, pageSize, ...filters } =
+      listCashTransactionsQuery.parse(query);
     const { items, total } = await this.queries.listCashTransactions({
       tenantId: tenant,
       page,
       pageSize,
-      ...(cashBoxId ? { cashBoxId } : {}),
-      ...(kind ? { kind } : {}),
-      ...(direction ? { direction } : {}),
-      ...(userId ? { userId } : {}),
-      ...(collectorId ? { collectorId } : {}),
-      ...(borrowerId ? { borrowerId } : {}),
-      ...(from ? { from } : {}),
-      ...(to ? { to } : {}),
+      ...definedFilters(filters),
+      ...scopeOf(session),
     });
     return { items, page, pageSize, total };
+  }
+
+  // Exportación CSV del libro con los mismos filtros (detalle de una liquidación). Texto plano,
+  // sin caché: lleva motivos escritos por usuarios (escapados contra inyección de fórmulas).
+  @Get('cash/transactions/export')
+  async exportTransactions(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+    @Query() query: Record<string, string>,
+    @Res() res: Response,
+  ): Promise<void> {
+    const tenant = requireTenant(tenantId);
+    const session = requireRole(auth, MANAGER_ROLES);
+    // La exportación no pagina: mismos filtros sin page/pageSize.
+    const filters = listCashTransactionsQuery
+      .omit({ page: true, pageSize: true })
+      .parse(query);
+    const { items, truncated } = await this.queries.exportCashTransactions({
+      tenantId: tenant,
+      ...definedFilters(filters),
+      ...scopeOf(session),
+    });
+    res
+      .status(200)
+      .setHeader('Content-Type', 'text/csv; charset=utf-8')
+      .setHeader(
+        'Content-Disposition',
+        'attachment; filename="movimientos.csv"',
+      )
+      .setHeader('Cache-Control', 'no-store')
+      .setHeader('X-Export-Truncated', String(truncated))
+      .send(ledgerCsv(items));
   }
 
   @Get('cash/dashboard')
@@ -328,4 +349,46 @@ export class CashBoxController {
       syncedBy: session.userId,
     });
   }
+}
+
+/** Solo los filtros presentes (el repositorio distingue "sin filtro" de un valor). */
+function definedFilters<T extends Record<string, unknown>>(
+  filters: T,
+): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(filters).filter(([, v]) => v !== undefined),
+  ) as Partial<T>;
+}
+
+/** El coordinador ve los asientos de su subárbol de zonas; el ADMIN, todo el libro. */
+function scopeOf(session: Session): { zoneScope?: SQL } {
+  const scope = zoneScopePredicate(session);
+  return scope ? { zoneScope: scope } : {};
+}
+
+const LEDGER_CSV_HEADER = [
+  'fecha',
+  'caja',
+  'zona',
+  'tipo',
+  'sentido',
+  'monto_minor',
+  'moneda',
+  'motivo',
+];
+
+function ledgerCsv(items: CashTransactionRow[]): string {
+  return toCsv(
+    LEDGER_CSV_HEADER,
+    items.map((t) => [
+      t.createdAt,
+      t.boxName,
+      t.zoneName ?? '',
+      t.kind,
+      t.direction,
+      String(t.amountMinor),
+      t.currency,
+      t.reason ?? '',
+    ]),
+  );
 }

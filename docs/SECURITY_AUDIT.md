@@ -235,7 +235,7 @@ sin CSP en `app.{$DOMAIN}`, cualquier XSS se vuelve toma de cuenta de 30 días. 
 | Paquete | Instalado | Parche | Problema |
 |---|---|---|---|
 | `drizzle-orm` | 0.36.4 | ≥0.45.2 | **SQLi por identificadores mal escapados** |
-| `multer` | 2.1.1 | ≥2.2.0 | DoS por campos anidados |
+| ~~`multer`~~ | ~~2.1.1~~ → **2.4.0** ✅ | ≥2.2.0 | DoS por campos anidados — **corregido 2026-09-26**: NestJS subió a 11.2.6 (`platform-express` trae `multer` 2.4.0); cubierto por `expense-upload.http.spec.ts` (multipart real) |
 | `form-data` | <4.0.6 | ≥4.0.6 | Inyección CRLF |
 | `body-parser` | <2.3.0 | ≥2.3.0 | El límite de tamaño se desactiva en silencio |
 

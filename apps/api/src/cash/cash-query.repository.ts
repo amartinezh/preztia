@@ -7,6 +7,7 @@ import {
   exists,
   gte,
   inArray,
+  lt,
   lte,
   or,
   sql,
@@ -243,68 +244,20 @@ export class CashQueryRepository {
   }
 
   // Historial detallado de movimientos con filtros (Req 5). Paginado; RLS aísla por tenant.
-  async listCashTransactions(input: {
-    tenantId: string;
-    page: number;
-    pageSize: number;
-    cashBoxId?: string;
-    kind?: CashTxKind;
-    direction?: CashTxDirection;
-    userId?: string;
-    collectorId?: string;
-    borrowerId?: string;
-    from?: string;
-    to?: string;
-  }): Promise<{ items: CashTransactionRow[]; total: number }> {
+  /**
+   * Libro de movimientos filtrado y paginado (más recientes primero). `zoneScope` recorta al
+   * coordinador a los asientos de su subárbol (atribución sellada en el asiento).
+   */
+  async listCashTransactions(
+    input: TransactionFilters & {
+      tenantId: string;
+      page: number;
+      pageSize: number;
+    },
+  ): Promise<{ items: CashTransactionRow[]; total: number }> {
     return withTenantTxFor(input.tenantId, async (tx) => {
-      const conds: SQL[] = [];
-      if (input.cashBoxId)
-        conds.push(eq(schema.cashTransaction.cashBoxId, input.cashBoxId));
-      if (input.kind) conds.push(eq(schema.cashTransaction.kind, input.kind));
-      if (input.direction)
-        conds.push(eq(schema.cashTransaction.direction, input.direction));
-      if (input.userId)
-        conds.push(eq(schema.cashTransaction.createdBy, input.userId));
-      // Cobrador dueño de la caja: filtra por el efectivo de su ruta (vía cash_box.assigned_to).
-      if (input.collectorId)
-        conds.push(eq(schema.cashBox.assignedTo, input.collectorId));
-      // Cliente: los movimientos que CAUSA un deudor son sus DESEMBOLSOS (egreso, vía credit_id
-      // directo) y sus ABONOS (ingreso, vía payment→credit). EXISTS correlacionados: no multiplican
-      // filas ni alteran el conteo, y las subconsultas quedan aisladas por RLS (mismo tenant tx).
-      if (input.borrowerId) {
-        const disbursementOfBorrower = tx
-          .select({ one: sql`1` })
-          .from(schema.credit)
-          .where(
-            and(
-              eq(schema.credit.id, schema.cashTransaction.creditId),
-              eq(schema.credit.borrowerId, input.borrowerId),
-            ),
-          );
-        const paymentOfBorrower = tx
-          .select({ one: sql`1` })
-          .from(schema.payment)
-          .innerJoin(
-            schema.credit,
-            eq(schema.credit.id, schema.payment.creditId),
-          )
-          .where(
-            and(
-              eq(schema.payment.id, schema.cashTransaction.paymentId),
-              eq(schema.credit.borrowerId, input.borrowerId),
-            ),
-          );
-        conds.push(
-          or(exists(disbursementOfBorrower), exists(paymentOfBorrower)) as SQL,
-        );
-      }
-      if (input.from)
-        conds.push(gte(schema.cashTransaction.createdAt, new Date(input.from)));
-      if (input.to)
-        conds.push(lte(schema.cashTransaction.createdAt, new Date(input.to)));
-      const where = conds.length ? and(...conds) : undefined;
-
-      // El join 1:1 con cash_box permite filtrar por su dueño sin alterar el conteo.
+      const where = transactionConditions(tx, input);
+      // Los joins son 1:1 (caja) y 0..1 (zona): no alteran el conteo.
       const [totalRow] = await tx
         .select({ value: count() })
         .from(schema.cashTransaction)
@@ -312,48 +265,36 @@ export class CashQueryRepository {
           schema.cashBox,
           eq(schema.cashBox.id, schema.cashTransaction.cashBoxId),
         )
-        .where(where);
-
-      const rows = await tx
-        .select({
-          id: schema.cashTransaction.id,
-          cashBoxId: schema.cashTransaction.cashBoxId,
-          boxName: schema.cashBox.name,
-          direction: schema.cashTransaction.direction,
-          kind: schema.cashTransaction.kind,
-          amountMinor: schema.cashTransaction.amountMinor,
-          currency: schema.cashTransaction.currency,
-          reason: schema.cashTransaction.reason,
-          paymentId: schema.cashTransaction.paymentId,
-          transferGroupId: schema.cashTransaction.transferGroupId,
-          createdBy: schema.cashTransaction.createdBy,
-          createdAt: schema.cashTransaction.createdAt,
-        })
-        .from(schema.cashTransaction)
-        .innerJoin(
-          schema.cashBox,
-          eq(schema.cashBox.id, schema.cashTransaction.cashBoxId),
+        .leftJoin(
+          schema.zone,
+          eq(schema.zone.id, schema.cashTransaction.zoneId),
         )
+        .where(where);
+      const rows = await selectTransactions(tx)
         .where(where)
         .orderBy(desc(schema.cashTransaction.createdAt))
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize);
+      return {
+        items: rows.map(toTransactionRow),
+        total: Number(totalRow?.value ?? 0),
+      };
+    });
+  }
 
-      const items: CashTransactionRow[] = rows.map((row) => ({
-        id: row.id,
-        cashBoxId: row.cashBoxId,
-        boxName: row.boxName,
-        direction: row.direction,
-        kind: row.kind,
-        amountMinor: row.amountMinor,
-        currency: row.currency,
-        reason: row.reason,
-        paymentId: row.paymentId,
-        transferGroupId: row.transferGroupId,
-        createdBy: row.createdBy,
-        createdAt: row.createdAt.toISOString(),
-      }));
-      return { items, total: Number(totalRow?.value ?? 0) };
+  /** Los mismos movimientos (sin paginar, con tope) para exportar a CSV. */
+  async exportCashTransactions(
+    input: TransactionFilters & { tenantId: string },
+  ): Promise<{ items: CashTransactionRow[]; truncated: boolean }> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const rows = await selectTransactions(tx)
+        .where(transactionConditions(tx, input))
+        .orderBy(desc(schema.cashTransaction.createdAt))
+        .limit(MAX_EXPORT_ROWS + 1);
+      return {
+        items: rows.slice(0, MAX_EXPORT_ROWS).map(toTransactionRow),
+        truncated: rows.length > MAX_EXPORT_ROWS,
+      };
     });
   }
 
@@ -539,4 +480,114 @@ async function routeBoxesOf(
         { id: r.id, name: r.name, balanceMinor: Number(r.balanceMinor ?? 0) },
       ]),
   );
+}
+
+/** Filtros del libro de movimientos (los mismos para la lista y la exportación). */
+export interface TransactionFilters {
+  cashBoxId?: string;
+  kind?: CashTxKind;
+  direction?: CashTxDirection;
+  userId?: string;
+  collectorId?: string;
+  borrowerId?: string;
+  zoneId?: string;
+  from?: string;
+  to?: string;
+  before?: string;
+  zoneScope?: SQL;
+}
+
+// Tope de filas de una exportación (evita un CSV gigante en una sola petición).
+const MAX_EXPORT_ROWS = 20_000;
+
+function transactionConditions(
+  tx: Tx,
+  input: TransactionFilters,
+): SQL | undefined {
+  const conds: SQL[] = [];
+  if (input.cashBoxId)
+    conds.push(eq(schema.cashTransaction.cashBoxId, input.cashBoxId));
+  if (input.kind) conds.push(eq(schema.cashTransaction.kind, input.kind));
+  if (input.direction)
+    conds.push(eq(schema.cashTransaction.direction, input.direction));
+  if (input.userId)
+    conds.push(eq(schema.cashTransaction.createdBy, input.userId));
+  // Cobrador dueño de la caja: filtra por el efectivo de su ruta (vía cash_box.assigned_to).
+  if (input.collectorId)
+    conds.push(eq(schema.cashBox.assignedTo, input.collectorId));
+  if (input.zoneId) conds.push(eq(schema.cashTransaction.zoneId, input.zoneId));
+  // Cliente: los movimientos que CAUSA un deudor son sus DESEMBOLSOS (egreso, vía credit_id
+  // directo) y sus ABONOS (ingreso, vía payment→credit). EXISTS correlacionados: no multiplican
+  // filas ni alteran el conteo, y las subconsultas quedan aisladas por RLS (mismo tenant tx).
+  if (input.borrowerId) {
+    const disbursementOfBorrower = tx
+      .select({ one: sql`1` })
+      .from(schema.credit)
+      .where(
+        and(
+          eq(schema.credit.id, schema.cashTransaction.creditId),
+          eq(schema.credit.borrowerId, input.borrowerId),
+        ),
+      );
+    const paymentOfBorrower = tx
+      .select({ one: sql`1` })
+      .from(schema.payment)
+      .innerJoin(schema.credit, eq(schema.credit.id, schema.payment.creditId))
+      .where(
+        and(
+          eq(schema.payment.id, schema.cashTransaction.paymentId),
+          eq(schema.credit.borrowerId, input.borrowerId),
+        ),
+      );
+    conds.push(
+      or(exists(disbursementOfBorrower), exists(paymentOfBorrower)) as SQL,
+    );
+  }
+  if (input.from)
+    conds.push(gte(schema.cashTransaction.createdAt, new Date(input.from)));
+  if (input.to)
+    conds.push(lte(schema.cashTransaction.createdAt, new Date(input.to)));
+  if (input.before)
+    conds.push(lt(schema.cashTransaction.createdAt, new Date(input.before)));
+  if (input.zoneScope) conds.push(input.zoneScope);
+  return conds.length ? and(...conds) : undefined;
+}
+
+function selectTransactions(tx: Tx) {
+  return tx
+    .select({
+      id: schema.cashTransaction.id,
+      cashBoxId: schema.cashTransaction.cashBoxId,
+      boxName: schema.cashBox.name,
+      direction: schema.cashTransaction.direction,
+      kind: schema.cashTransaction.kind,
+      amountMinor: schema.cashTransaction.amountMinor,
+      currency: schema.cashTransaction.currency,
+      reason: schema.cashTransaction.reason,
+      paymentId: schema.cashTransaction.paymentId,
+      transferGroupId: schema.cashTransaction.transferGroupId,
+      createdBy: schema.cashTransaction.createdBy,
+      zoneId: schema.cashTransaction.zoneId,
+      zoneName: schema.zone.name,
+      createdAt: schema.cashTransaction.createdAt,
+    })
+    .from(schema.cashTransaction)
+    .innerJoin(
+      schema.cashBox,
+      eq(schema.cashBox.id, schema.cashTransaction.cashBoxId),
+    )
+    .leftJoin(schema.zone, eq(schema.zone.id, schema.cashTransaction.zoneId))
+    .$dynamic();
+}
+
+function toTransactionRow(
+  row: Awaited<
+    ReturnType<ReturnType<typeof selectTransactions>['execute']>
+  >[number],
+): CashTransactionRow {
+  return {
+    ...row,
+    zoneName: row.zoneName ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
 }

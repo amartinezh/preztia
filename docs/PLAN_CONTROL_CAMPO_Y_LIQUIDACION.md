@@ -10,10 +10,9 @@
 > precisamente por recalcular caja por su cuenta y divergir del libro
 > ([PLAN_TESORERIA_UNICA_FUENTE.md](PLAN_TESORERIA_UNICA_FUENTE.md)). Este plan no la resucita.
 >
-> **Estado:** diseño acordado con el usuario (2026-09-25). **Fases 1–6 implementadas y verificadas**
-> contra Postgres real (migraciones 0057–0066 aplicadas en local, con RLS a mano en 0059, 0062,
-> 0064 y 0066; integración 75/75). Nada aplicado aún en producción: se desplegará todo junto al
-> terminar. Siguiente: Fase 7 (pantallas de dirección y estadísticas).
+> **Estado:** **plan completo — Fases 1–7 implementadas y verificadas** contra Postgres real
+> (migraciones 0057–0066 aplicadas en local, con RLS a mano en 0059, 0062, 0064 y 0066; integración
+> 75/75). Nada aplicado aún en producción: se desplegará todo junto tras la verificación en local.
 > **ADR:** #41 registrado en [ARCHITECTURE.md](ARCHITECTURE.md) (ver §9).
 
 ---
@@ -595,7 +594,7 @@ Escenario: Alcance del coordinador
   Y el cobrador no ve liquidaciones (403)
 ```
 
-### Fase 7 — Pantallas de dirección y estadísticas
+### Fase 7 — Pantallas de dirección y estadísticas ✅
 
 - **Período actual:** filas = conceptos, columnas = cajas o zonas (conmutables); tarjetas de
   utilidad y % de recaudo.
@@ -606,6 +605,17 @@ Escenario: Alcance del coordinador
   efectivas, faltantes, atrasos de rendición.
 
 ---
+
+- **Implementado:** segmento **Liquidación** en Dinero (en curso + histórico). Tarjetas de
+  resultado; tabla de tesorería por concepto con columnas conmutables cajas/zonas (+ total); tabla de
+  cobradores con su desempeño del período (paradas liquidadas/despachadas, % de visitas con pago,
+  tiempo promedio de visita, consignaciones verificadas y tiempo hasta reportar, rendiciones y
+  cuántas tarde — guardado en la foto para la estadística histórica); movimientos exactos del período
+  (`before` exclusivo) con filtros tipo/caja/zona y **CSV** (`GET /cash/transactions/export`, celdas
+  neutralizadas contra inyección de fórmulas). Histórico: gráfica de tendencia (cobrado, prestado,
+  utilidad; paleta validada con la skill dataviz en claro y oscuro; renderizada y revisada) y tabla
+  comparativa de los últimos 12 períodos; tocar un período abre su fotografía.
+- De paso: el libro (`/cash/transactions`) ahora recorta al coordinador a su subárbol de zonas.
 
 ## 8. Seguridad, auditoría y operación (checklist transversal)
 

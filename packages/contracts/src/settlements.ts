@@ -99,6 +99,20 @@ export const settlementSnapshot = z.object({
       payrollMinor: money,
       writeOffMinor: money,
       closingCashMinor: money,
+      /** Desempeño de campo del período; ausente en fotos anteriores a la Fase 7. */
+      performance: z
+        .object({
+          stopsDispatched: z.number().int(),
+          stopsResolved: z.number().int(),
+          effectiveVisitRatePerMille: z.number().int().nullable(),
+          avgResolveMinutes: z.number().int().nullable(),
+          depositsIssued: z.number().int(),
+          depositsVerified: z.number().int(),
+          avgDepositReportMinutes: z.number().int().nullable(),
+          remittancesSubmitted: z.number().int(),
+          remittancesLate: z.number().int(),
+        })
+        .optional(),
     }),
   ),
 });

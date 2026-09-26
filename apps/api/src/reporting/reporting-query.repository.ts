@@ -4,6 +4,7 @@ import { schema } from '@preztiaos/db';
 import type { BorrowerReport, Dashboard } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
+import { csvCell } from '../shared/csv';
 
 // Read models de REPORTERÍA (CQRS): panel del tenant, resumen de cliente y export CSV. Derivan
 // de cartera/pagos/caja/operación; solo lectura, RLS aísla por tenant.
@@ -267,10 +268,4 @@ function fullName(first: string | null, last: string | null): string | null {
 
 function toMajor(minor: number): string {
   return (minor / 100).toFixed(2);
-}
-
-/** Escapa una celda CSV (comillas/comas/saltos de línea). */
-function csvCell(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
 }

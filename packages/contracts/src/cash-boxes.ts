@@ -219,6 +219,9 @@ export const cashTransactionRow = z.object({
   transferGroupId: z.string().uuid().nullable(),
   /** null = asiento generado por el sistema (ruteo automático de un pago). */
   createdBy: z.string().uuid().nullable(),
+  /** Zona sellada en el asiento (atribución de la liquidación); null = sin zona. */
+  zoneId: z.string().uuid().nullable(),
+  zoneName: z.string().nullable(),
   createdAt: z.string(),
 });
 export type CashTransactionRow = z.infer<typeof cashTransactionRow>;
@@ -244,7 +247,12 @@ export const listCashTransactionsQuery = paginationQuery.extend({
   borrowerId: z.string().uuid().optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
+  /** Corte EXCLUSIVO (< before): el detalle de una liquidación usa exactamente su [inicio, fin). */
+  before: z.string().datetime().optional(),
+  /** Zona sellada en el asiento. */
+  zoneId: z.string().uuid().optional(),
 });
+export type ListCashTransactionsQuery = z.infer<typeof listCashTransactionsQuery>;
 
 // --- Dashboard --------------------------------------------------------------
 

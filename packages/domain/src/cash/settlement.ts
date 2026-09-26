@@ -83,6 +83,37 @@ export interface SettlementCollectorRef {
   readonly zonePath: string | null;
 }
 
+/** Actividad de campo del cobrador en el período (la cuenta la infraestructura). */
+export interface CollectorActivity {
+  readonly collectorId: string;
+  readonly stopsDispatched: number;
+  readonly stopsResolved: number;
+  readonly stopsPaid: number;
+  /** Σ minutos entre despacho y liquidación de las paradas resueltas. */
+  readonly resolveMinutesTotal: number;
+  readonly depositsIssued: number;
+  readonly depositsVerified: number;
+  /** Σ minutos entre la orden y el reporte de las consignaciones reportadas. */
+  readonly depositReportMinutesTotal: number;
+  readonly depositsReported: number;
+  readonly remittancesSubmitted: number;
+  readonly remittancesLate: number;
+}
+
+/** Indicadores de desempeño del cobrador (control estricto y estadístico). */
+export interface CollectorPerformance {
+  readonly stopsDispatched: number;
+  readonly stopsResolved: number;
+  /** Visitas con pago sobre visitas liquidadas, base mil; null sin visitas. */
+  readonly effectiveVisitRatePerMille: number | null;
+  readonly avgResolveMinutes: number | null;
+  readonly depositsIssued: number;
+  readonly depositsVerified: number;
+  readonly avgDepositReportMinutes: number | null;
+  readonly remittancesSubmitted: number;
+  readonly remittancesLate: number;
+}
+
 /** Métricas de cartera del período por zona (las calcula la infraestructura sobre la cartera). */
 export interface PortfolioByZone {
   readonly zoneId: string;
@@ -150,6 +181,7 @@ export interface SettlementCollectorLine {
   readonly writeOffMinor: number;
   /** Efectivo en su caja de ruta al corte (lo no entregado = deuda). */
   readonly closingCashMinor: number;
+  readonly performance: CollectorPerformance;
 }
 
 export interface SettlementSnapshot {
@@ -199,10 +231,13 @@ export function buildSettlement(input: {
   zones: readonly SettlementZoneRef[];
   collectors: readonly SettlementCollectorRef[];
   portfolio: readonly PortfolioByZone[];
+  activity?: readonly CollectorActivity[];
 }): SettlementSnapshot {
   const boxes = input.boxes.map((box) => boxLine(box, input.flows.filter((f) => f.cashBoxId === box.cashBoxId)));
   const zones = zoneLines(input);
-  const collectors = input.collectors.map((c) => collectorLine(c, input.flows, input.boxes));
+  const collectors = input.collectors.map((c) =>
+    collectorLine(c, input.flows, input.boxes, input.activity?.find((a) => a.collectorId === c.collectorId)),
+  );
   return {
     totals: sumTreasury(boxes),
     result: mergeResults(zones.map((z) => z.result)),
@@ -345,10 +380,28 @@ function sumTreasury(boxes: readonly SettlementBoxLine[]): SettlementSnapshot["t
   };
 }
 
+/** Indicadores a partir de la actividad (promedios enteros en minutos; tasas en base mil). */
+export function collectorPerformance(a: CollectorActivity | undefined): CollectorPerformance {
+  const avg = (total: number, n: number) => (n > 0 ? Math.round(total / n) : null);
+  return {
+    stopsDispatched: a?.stopsDispatched ?? 0,
+    stopsResolved: a?.stopsResolved ?? 0,
+    effectiveVisitRatePerMille:
+      a && a.stopsResolved > 0 ? Math.floor((a.stopsPaid * PER_MILLE) / a.stopsResolved) : null,
+    avgResolveMinutes: avg(a?.resolveMinutesTotal ?? 0, a?.stopsResolved ?? 0),
+    depositsIssued: a?.depositsIssued ?? 0,
+    depositsVerified: a?.depositsVerified ?? 0,
+    avgDepositReportMinutes: avg(a?.depositReportMinutesTotal ?? 0, a?.depositsReported ?? 0),
+    remittancesSubmitted: a?.remittancesSubmitted ?? 0,
+    remittancesLate: a?.remittancesLate ?? 0,
+  };
+}
+
 function collectorLine(
   ref: SettlementCollectorRef,
   flows: readonly SettlementFlow[],
   boxes: readonly SettlementBoxInput[],
+  activity: CollectorActivity | undefined,
 ): SettlementCollectorLine {
   const own = flows.filter((f) => f.collectorId === ref.collectorId);
   const { concepts } = conceptsOf(own);
@@ -368,5 +421,6 @@ function collectorLine(
     payrollMinor: concepts.DEBT_PAYROLL,
     writeOffMinor: concepts.DEBT_WRITE_OFF,
     closingCashMinor,
+    performance: collectorPerformance(activity),
   };
 }

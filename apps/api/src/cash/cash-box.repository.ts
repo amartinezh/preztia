@@ -467,6 +467,9 @@ function toTxView(
     paymentId: row.paymentId,
     transferGroupId: row.transferGroupId,
     createdBy: row.createdBy,
+    zoneId: row.zoneId,
+    // Respuesta de un asiento recién posteado: el nombre de la zona lo trae el listado del libro.
+    zoneName: null,
     createdAt: row.createdAt.toISOString(),
   };
 }

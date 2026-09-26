@@ -9,6 +9,7 @@ import { CashBoxesScreen } from "./cash-boxes-screen";
 import { CashMovementsScreen } from "./cash-movements-screen";
 import { RemittancesBoardScreen } from "@/features/remittances/screens/remittances-board-screen";
 import { DepositOrdersScreen } from "@/features/deposit-orders/screens/deposit-orders-screen";
+import { SettlementsScreen } from "@/features/settlements/screens/settlements-screen";
 
 type Segment = { key: string; label: string; render: () => ReactNode };
 
@@ -25,6 +26,11 @@ export function DineroHubScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
 
   const segments: Segment[] = [
+    {
+      key: "liquidacion",
+      label: t("dinero.segment.settlement"),
+      render: () => <SettlementsScreen />,
+    },
     {
       key: "resumen",
       label: t("dinero.segment.summary"),
