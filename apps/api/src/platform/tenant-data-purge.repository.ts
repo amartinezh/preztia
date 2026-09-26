@@ -27,6 +27,8 @@ export const PURGE_ORDER: readonly string[] = [
   'payment_charge', // → payment, credit
   'payment_allocation', // → payment, installment
   'payment_event', // → payment
+  'route_stop', // → payment, collection_route
+  'collection_route',
   // Agregados de dinero.
   'payment',
   'installment', // → credit

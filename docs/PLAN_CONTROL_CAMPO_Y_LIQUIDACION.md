@@ -10,12 +10,10 @@
 > precisamente por recalcular caja por su cuenta y divergir del libro
 > ([PLAN_TESORERIA_UNICA_FUENTE.md](PLAN_TESORERIA_UNICA_FUENTE.md)). Este plan no la resucita.
 >
-> **Estado:** diseño acordado con el usuario (2026-09-25). **Fases 1–3 implementadas y verificadas**
-> contra Postgres real (migraciones 0057–0060 aplicadas en local; integración 56/56). **Fase 4
-> implementada** (verde en build + typecheck + lint + test); **falta** `pnpm db:generate`, la
-> migración RLS a mano de `field_order` y `field_order_event`, `pnpm db:migrate` y
-> `pnpm --filter api test:integration` (`deposit-order.integration.spec.ts`). Nada aplicado aún en
-> producción.
+> **Estado:** diseño acordado con el usuario (2026-09-25). **Fases 1–5 implementadas y verificadas**
+> contra Postgres real (migraciones 0057–0064 aplicadas en local, con RLS a mano en 0059, 0062 y
+> 0064; integración 71/71). Nada aplicado aún en producción. Siguiente: Fase 6 (liquidación por
+> período).
 > **ADR:** #41 registrado en [ARCHITECTURE.md](ARCHITECTURE.md) (ver §9).
 
 ---
@@ -430,7 +428,7 @@ Escenario: Alcance
   Y un coordinador de "Norte" no lo ve ni lo puede revisar (404)
 ```
 
-### Fase 4 — Órdenes de consignación ✅ (implementada, migración pendiente)
+### Fase 4 — Órdenes de consignación ✅
 
 - `field_order` + `field_order_event` (append-only) con la máquina de §5.2.
 - El coordinador ve el **efectivo en la calle por cobrador** y emite la orden (monto ≤ saldo de la
@@ -482,7 +480,7 @@ Escenario: Alcance
   Entonces el cobrador solo ve sus órdenes y un coordinador de otra zona no las ve (404)
 ```
 
-### Fase 5 — Órdenes de ruta
+### Fase 5 — Órdenes de ruta ✅
 
 - `collection_route` + `route_stop`. Propuesta = clientes que "necesitan visita" (regla existente) de
   la zona + optimización OSRM.
@@ -494,6 +492,45 @@ Escenario: Alcance
   fecha / `NOT_FOUND`; reutiliza `collection_note` / `collection_visit`.
 - Perfil del cobrador: rutas pendientes con **"solicitada el dd/mm hh:mm"** y antigüedad; histórico.
 - **Aceptación:** I11; el recaudo de cada parada se atribuye al cobrador que la liquidó.
+- **Decisiones de implementación:**
+  - Rutas bajo `/collection-routes` (`/routes` ya es la "lista de cobros" del legado).
+  - **Dirección del cliente:** no existía en el modelo (solo lat/lng). Se agrega `borrower.address`
+    (opcional, editable en la ficha del cliente) y la parada guarda una **copia** al despachar
+    (dirección, teléfono, nombre, coordenadas, monto a cobrar): la vista mínima no consulta el
+    crédito ni al cliente, así no puede filtrar saldo ni historial.
+  - **Monto a cobrar** = saldo vencido al despachar (Σ cuotas vencidas − abonado), regla pura.
+  - Una sola parada abierta por crédito (índice único parcial): no se despacha dos veces el mismo
+    cliente. La vista mínima solo existe mientras la parada está abierta (`ASSIGNED`/`SEEN`).
+  - **Liquidar la parada** es una transacción: `PAID` registra el cobro en efectivo (asiento a la
+    caja de ruta de quien cobró → entra en su rendición); `PAID`/`NOT_PAID`/`PROMISE` registran la
+    visita (reagenda por ciclo de mora); `NOT_FOUND` deja solo la observación (sigue pendiente).
+  - La obligación de **rendir dinero** sigue siendo "cobró efectivo"; la ruta se rinde parada por
+    parada (su resultado es el informe de visita). Un día de ruta sin cobros no exige rendición de caja.
+
+```gherkin
+Escenario: El sistema propone y el coordinador reparte
+  Dado 3 clientes de la zona "Norte" que necesitan visita (mora ≥ umbral)
+  Cuando el coordinador pide la propuesta de ruta de "Norte"
+  Entonces recibe las 3 paradas ordenadas por recorrido, con el monto vencido de cada una
+  Cuando asigna 2 paradas a "Ana" y 1 a "Beto" y despacha
+  Entonces a cada cobrador le aparecen sus paradas con "solicitada el dd/mm hh:mm"
+  Y despachar de nuevo un cliente con parada abierta responde 409 STOP_ALREADY_OPEN
+
+Escenario: Vista mínima de un cliente que no es de su cartera
+  Dado que "Ana" recibe una parada de un cliente que no tiene asignado
+  Entonces ve nombre, dirección, mapa, teléfono y monto a cobrar
+  Pero no ve saldo total, historial ni las paradas de "Beto"
+  Y al liquidar la parada, deja de verla en sus pendientes
+
+Escenario: Liquidar visita con cobro
+  Cuando "Ana" liquida la parada como PAGÓ 50.000
+  Entonces se registra el abono, entra a la caja de ruta de "Ana" y queda la visita
+  Y PAGÓ sin monto, NO PAGÓ sin motivo o PROMESA sin fecha (o con fecha pasada) responden 400
+
+Escenario: No encontrado
+  Cuando la liquida como NO ENCONTRADO
+  Entonces queda la observación pero el cliente sigue pendiente de visita
+```
 
 ### Fase 6 — Liquidación por período
 

@@ -278,6 +278,7 @@ function BorrowerFormModal({
   const [firstName, setFirstName] = useState(borrower?.firstName ?? "");
   const [lastName, setLastName] = useState(borrower?.lastName ?? "");
   const [business, setBusiness] = useState(borrower?.business ?? "");
+  const [address, setAddress] = useState(borrower?.address ?? "");
   const [phone, setPhone] = useState(borrower?.phone ?? "");
   const [color, setColor] = useState<BorrowerColor>(borrower?.color ?? "NONE");
   const [creditLimit, setCreditLimit] = useState(
@@ -300,6 +301,7 @@ function BorrowerFormModal({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       business: business.trim() || null,
+      address: address.trim() || null,
       phone: phone.trim() || null,
       color,
       creditBlocked,
@@ -344,6 +346,9 @@ function BorrowerFormModal({
         </Field>
         <Field label={t("borrowers.field.business")}>
           <Input value={business} onChangeText={setBusiness} />
+        </Field>
+        <Field label={t("borrowers.field.address")} hint={t("borrowers.field.addressHint")}>
+          <Input value={address} onChangeText={setAddress} />
         </Field>
         <Field label={t("borrowers.field.phone")}>
           <Input value={phone} onChangeText={setPhone} keyboardType="phone-pad" />

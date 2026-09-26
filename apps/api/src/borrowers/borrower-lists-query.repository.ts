@@ -64,6 +64,7 @@ export class BorrowerListsQueryRepository {
         firstName: borrower.firstName,
         lastName: borrower.lastName,
         business: borrower.business,
+        address: borrower.address,
         phone: borrower.phone,
         lat: borrower.lat,
         lng: borrower.lng,

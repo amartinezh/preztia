@@ -25,6 +25,7 @@ export * from "./credit/portfolio/allocate-payment";
 export * from "./credit/portfolio/principal-interest-split";
 export * from "./credit/collection/collection-reminder";
 export * from "./credit/collection/visit-policy";
+export * from "./credit/collection/route-stop";
 export * from "./credit/portfolio/account";
 export * from "./credit/portfolio/account-inquiry";
 export * from "./cash/expense";

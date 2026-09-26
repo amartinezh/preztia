@@ -35,6 +35,7 @@ export * from "./cash-transaction";
 export * from "./cash-count";
 export * from "./collector-remittance";
 export * from "./field-order";
+export * from "./collection-route";
 export * from "./bank-reconciliation";
 export * from "./app-user";
 export * from "./tenant";

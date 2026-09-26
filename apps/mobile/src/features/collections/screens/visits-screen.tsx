@@ -15,6 +15,7 @@ import {
 } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
+import { MyRouteSection } from "@/features/collection-routes/components/my-route-section";
 import { useT } from "@/core/i18n";
 import { useCollectionVisits } from "../api/visits-queries";
 import { CollectionMap } from "../components/collection-map";
@@ -41,6 +42,9 @@ export function VisitsScreen() {
     <Screen>
       <Stack gap="lg">
         <Text variant="subtitle">{t("visits.title")}</Text>
+
+        {/* Paradas despachadas por el coordinador (vista mínima mientras están abiertas). */}
+        <MyRouteSection />
 
         <Row gap="sm">
           {TABS.map((item) => {

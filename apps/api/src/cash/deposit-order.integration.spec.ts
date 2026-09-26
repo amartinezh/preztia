@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import { schema } from '@preztiaos/db';
 import { ConflictError, DomainError } from '@preztiaos/domain';
 import { CashBoxDrizzleRepository } from './cash-box.repository';
 import { BankAccountDrizzleRepository } from './bank-account.repository';
@@ -10,6 +11,7 @@ import {
 } from './deposit-order.repository';
 import { DepositOrderQueryRepository } from './deposit-order-query.repository';
 import { IncomingCreditDrizzleRepository } from '../payments/incoming-credit.repository';
+import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { owner, cleanupTenant, closeOwner, hasDb } from '../../test/db-helpers';
 
 // Integración de la Fase 4 (órdenes de consignación) contra Postgres real con RLS: emitir con tope
@@ -279,6 +281,41 @@ describeDb('Fase 4 — órdenes de consignación (integración)', () => {
       'COMMENT',
       'REPORTED',
     ]);
+  });
+
+  it('RLS: otro tenant no ve la orden ni su hilo, y la bitácora no se edita ni se borra', async () => {
+    const f = await setup();
+    const other = await setup();
+    const id = await issue(f);
+
+    const seen = await withTenantTxFor(other.tenant, (tx) =>
+      tx
+        .select({ id: schema.fieldOrder.id })
+        .from(schema.fieldOrder)
+        .where(eq(schema.fieldOrder.id, id)),
+    );
+    expect(seen).toHaveLength(0);
+    const events = await withTenantTxFor(other.tenant, (tx) =>
+      tx
+        .select({ id: schema.fieldOrderEvent.id })
+        .from(schema.fieldOrderEvent)
+        .where(eq(schema.fieldOrderEvent.orderId, id)),
+    );
+    expect(events).toHaveLength(0);
+
+    await expect(
+      withTenantTxFor(f.tenant, (tx) =>
+        tx
+          .update(schema.fieldOrderEvent)
+          .set({ message: 'editado' })
+          .where(eq(schema.fieldOrderEvent.orderId, id)),
+      ),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      withTenantTxFor(f.tenant, (tx) =>
+        tx.delete(schema.fieldOrder).where(eq(schema.fieldOrder.id, id)),
+      ),
+    ).rejects.toThrow(/permission denied/);
   });
 
   it('alcance: otro cobrador no la ve y un coordinador de otra zona no la verifica', async () => {

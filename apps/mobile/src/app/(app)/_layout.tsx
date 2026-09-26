@@ -52,6 +52,7 @@ export default function AppLayout() {
         <Stack.Screen name="lists" options={detail(t("lists.title"), "/cuentas" as Href)} />
         <Stack.Screen name="payments/[id]" options={detail(t("payment.detail.title"), "/cuentas?tab=pagos" as Href)} />
         <Stack.Screen name="collection-map" options={detail(t("map.title"), "/cartera" as Href)} />
+        <Stack.Screen name="collection-routes" options={detail(t("route.title"), "/cartera" as Href)} />
         <Stack.Screen name="cash/boxes" options={detail(t("cash.boxes.title"), "/cash" as Href)} />
         <Stack.Screen name="cash/movements" options={detail(t("cash.movements.title"), "/cash/boxes" as Href)} />
         <Stack.Screen name="cash/config" options={detail(t("cash.config.link"), "/cash/boxes" as Href)} />

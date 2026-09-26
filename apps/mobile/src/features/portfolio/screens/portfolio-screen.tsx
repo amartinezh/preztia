@@ -93,6 +93,14 @@ export function PortfolioScreen() {
                     onPress={() => router.push("/collection-map" as Href)}
                   />
                 ) : null}
+                {canRemind ? (
+                  <Button
+                    label={t("route.title")}
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => router.push("/collection-routes" as Href)}
+                  />
+                ) : null}
                 {canExport ? (
                   <Button
                     label={t("accounts.export")}

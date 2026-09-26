@@ -11,6 +11,7 @@ export interface NewBorrower {
   readonly firstName: string;
   readonly lastName: string;
   readonly business: string | null;
+  readonly address: string | null;
   readonly phone: string | null;
   readonly lat: number | null;
   readonly lng: number | null;
@@ -26,6 +27,7 @@ export interface BorrowerRecord {
   readonly firstName: string;
   readonly lastName: string;
   readonly business: string | null;
+  readonly address: string | null;
   readonly phone: string | null;
   readonly lat: number | null;
   readonly lng: number | null;
@@ -41,6 +43,7 @@ export interface BorrowerPatch {
   readonly firstName?: string;
   readonly lastName?: string;
   readonly business?: string | null;
+  readonly address?: string | null;
   readonly phone?: string | null;
   readonly lat?: number | null;
   readonly lng?: number | null;

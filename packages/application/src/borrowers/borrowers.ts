@@ -22,6 +22,7 @@ export interface CreateBorrowerCommand {
   firstName: string;
   lastName: string;
   business: string | null;
+  address: string | null;
   phone: string | null;
   lat: number | null;
   lng: number | null;
@@ -57,6 +58,7 @@ export class CreateBorrowerHandler {
       firstName: cmd.firstName,
       lastName: cmd.lastName,
       business: cmd.business,
+      address: cmd.address,
       phone: cmd.phone,
       lat: cmd.lat,
       lng: cmd.lng,

@@ -13,8 +13,8 @@ import {
 import type { RemittanceView } from '@preztiaos/contracts';
 import { type Tx } from '../tenancy/unit-of-work';
 import { balanceOfBox } from './cash-ledger';
+import { resolveTenantTimeZone } from '../tenant-config/tenant-timezone';
 
-const DEFAULT_TIMEZONE = 'America/Bogota';
 const MS_PER_MINUTE = 60_000;
 
 type RemittanceRow = typeof schema.collectorRemittance.$inferSelect;
@@ -25,21 +25,17 @@ export interface RemittanceSchedule {
   readonly deadlineHourLocal: number;
 }
 
-/** Lee la zona horaria (la del cron de cobranza) y la hora límite de los ajustes operativos. */
+/** Zona horaria del tenant y hora límite de rendición de sus ajustes operativos. */
 export async function resolveRemittanceSchedule(
   tx: Tx,
   tenantId: string,
 ): Promise<RemittanceSchedule> {
   const rows = (await tx.execute(sql`
-    SELECT collection_reminder_settings->>'timezone' AS time_zone,
-           (operational_settings->>'remittanceDeadlineHourLocal')::int AS deadline_hour
+    SELECT (operational_settings->>'remittanceDeadlineHourLocal')::int AS deadline_hour
     FROM tenant_config WHERE tenant_id = ${tenantId} LIMIT 1
-  `)) as unknown as Array<{
-    time_zone: string | null;
-    deadline_hour: number | null;
-  }>;
+  `)) as unknown as Array<{ deadline_hour: number | null }>;
   return {
-    timeZone: rows[0]?.time_zone ?? DEFAULT_TIMEZONE,
+    timeZone: await resolveTenantTimeZone(tx, tenantId),
     deadlineHourLocal:
       rows[0]?.deadline_hour ?? DEFAULT_REMITTANCE_DEADLINE_HOUR,
   };

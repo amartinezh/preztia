@@ -35,6 +35,8 @@ export const borrower = pgTable(
     lastName: text("last_name").notNull().default(""),
     // Negocio/ocupación (Negocio del legado): lanchonete, Uber, salón, etc.
     business: text("business"),
+    // Dirección de visita (texto libre). Se copia a la parada de ruta al despacharla.
+    address: text("address"),
     // Teléfono del cliente (E.164 sin '+' u otro formato local).
     phone: text("phone"),
     // Geolocalización para "Ver en Mapa" / "Posición de Clientes".

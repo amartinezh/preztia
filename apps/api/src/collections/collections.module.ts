@@ -39,15 +39,22 @@ import { ConversationMessageLog } from '../conversations/conversation-message.lo
  * transcript `conversation_message`, satisfaciendo el log de auditoría del hilo). El cron de
  * `@nestjs/schedule` activa el envío automático; el controlador, el manual.
  */
+import { CollectionRouteController } from './collection-route.controller';
+import { CollectionRouteDrizzleRepository } from './collection-route.repository';
+import { CollectionRouteQueryRepository } from './collection-route-query.repository';
+
 @Module({
   imports: [MessagingModule],
-  controllers: [CollectionsController],
+  controllers: [CollectionsController, CollectionRouteController],
   providers: [
     DueCreditsRepository,
     DueTenantsRepository,
     CriticalClientsRepository,
     PortfolioMapRepository,
     OsrmRouteOptimizer,
+    // Órdenes de ruta (Fase 5): despacho de paradas a cobradores y su liquidación.
+    CollectionRouteDrizzleRepository,
+    CollectionRouteQueryRepository,
     ReminderIdempotencyRepository,
     CollectionAuditLogAdapter,
 

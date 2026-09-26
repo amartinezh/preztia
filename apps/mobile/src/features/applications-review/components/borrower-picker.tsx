@@ -50,6 +50,7 @@ export function BorrowerPicker({ extractedIdentity, applicantPhone, selected, on
       firstName: extractedIdentity.firstName,
       lastName: extractedIdentity.lastName,
       business: null,
+      address: null,
       phone: applicantPhone,
       lat: null,
       lng: null,

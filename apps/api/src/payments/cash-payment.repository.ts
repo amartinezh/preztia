@@ -27,109 +27,122 @@ export interface CashPaymentResult {
  */
 @Injectable()
 export class CashPaymentDrizzleRepository {
-  async register(input: {
-    tenantId: string;
-    creditId: string;
-    amountMinor: number;
-    idempotencyKey: string | null;
-    /** app_user que recibió el efectivo (su caja de ruta lo recibe). */
-    receivedBy: string;
-  }): Promise<CashPaymentResult | null> {
-    return withTenantTxFor(input.tenantId, async (tx) => {
-      // 1. Idempotencia: si esta clave ya materializó un abono, devolver su resultado
-      //    sin volver a abonar (sin doble cobro).
-      if (input.idempotencyKey) {
-        const [existing] = await tx
-          .select({
-            id: schema.payment.id,
-            creditId: schema.payment.creditId,
-            amountMinor: schema.payment.amountMinor,
-          })
-          .from(schema.payment)
-          .where(eq(schema.payment.idempotencyKey, input.idempotencyKey));
-        if (existing) {
-          const creditId = existing.creditId ?? input.creditId;
-          return {
-            id: existing.id,
-            creditId,
-            amountMinor: existing.amountMinor ?? input.amountMinor,
-            balanceMinor: await balanceOf(tx, creditId),
-          };
-        }
-      }
-
-      // 2. Cargar crédito + cuotas.
-      const [credit] = await tx
-        .select({ id: schema.credit.id, currency: schema.credit.currency })
-        .from(schema.credit)
-        .where(eq(schema.credit.id, input.creditId));
-      if (!credit) return null;
-
-      const installments = await loadInstallments(tx, input.creditId);
-
-      // 3. Regla de dominio: repartir el abono en cascada.
-      const result = allocatePayment(
-        credit.currency,
-        installments,
-        Money.of(input.amountMinor, credit.currency),
-      );
-
-      // 4. Persistir el pago (efectivo confirmado por el cobrador → VERIFIED).
-      const [inserted] = await tx
-        .insert(schema.payment)
-        .values({
-          tenantId: input.tenantId,
-          creditId: input.creditId,
-          payerPhone: '',
-          amountMinor: input.amountMinor,
-          currency: credit.currency,
-          paidAt: new Date(),
-          status: 'VERIFIED',
-          idempotencyKey: input.idempotencyKey,
-        })
-        .returning({ id: schema.payment.id });
-      const paymentId = inserted.id;
-
-      // El efectivo entra al libro en la caja de ruta de quien cobró (sin caja → 409, todo
-      // se revierte: no queda abono sin dinero en caja).
-      await postCashPaymentToRouteBox(tx, {
-        tenantId: input.tenantId,
-        paymentId,
-        receivedBy: input.receivedBy,
-        amountMinor: input.amountMinor,
-        currency: credit.currency,
-      });
-
-      // 5. Aplicar las asignaciones con guardia de concurrencia (paid ≤ due), con su
-      //    desglose capital/interés, e insertar las filas auditables de asignación.
-      await applyAllocationsTx(tx, {
-        tenantId: input.tenantId,
-        paymentId,
-        creditId: input.creditId,
-        allocations: result.allocations,
-      });
-
-      // 6. Traza append-only del movimiento de dinero (auditabilidad financiera).
-      await tx.insert(schema.paymentEvent).values({
-        tenantId: input.tenantId,
-        paymentId,
-        creditId: input.creditId,
-        type: 'cash_payment_registered',
-        payload: {
-          amountMinor: input.amountMinor,
-          allocations: result.allocations.length,
-          settled: result.creditSettled,
-        },
-      });
-
-      return {
-        id: paymentId,
-        creditId: input.creditId,
-        amountMinor: input.amountMinor,
-        balanceMinor: portfolioBalanceMinor(result.installments),
-      };
-    });
+  async register(input: CashPaymentInput): Promise<CashPaymentResult | null> {
+    return withTenantTxFor(input.tenantId, (tx) =>
+      registerCashPaymentTx(tx, input),
+    );
   }
+}
+
+export interface CashPaymentInput {
+  tenantId: string;
+  creditId: string;
+  amountMinor: number;
+  idempotencyKey: string | null;
+  /** app_user que recibió el efectivo (su caja de ruta lo recibe). */
+  receivedBy: string;
+}
+
+/**
+ * Cuerpo del registro del abono en efectivo DENTRO de la transacción del llamador: lo reutilizan
+ * el endpoint de abono y la liquidación de una parada de ruta (todo o nada con la visita).
+ */
+export async function registerCashPaymentTx(
+  tx: Tx,
+  input: CashPaymentInput,
+): Promise<CashPaymentResult | null> {
+  // 1. Idempotencia: si esta clave ya materializó un abono, devolver su resultado
+  //    sin volver a abonar (sin doble cobro).
+  if (input.idempotencyKey) {
+    const [existing] = await tx
+      .select({
+        id: schema.payment.id,
+        creditId: schema.payment.creditId,
+        amountMinor: schema.payment.amountMinor,
+      })
+      .from(schema.payment)
+      .where(eq(schema.payment.idempotencyKey, input.idempotencyKey));
+    if (existing) {
+      const creditId = existing.creditId ?? input.creditId;
+      return {
+        id: existing.id,
+        creditId,
+        amountMinor: existing.amountMinor ?? input.amountMinor,
+        balanceMinor: await balanceOf(tx, creditId),
+      };
+    }
+  }
+
+  // 2. Cargar crédito + cuotas.
+  const [credit] = await tx
+    .select({ id: schema.credit.id, currency: schema.credit.currency })
+    .from(schema.credit)
+    .where(eq(schema.credit.id, input.creditId));
+  if (!credit) return null;
+
+  const installments = await loadInstallments(tx, input.creditId);
+
+  // 3. Regla de dominio: repartir el abono en cascada.
+  const result = allocatePayment(
+    credit.currency,
+    installments,
+    Money.of(input.amountMinor, credit.currency),
+  );
+
+  // 4. Persistir el pago (efectivo confirmado por el cobrador → VERIFIED).
+  const [inserted] = await tx
+    .insert(schema.payment)
+    .values({
+      tenantId: input.tenantId,
+      creditId: input.creditId,
+      payerPhone: '',
+      amountMinor: input.amountMinor,
+      currency: credit.currency,
+      paidAt: new Date(),
+      status: 'VERIFIED',
+      idempotencyKey: input.idempotencyKey,
+    })
+    .returning({ id: schema.payment.id });
+  const paymentId = inserted.id;
+
+  // El efectivo entra al libro en la caja de ruta de quien cobró (sin caja → 409, todo
+  // se revierte: no queda abono sin dinero en caja).
+  await postCashPaymentToRouteBox(tx, {
+    tenantId: input.tenantId,
+    paymentId,
+    receivedBy: input.receivedBy,
+    amountMinor: input.amountMinor,
+    currency: credit.currency,
+  });
+
+  // 5. Aplicar las asignaciones con guardia de concurrencia (paid ≤ due), con su
+  //    desglose capital/interés, e insertar las filas auditables de asignación.
+  await applyAllocationsTx(tx, {
+    tenantId: input.tenantId,
+    paymentId,
+    creditId: input.creditId,
+    allocations: result.allocations,
+  });
+
+  // 6. Traza append-only del movimiento de dinero (auditabilidad financiera).
+  await tx.insert(schema.paymentEvent).values({
+    tenantId: input.tenantId,
+    paymentId,
+    creditId: input.creditId,
+    type: 'cash_payment_registered',
+    payload: {
+      amountMinor: input.amountMinor,
+      allocations: result.allocations.length,
+      settled: result.creditSettled,
+    },
+  });
+
+  return {
+    id: paymentId,
+    creditId: input.creditId,
+    amountMinor: input.amountMinor,
+    balanceMinor: portfolioBalanceMinor(result.installments),
+  };
 }
 
 async function loadInstallments(

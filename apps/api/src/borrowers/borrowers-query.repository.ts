@@ -58,6 +58,7 @@ export class BorrowersQueryRepository {
         firstName: row.firstName,
         lastName: row.lastName,
         business: row.business,
+        address: row.address,
         phone: row.phone,
         lat: row.lat,
         lng: row.lng,

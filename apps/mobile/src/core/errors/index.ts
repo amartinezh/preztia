@@ -38,6 +38,8 @@ export type ErrorMessageKey =
   | "errors.deposit.invalidDestination"
   | "errors.deposit.bankCreditConsumed"
   | "errors.deposit.bankCreditMismatch"
+  | "errors.route.stopAlreadyOpen"
+  | "errors.route.stopClosed"
   | "errors.telegram.invalidToken"
   | "errors.telegram.disabled"
   | "errors.telegram.botMismatch"
@@ -72,6 +74,9 @@ const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
   INVALID_DEPOSIT_DESTINATION: "errors.deposit.invalidDestination",
   BANK_CREDIT_CONSUMED: "errors.deposit.bankCreditConsumed",
   BANK_CREDIT_MISMATCH: "errors.deposit.bankCreditMismatch",
+  // Órdenes de ruta (Fase 5)
+  STOP_ALREADY_OPEN: "errors.route.stopAlreadyOpen",
+  STOP_CLOSED: "errors.route.stopClosed",
   // Canales de mensajería (ADR #40)
   TELEGRAM_INVALID_TOKEN: "errors.telegram.invalidToken",
   TELEGRAM_DISABLED: "errors.telegram.disabled",
