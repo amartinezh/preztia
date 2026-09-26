@@ -34,6 +34,9 @@ export const operationalSettings = z.object({
   settlementAnchorDay: z.number().int().min(1).max(28),
   // El tope por frecuencia (1–7 en semanal) lo valida el dominio al guardar.
   settlementAutoClose: z.boolean(),
+  // Liquidar desde (YYYY-MM-DD): la historia anterior no se reconstruye. Sin definir (null), el
+  // cierre automático no corre.
+  settlementStartDate: z.string().date().nullable(),
 });
 export type OperationalSettings = z.infer<typeof operationalSettings>;
 

@@ -57,6 +57,8 @@ export interface OperationalSettings {
   readonly settlementFrequency: SettlementFrequency;
   readonly settlementAnchorDay: number;
   readonly settlementAutoClose: boolean;
+  /** Día desde el que se liquida (YYYY-MM-DD); null = sin definir (el cierre automático no corre). */
+  readonly settlementStartDate: string | null;
 }
 
 /** Vencimiento por defecto de la oferta de plan: un día (parametrizable por tenant). */
@@ -86,6 +88,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   settlementFrequency: DEFAULT_SETTLEMENT_SETTINGS.frequency,
   settlementAnchorDay: DEFAULT_SETTLEMENT_SETTINGS.anchorDay,
   settlementAutoClose: DEFAULT_SETTLEMENT_SETTINGS.autoClose,
+  settlementStartDate: DEFAULT_SETTLEMENT_SETTINGS.startDate,
 };
 
 /** La configuración de liquidación contenida en los ajustes operativos. */
@@ -94,6 +97,7 @@ export function settlementSettingsOf(s: OperationalSettings): SettlementSettings
     frequency: s.settlementFrequency,
     anchorDay: s.settlementAnchorDay,
     autoClose: s.settlementAutoClose,
+    startDate: s.settlementStartDate ?? null,
   };
 }
 

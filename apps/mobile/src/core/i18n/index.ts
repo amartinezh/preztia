@@ -817,6 +817,13 @@ const es = {
   "config.settlement.anchorHint.WEEKLY": "1 = lunes … 7 = domingo",
   "config.settlement.anchorHint.MONTHLY": "Del 1 al 28 (existe en todos los meses)",
   "config.settlement.autoClose": "Cerrar la liquidación automáticamente al terminar cada período",
+  "config.settlement.startDate": "Liquidar desde",
+  "config.settlement.startDateHint":
+    "Primer día que se liquida (AAAA-MM-DD). Lo anterior no se reconstruye. Sin fecha, el cierre automático no corre.",
+  "config.settlement.today": "Hoy",
+  "settlement.noStartDate": "Define desde cuándo se liquida",
+  "settlement.noStartDateHint":
+    "En Ajustes → General, pon la fecha en \"Liquidar desde\". Mientras tanto se muestra el período actual y el cierre automático está en pausa.",
   "config.settlement.autoCloseHint":
     "Si lo apagas, el administrador cierra cada período a mano. Un cambio de período aplica desde el siguiente corte.",
   "config.remittanceDeadlineHint":

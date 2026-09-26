@@ -470,6 +470,13 @@
       "when": 1790442825929,
       "tag": "0066_settlement_period_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1790451475991,
+      "tag": "0067_bumpy_nick_fury",
+      "breakpoints": true
     }
   ]
 }

@@ -67,6 +67,7 @@ export class SettlementRepository {
         closedBy: null,
         snapshot: toView(scopeSettlement(snapshot, input.scopes)),
         pendingClosures: pendingClosures(ctx),
+        startDateConfigured: ctx.settings.startDate !== null,
       };
     });
   }

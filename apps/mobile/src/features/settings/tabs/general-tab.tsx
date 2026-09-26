@@ -35,6 +35,12 @@ const ROLE_LABEL: Record<string, string> = {
  * que ejemplifica el control lectura/escritura: con `canEdit=false` (Coordinador) todo se ve pero
  * los inputs/toggles van deshabilitados y no se muestra el botón Guardar.
  */
+/** Hoy (YYYY-MM-DD) en la hora local del dispositivo del administrador. */
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const SETTLEMENT_FREQUENCIES: OperationalSettings["settlementFrequency"][] = ["WEEKLY", "BIWEEKLY", "MONTHLY"];
 
 export function GeneralTab({ canEdit }: { canEdit: boolean }) {
@@ -160,6 +166,23 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
             />
           </Field>
         ) : null}
+        <Field label={t("config.settlement.startDate")} hint={t("config.settlement.startDateHint")}>
+          <Row gap="sm" className="items-center">
+            <Input
+              editable={canEdit}
+              value={form.settlementStartDate ?? ""}
+              placeholder="AAAA-MM-DD"
+              onChangeText={(text) => set("settlementStartDate", text.trim() || null)}
+            />
+            <Button
+              label={t("config.settlement.today")}
+              variant="secondary"
+              size="sm"
+              disabled={!canEdit}
+              onPress={() => set("settlementStartDate", localToday())}
+            />
+          </Row>
+        </Field>
         <Switch
           value={form.settlementAutoClose}
           onValueChange={(v) => set("settlementAutoClose", v)}

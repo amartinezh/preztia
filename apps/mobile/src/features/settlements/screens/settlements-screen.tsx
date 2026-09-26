@@ -62,6 +62,9 @@ function CurrentSettlement() {
   const data = current.data;
   return (
     <Stack gap="md">
+      {!data.startDateConfigured ? (
+        <Banner tone="info" title={t("settlement.noStartDate")} description={t("settlement.noStartDateHint")} />
+      ) : null}
       {data.pendingClosures > 0 ? (
         <Banner
           tone="warning"

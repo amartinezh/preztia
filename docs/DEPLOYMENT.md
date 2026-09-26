@@ -159,6 +159,30 @@ transcript). Si un bot deja de recibir: *Verificar* re-registra el webhook y mue
 que reportó Telegram. Para rotar el token: `/revoke` en @BotFather → pega el nuevo en *Rotar token*
 (debe ser del MISMO bot).
 
+## 8. Release "control de campo y liquidación" (migraciones 0057–0067)
+
+Plan completo en [PLAN_CONTROL_CAMPO_Y_LIQUIDACION.md](PLAN_CONTROL_CAMPO_Y_LIQUIDACION.md). Todo va
+junto (API + web + migraciones); el orden importa:
+
+1. **Respaldo** antes de migrar (sección 5, `pg_dump`).
+2. `deploy/scripts/deploy.sh` (git pull → build → `--profile migrate up migrate` → `up -d`). Aplica
+   0057–0067 en orden: cada tabla nueva lleva su RLS en la migración siguiente (0059, 0062, 0064,
+   0066). La imagen sube NestJS a 11.2.6 (`multer` 2.4.0, hallazgo #13).
+3. **Publicar la web el mismo día** (`deploy/scripts/publish-web.sh`): una web vieja contra esta
+   API falla al otorgar créditos (ahora exige caja de origen) y al pedir gastos (multipart con foto).
+4. **Antes de que los cobradores salgan a cobrar** (Ajustes → Cajas): una **caja de ruta** por
+   cobrador (efectivo, asignada a él, con su zona) y la **zona** de cada caja de oficina/banco. Sin
+   caja de ruta el cobro en efectivo responde 409, y la cola offline de las apps nativas viejas
+   descarta ese rechazo en silencio.
+5. **Saldos:** si una caja de oficina/banco está en 0, cárgala con un arqueo + ajuste; sin saldo no
+   se desembolsa (otorgar y aprobar debitan caja).
+6. **Ajustes → General:** hora límite de rendición, período de liquidación y **"Liquidar desde" =
+   hoy**. Sin esa fecha el cierre automático NO corre (no se sella historia vieja incompleta).
+7. **Apps nativas:** dev build nuevo (`expo-image-picker` para las fotos de gastos y consignaciones).
+
+Verificación rápida tras desplegar: `migrate` termina sin error; un cobrador ve "Mi caja"; un cobro
+en efectivo aparece en su caja de ruta; Dinero → Liquidación muestra el período en curso.
+
 ## Notas de seguridad
 - Ningún servicio de datos expone puertos al host: solo Caddy. El aislamiento entre empresas lo
   garantiza además RLS en Postgres.

@@ -23,6 +23,7 @@ export interface OperationalSettings {
   readonly settlementFrequency: "WEEKLY" | "BIWEEKLY" | "MONTHLY"; // Período de liquidación
   readonly settlementAnchorDay: number; // Día de inicio del período (1–7 semanal; 1–28 mensual)
   readonly settlementAutoClose: boolean; // ¿Cierre automático al pasar el corte?
+  readonly settlementStartDate: string | null; // Liquidar desde (YYYY-MM-DD); null = sin definir
 }
 
 // Configuración del recordatorio de cobro por WhatsApp (Cron por tenant). La hora es LOCAL del
@@ -59,6 +60,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   settlementFrequency: "WEEKLY",
   settlementAnchorDay: 1,
   settlementAutoClose: true,
+  settlementStartDate: null,
 };
 
 // Proveedores de mensajería habilitados en el tenant (ADR #40). Espejo de `MessagingChannelsSettings`

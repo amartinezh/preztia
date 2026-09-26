@@ -145,6 +145,8 @@ export type SettlementView = z.infer<typeof settlementView>;
 export const currentSettlementOutput = settlementView.extend({
   /** Períodos ya terminados que faltan por cerrar (antes de este). */
   pendingClosures: z.number().int(),
+  /** ¿El ADMIN definió "Liquidar desde"? Sin ella el cierre automático está en pausa. */
+  startDateConfigured: z.boolean(),
 });
 export type CurrentSettlementOutput = z.infer<typeof currentSettlementOutput>;
 

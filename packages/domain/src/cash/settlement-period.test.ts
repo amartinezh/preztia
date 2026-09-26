@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { DomainError } from "../shared/money";
 import {
   assertValidSettlementSettings,
+  canAutoClose,
   currentOpenPeriod,
   isRetroactive,
   nextPeriodToClose,
@@ -9,9 +10,14 @@ import {
   type SettlementSettings,
 } from "./settlement-period";
 
-const weekly = (anchorDay = 1): SettlementSettings => ({ frequency: "WEEKLY", anchorDay, autoClose: true });
-const monthly = (anchorDay = 1): SettlementSettings => ({ frequency: "MONTHLY", anchorDay, autoClose: true });
-const biweekly: SettlementSettings = { frequency: "BIWEEKLY", anchorDay: 1, autoClose: true };
+const weekly = (anchorDay = 1, startDate: string | null = null): SettlementSettings => ({
+  frequency: "WEEKLY",
+  anchorDay,
+  autoClose: true,
+  startDate,
+});
+const monthly = (anchorDay = 1): SettlementSettings => ({ frequency: "MONTHLY", anchorDay, autoClose: true, startDate: null });
+const biweekly: SettlementSettings = { frequency: "BIWEEKLY", anchorDay: 1, autoClose: true, startDate: null };
 
 describe("periodContaining", () => {
   it("semanal de lunes a domingo (2026-09-24 es jueves)", () => {
@@ -102,5 +108,38 @@ describe("isRetroactive", () => {
   it("cerrado el mismo día de corte no es retroactivo; después sí", () => {
     expect(isRetroactive(period, "2026-09-21")).toBe(false);
     expect(isRetroactive(period, "2026-09-22")).toBe(true);
+  });
+});
+
+describe("fecha de inicio de la liquidación", () => {
+  it("el primer período empieza en la fecha de inicio (parcial) sin reconstruir lo anterior", () => {
+    // Inicio el jueves 24: el primer período va hasta el lunes 28 (corte semanal de lunes).
+    expect(nextPeriodToClose(weekly(1, "2026-09-24"), { lastClosedEnd: null, firstActivityDate: "2026-06-01" })).toEqual({
+      start: "2026-09-24",
+      end: "2026-09-28",
+    });
+    // Después de cerrarlo, sigue la cadena normal.
+    expect(nextPeriodToClose(weekly(1, "2026-09-24"), { lastClosedEnd: "2026-09-28", firstActivityDate: "2026-06-01" })).toEqual({
+      start: "2026-09-28",
+      end: "2026-10-05",
+    });
+  });
+
+  it("el período en curso arranca en la fecha de inicio si aún no hay cierres", () => {
+    expect(currentOpenPeriod(weekly(1, "2026-09-24"), { lastClosedEnd: null, today: "2026-09-25" })).toEqual({
+      start: "2026-09-24",
+      end: "2026-09-28",
+    });
+  });
+
+  it("el cierre automático exige la fecha de inicio", () => {
+    expect(canAutoClose(weekly(1))).toBe(false);
+    expect(canAutoClose(weekly(1, "2026-09-24"))).toBe(true);
+    expect(canAutoClose({ ...weekly(1, "2026-09-24"), autoClose: false })).toBe(false);
+  });
+
+  it("rechaza fechas inválidas", () => {
+    expect(() => assertValidSettlementSettings(weekly(1, "2026-02-30"))).toThrow(DomainError);
+    expect(() => assertValidSettlementSettings(weekly(1, "24/09/2026"))).toThrow(DomainError);
   });
 });

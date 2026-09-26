@@ -11,8 +11,8 @@
 > ([PLAN_TESORERIA_UNICA_FUENTE.md](PLAN_TESORERIA_UNICA_FUENTE.md)). Este plan no la resucita.
 >
 > **Estado:** **plan completo — Fases 1–7 implementadas y verificadas** contra Postgres real
-> (migraciones 0057–0066 aplicadas en local, con RLS a mano en 0059, 0062, 0064 y 0066; integración
-> 75/75). Nada aplicado aún en producción: se desplegará todo junto tras la verificación en local.
+> (migraciones 0057–0067 aplicadas en local, con RLS a mano en 0059, 0062, 0064 y 0066; integración
+> 76/76). Procedimiento de despliegue: [DEPLOYMENT.md §8](DEPLOYMENT.md). Nada aplicado aún en producción: se desplegará todo junto tras la verificación en local.
 > **ADR:** #41 registrado en [ARCHITECTURE.md](ARCHITECTURE.md) (ver §9).
 
 ---
@@ -564,6 +564,10 @@ Escenario: No encontrado
   - Foto en `settlement_period.snapshot` (JSONB append-only, `REVOKE UPDATE, DELETE`): se guarda con
     la ruta de zona en cada línea para que el coordinador la vea recortada a su subárbol sin tocar
     la BD. La mora al corte refleja el estado de la cartera al momento del cierre.
+  - **"Liquidar desde"** (`settlementStartDate`, añadido antes del despliegue): el primer período
+    arranca en esa fecha (parcial hasta el siguiente corte) y la historia anterior no se
+    reconstruye. Sin fecha el cierre automático no corre (`canAutoClose`); un cierre manual sí
+    reconstruye desde el primer movimiento. En producción se fija el día del despliegue.
   - No hace falta `cash_transaction.settles_period_id`: el libro es append-only y fechado con
     `clock_timestamp()`, así que una corrección posterior cae sola en el período siguiente.
 

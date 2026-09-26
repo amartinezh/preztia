@@ -58,14 +58,17 @@ export class SettlementCron {
     return MAX_CLOSES_PER_RUN;
   }
 
-  /** Tenants con cierre automático (activo por defecto si nunca lo configuraron). Cross-tenant. */
+  /**
+   * Tenants que pueden cerrar solos (regla `canAutoClose`): cierre automático activo (por defecto)
+   * y fecha de inicio definida — sin ella no se sella historia que nadie pidió. Cross-tenant.
+   */
   private async autoCloseTenants(): Promise<string[]> {
     return withPlatformTx(async (tx) => {
       const rows = (await tx.execute(sql`
-        SELECT t.id AS tenant_id
-        FROM tenant t
-        LEFT JOIN tenant_config c ON c.tenant_id = t.id
+        SELECT c.tenant_id
+        FROM tenant_config c
         WHERE COALESCE((c.operational_settings->>'settlementAutoClose')::boolean, true)
+          AND NULLIF(c.operational_settings->>'settlementStartDate', '') IS NOT NULL
       `)) as unknown as Array<{ tenant_id: string }>;
       return rows.map((r) => r.tenant_id);
     });

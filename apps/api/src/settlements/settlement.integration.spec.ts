@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
+import { businessDateOf } from '@preztiaos/domain';
 import { CashBoxDrizzleRepository } from '../cash/cash-box.repository';
 import { CreditDrizzleRepository } from '../credit/credit.repository';
 import { CashPaymentDrizzleRepository } from '../payments/cash-payment.repository';
@@ -214,6 +215,28 @@ describeDb('Fase 6 — liquidación por períodos (integración)', () => {
       remittancesSubmitted: 0,
       effectiveVisitRatePerMille: null,
     });
+  });
+
+  it('con "Liquidar desde" no reconstruye la historia: el período arranca en esa fecha', async () => {
+    const f = await setup();
+    const today = businessDateOf(new Date(), 'America/Bogota');
+    await owner()`
+      INSERT INTO tenant_config (tenant_id, currency, operational_settings)
+      VALUES (${f.tenant}, ${CURRENCY}, ${owner().json({ settlementStartDate: today })})`;
+    const live = await settlements.current({
+      tenantId: f.tenant,
+      currency: CURRENCY,
+      scopes: null,
+      now: new Date(),
+    });
+    expect(live).toMatchObject({
+      periodStart: today,
+      pendingClosures: 0,
+      startDateConfigured: true,
+    });
+    // Lo anterior al inicio no es movimiento del período: entra como saldo inicial.
+    expect(live.snapshot.totals.openingMinor).toBeGreaterThanOrEqual(900_000);
+    await expect(close(f)).rejects.toMatchObject({ code: 'PERIOD_NOT_ENDED' });
   });
 
   it('el coordinador de otra zona no ve cajas ni cobradores de Norte', async () => {
