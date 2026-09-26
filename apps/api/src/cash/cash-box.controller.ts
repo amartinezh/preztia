@@ -39,7 +39,8 @@ import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
 const uuid = z.string().uuid();
 
-// Reportería/lectura: todo el plano de datos. Mover dinero: socio/coordinador.
+// Lecturas de tesorería y mover dinero: socio/coordinador. El plano de datos completo (incluido
+// el cobrador) solo para lo propio (`/me/cash-box`).
 const DATA_PLANE_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
 const MANAGER_ROLES = ['ADMIN', 'COORDINATOR'] as const;
 
@@ -65,7 +66,8 @@ export class CashBoxController {
     @Headers('authorization') auth: string | undefined,
   ) {
     const tenant = requireTenant(tenantId);
-    requireRole(auth, DATA_PLANE_ROLES);
+    // Cajas y saldos son tesorería: solo ADMIN/COORDINATOR (el cobrador ve SU caja en /me/cash-box).
+    requireRole(auth, MANAGER_ROLES);
     return { items: await this.boxes.list(tenant) };
   }
 
@@ -187,7 +189,8 @@ export class CashBoxController {
     @Query() query: Record<string, string>,
   ) {
     const tenant = requireTenant(tenantId);
-    requireRole(auth, DATA_PLANE_ROLES);
+    // El libro mayor del tenant es tesorería: el cobrador no lo ve.
+    requireRole(auth, MANAGER_ROLES);
     const {
       page,
       pageSize,
@@ -222,7 +225,8 @@ export class CashBoxController {
     @Headers('authorization') auth: string | undefined,
   ) {
     const tenant = requireTenant(tenantId);
-    requireRole(auth, DATA_PLANE_ROLES);
+    // Saldos de todas las cajas: solo ADMIN/COORDINATOR (el cobrador no dimensiona las cifras).
+    requireRole(auth, MANAGER_ROLES);
     return this.queries.getCashDashboard({
       tenantId: tenant,
       currency: await resolveTenantCurrency(tenant),

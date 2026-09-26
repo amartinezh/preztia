@@ -18,6 +18,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { PaymentPlanModule } from './credit/plans/payment-plan.module';
 import { CollectionsModule } from './collections/collections.module';
+import { SettlementsModule } from './settlements/settlements.module';
 import { NewsModule } from './news/news.module';
 import { tenantMiddleware } from './tenancy/tenant-context';
 
@@ -42,6 +43,7 @@ import { tenantMiddleware } from './tenancy/tenant-context';
     TelegramModule,
     PaymentPlanModule,
     CollectionsModule,
+    SettlementsModule,
     NewsModule,
   ],
   controllers: [CreditController],

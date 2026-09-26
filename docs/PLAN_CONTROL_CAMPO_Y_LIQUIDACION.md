@@ -10,10 +10,10 @@
 > precisamente por recalcular caja por su cuenta y divergir del libro
 > ([PLAN_TESORERIA_UNICA_FUENTE.md](PLAN_TESORERIA_UNICA_FUENTE.md)). Este plan no la resucita.
 >
-> **Estado:** diseño acordado con el usuario (2026-09-25). **Fases 1–5 implementadas y verificadas**
-> contra Postgres real (migraciones 0057–0064 aplicadas en local, con RLS a mano en 0059, 0062 y
-> 0064; integración 71/71). Nada aplicado aún en producción. Siguiente: Fase 6 (liquidación por
-> período).
+> **Estado:** diseño acordado con el usuario (2026-09-25). **Fases 1–6 implementadas y verificadas**
+> contra Postgres real (migraciones 0057–0066 aplicadas en local, con RLS a mano en 0059, 0062,
+> 0064 y 0066; integración 75/75). Nada aplicado aún en producción: se desplegará todo junto al
+> terminar. Siguiente: Fase 7 (pantallas de dirección y estadísticas).
 > **ADR:** #41 registrado en [ARCHITECTURE.md](ARCHITECTURE.md) (ver §9).
 
 ---
@@ -532,7 +532,7 @@ Escenario: No encontrado
   Entonces queda la observación pero el cliente sigue pendiente de visita
 ```
 
-### Fase 6 — Liquidación por período
+### Fase 6 — Liquidación por período ✅
 
 - Dominio: `periodBoundaries(settings, fecha, tz) → [inicio, fin)` (casos borde: febrero, fin de año,
   cambio de configuración a mitad de período → el cambio aplica desde el siguiente corte);
@@ -550,6 +550,50 @@ Escenario: No encontrado
     real (%), mora al corte.
   - **Por cobrador:** recaudo, gastos, consignado, entregado, deuda arrastrada, rendiciones atrasadas.
 - **Aceptación:** I1–I4, I10.
+- **Decisiones de implementación:**
+  - Configuración en `operational_settings` (junto a la hora de rendición, sin columna nueva):
+    `settlementFrequency` (`WEEKLY` | `BIWEEKLY` | `MONTHLY`), `settlementAnchorDay` (día de INICIO:
+    1–7 lunes a domingo en semanal; 1–28 en mensual; la quincena es fija 1–15 / 16–fin) y
+    `settlementAutoClose`.
+  - **Períodos contiguos por construcción:** cada cierre sella el período SIGUIENTE al último cerrado
+    (empieza donde terminó el anterior), así que no hay huecos ni solapes (I2, I10). Si nunca se ha
+    cerrado ninguno, el primero es el que contiene el primer asiento del libro: cerrar en orden
+    reconstruye la historia (retroactivos). Un cambio de configuración aplica desde el siguiente
+    corte (el período en curso termina donde diga la nueva regla, sin solapar el último cerrado).
+  - Un único `POST /settlements/close` (ADMIN) cierra el siguiente período terminado; repetirlo
+    rellena la historia. **Retroactivo** = cerrado después de su día de corte.
+  - Foto en `settlement_period.snapshot` (JSONB append-only, `REVOKE UPDATE, DELETE`): se guarda con
+    la ruta de zona en cada línea para que el coordinador la vea recortada a su subárbol sin tocar
+    la BD. La mora al corte refleja el estado de la cartera al momento del cierre.
+  - No hace falta `cash_transaction.settles_period_id`: el libro es append-only y fechado con
+    `clock_timestamp()`, así que una corrección posterior cae sola en el período siguiente.
+
+```gherkin
+Escenario: Período semanal en curso
+  Dado la liquidación semanal que empieza el lunes, y hoy es jueves
+  Cuando el socio abre la liquidación actual
+  Entonces ve desde el lunes hasta hoy: saldo inicial, lo que entró, lo que salió y el saldo por caja
+  Y el resultado: interés ganado, capital recuperado, gastos, condonaciones y utilidad
+
+Escenario: Cierre automático al corte
+  Dado el cierre automático activo
+  Cuando pasa la medianoche del domingo en la zona horaria del tenant
+  Entonces el cron sella la semana como una foto que ya no cambia
+  Y el saldo inicial de la semana siguiente es el saldo final de esta
+
+Escenario: Cuadre
+  Entonces por cada caja: saldo inicial + entradas − salidas = saldo final
+  Y la suma por zonas = la suma por cajas = el total
+
+Escenario: Historia retroactiva
+  Dado un libro con movimientos desde hace 5 semanas y ningún período cerrado
+  Cuando el ADMIN cierra repetidamente
+  Entonces se sellan las 5 semanas en orden, marcadas como retroactivas, y la actual no se puede cerrar
+
+Escenario: Alcance del coordinador
+  Entonces el coordinador de "Norte" ve solo las zonas, cajas y cobradores de su subárbol
+  Y el cobrador no ve liquidaciones (403)
+```
 
 ### Fase 7 — Pantallas de dirección y estadísticas
 

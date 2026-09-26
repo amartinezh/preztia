@@ -20,6 +20,9 @@ export interface OperationalSettings {
   readonly autoConfirmSettlement: boolean; // Conciliar y abonar automáticamente los matches de settlement (default OFF)
   readonly visitOverdueThreshold: number; // Cuotas vencidas para agendar visita del cobrador (y umbral "crítico" del mapa)
   readonly remittanceDeadlineHourLocal: number; // Hora local (0–23) límite para que el cobrador rinda cuentas
+  readonly settlementFrequency: "WEEKLY" | "BIWEEKLY" | "MONTHLY"; // Período de liquidación
+  readonly settlementAnchorDay: number; // Día de inicio del período (1–7 semanal; 1–28 mensual)
+  readonly settlementAutoClose: boolean; // ¿Cierre automático al pasar el corte?
 }
 
 // Configuración del recordatorio de cobro por WhatsApp (Cron por tenant). La hora es LOCAL del
@@ -53,6 +56,9 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   autoConfirmSettlement: false,
   visitOverdueThreshold: 3,
   remittanceDeadlineHourLocal: 20,
+  settlementFrequency: "WEEKLY",
+  settlementAnchorDay: 1,
+  settlementAutoClose: true,
 };
 
 // Proveedores de mensajería habilitados en el tenant (ADR #40). Espejo de `MessagingChannelsSettings`

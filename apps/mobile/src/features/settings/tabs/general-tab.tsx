@@ -9,6 +9,7 @@ import {
   majorToMinor,
   minorToMajor,
   Row,
+  Select,
   Spinner,
   Stack,
   Switch,
@@ -34,6 +35,8 @@ const ROLE_LABEL: Record<string, string> = {
  * que ejemplifica el control lectura/escritura: con `canEdit=false` (Coordinador) todo se ve pero
  * los inputs/toggles van deshabilitados y no se muestra el botón Guardar.
  */
+const SETTLEMENT_FREQUENCIES: OperationalSettings["settlementFrequency"][] = ["WEEKLY", "BIWEEKLY", "MONTHLY"];
+
 export function GeneralTab({ canEdit }: { canEdit: boolean }) {
   return (
     <Stack gap="lg">
@@ -138,6 +141,32 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
           />
         </Field>
         <Text variant="caption" tone="muted">{t("config.remittanceDeadlineHint")}</Text>
+
+        {/* Liquidación por períodos (el día de inicio se valida contra la frecuencia al guardar). */}
+        <Field label={t("config.settlement.frequency")}>
+          <Select
+            value={form.settlementFrequency}
+            options={SETTLEMENT_FREQUENCIES.map((f) => ({ value: f, label: t(`config.settlement.frequency.${f}`) }))}
+            onChange={(v) => set("settlementFrequency", v)}
+          />
+        </Field>
+        {form.settlementFrequency !== "BIWEEKLY" ? (
+          <Field label={t("config.settlement.anchor")} hint={t(`config.settlement.anchorHint.${form.settlementFrequency}`)}>
+            <Input
+              keyboardType="numeric"
+              editable={canEdit}
+              value={String(form.settlementAnchorDay)}
+              onChangeText={(text) => set("settlementAnchorDay", Math.max(1, Math.round(Number(text) || 1)))}
+            />
+          </Field>
+        ) : null}
+        <Switch
+          value={form.settlementAutoClose}
+          onValueChange={(v) => set("settlementAutoClose", v)}
+          label={t("config.settlement.autoClose")}
+          disabled={!canEdit}
+        />
+        <Text variant="caption" tone="muted">{t("config.settlement.autoCloseHint")}</Text>
         <Field label={t("config.commission")}>
           <Input
             keyboardType="numeric"

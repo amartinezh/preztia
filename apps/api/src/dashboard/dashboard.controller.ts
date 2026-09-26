@@ -5,9 +5,10 @@ import { requireRole } from '../auth/require-role';
 import { DashboardQueryRepository } from './dashboard-query.repository';
 import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
-// Panel de bienvenida del plano de datos: visible para cualquier operador autenticado del
-// tenant. La identidad (tenant + rol) sale del JWT; RLS aísla los datos por tenant.
-const DATA_PLANE_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
+// Panel de bienvenida con cifras de TODA la empresa (tesorería, cartera, solicitudes, fraude):
+// solo ADMIN/COORDINATOR. El cobrador tiene su propio inicio (su caja, su rendición, su ruta) y no
+// debe dimensionar las cifras del negocio. La identidad (tenant + rol) sale del JWT.
+const MANAGER_ROLES = ['ADMIN', 'COORDINATOR'] as const;
 
 /**
  * Frontera HTTP del DASHBOARD INICIAL: un único endpoint consolidado que devuelve todos los
@@ -24,7 +25,7 @@ export class DashboardController {
     @Headers('authorization') authorization: string | undefined,
   ) {
     const tenant = requireTenant(tenantId);
-    requireRole(authorization, DATA_PLANE_ROLES);
+    requireRole(authorization, MANAGER_ROLES);
     return this.queries.getKpis({
       tenantId: tenant,
       currency: await resolveTenantCurrency(tenant),

@@ -456,6 +456,20 @@
       "when": 1790391818057,
       "tag": "0064_collection_route_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1790442824929,
+      "tag": "0065_groovy_valeria_richards",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1790442825929,
+      "tag": "0066_settlement_period_rls",
+      "breakpoints": true
     }
   ]
 }

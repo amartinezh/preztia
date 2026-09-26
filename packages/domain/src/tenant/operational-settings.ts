@@ -1,3 +1,10 @@
+import {
+  assertValidSettlementSettings,
+  DEFAULT_SETTLEMENT_SETTINGS,
+  type SettlementFrequency,
+  type SettlementSettings,
+} from "../cash/settlement-period";
+
 // Ajustes operativos del tenant (configuración de cobro del legado). Tipo canónico + valores por
 // defecto + mezcla pura de un parche parcial. El esquema de BD refleja esta forma (mirror).
 
@@ -46,6 +53,10 @@ export interface OperationalSettings {
    * Pasada esa hora sin declarar, la rendición aparece atrasada (control del coordinador).
    */
   readonly remittanceDeadlineHourLocal: number;
+  /** Liquidación por períodos: frecuencia, día de inicio y cierre automático. */
+  readonly settlementFrequency: SettlementFrequency;
+  readonly settlementAnchorDay: number;
+  readonly settlementAutoClose: boolean;
 }
 
 /** Vencimiento por defecto de la oferta de plan: un día (parametrizable por tenant). */
@@ -72,12 +83,29 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   autoConfirmSettlement: false,
   visitOverdueThreshold: DEFAULT_VISIT_OVERDUE_THRESHOLD,
   remittanceDeadlineHourLocal: DEFAULT_REMITTANCE_DEADLINE_HOUR,
+  settlementFrequency: DEFAULT_SETTLEMENT_SETTINGS.frequency,
+  settlementAnchorDay: DEFAULT_SETTLEMENT_SETTINGS.anchorDay,
+  settlementAutoClose: DEFAULT_SETTLEMENT_SETTINGS.autoClose,
 };
 
-/** Aplica un parche parcial sobre los ajustes actuales (inmutable; solo campos presentes). */
+/** La configuración de liquidación contenida en los ajustes operativos. */
+export function settlementSettingsOf(s: OperationalSettings): SettlementSettings {
+  return {
+    frequency: s.settlementFrequency,
+    anchorDay: s.settlementAnchorDay,
+    autoClose: s.settlementAutoClose,
+  };
+}
+
+/**
+ * Aplica un parche parcial sobre los ajustes actuales (inmutable; solo campos presentes) y valida
+ * lo que depende de varios campos: el día de inicio de la liquidación según su frecuencia.
+ */
 export function mergeOperationalSettings(
   current: OperationalSettings,
   patch: Partial<OperationalSettings>,
 ): OperationalSettings {
-  return { ...current, ...patch };
+  const merged = { ...current, ...patch };
+  assertValidSettlementSettings(settlementSettingsOf(merged));
+  return merged;
 }

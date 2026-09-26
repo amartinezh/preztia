@@ -33,6 +33,8 @@ export * from "./cash/cash-box";
 export * from "./cash/ledger-attribution";
 export * from "./cash/remittance";
 export * from "./cash/deposit-order";
+export * from "./cash/settlement-period";
+export * from "./cash/settlement";
 export * from "./cash/cash-count";
 export * from "./cash/bank-reconciliation";
 export * from "./credit/payment/payment-review";

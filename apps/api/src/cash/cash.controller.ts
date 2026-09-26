@@ -185,7 +185,8 @@ export class CashController {
     @Query() query: Record<string, string>,
   ) {
     const tenant = requireTenant(tenantId);
-    requireRole(authorization, DATA_PLANE_ROLES);
+    // P&L del día de todo el tenant: solo ADMIN/COORDINATOR.
+    requireRole(authorization, MANAGER_ROLES);
     const date =
       z.string().date().optional().parse(query.date) ??
       new Date().toISOString().slice(0, 10);

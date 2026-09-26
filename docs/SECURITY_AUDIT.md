@@ -13,11 +13,12 @@
 | Severidad | Total | Corregidos | Pendientes |
 |---|---|---|---|
 | 🔴 Crítico | 3 | 2 | 1 |
-| 🟠 Alto | 6 | 3 | 3 |
+| 🟠 Alto | 8 | 5 | 3 |
 | 🟡 Medio | 6 | 0 | 6 |
 | 🔵 Bajo / informativo | 6 | 0 | 6 |
 
 Corregidos en la remediación de la semana 1 (2026-07-22): **#1, #2, #5, #7, #9**.
+Corregidos durante el plan de control de campo (2026-09): **#22, #23**.
 
 ---
 
@@ -170,6 +171,35 @@ pagos y descarga reportes bancarios** con solo `requireTenant`, mientras sus vec
 `payment:reconcile` que el cliente ya aplicaba.
 
 ---
+
+### #22 · Gastos de todo el tenant visibles y revisables fuera de alcance — ✅ CORREGIDO (2026-09-25)
+
+**Dónde:** [cash.controller.ts](../apps/api/src/cash/cash.controller.ts)
+
+`GET /expenses` listaba **todos** los gastos del tenant a cualquier rol del plano de datos (un
+cobrador veía los gastos de los demás), y `PATCH /expenses/:id` dejaba a un coordinador aprobar o
+rechazar gastos de zonas ajenas.
+
+**Corrección (Fase 3 del plan de control de campo):** alcance `expenseAccess` en la lista y en el
+comprobante (el cobrador solo lo suyo; el coordinador su subárbol de zonas; el ADMIN todo) y
+revisión acotada por zona en `ReviewExpenseHandler` (fuera de alcance → 404). Cubierto por
+`expense.integration.spec.ts`.
+
+### #23 · Tesorería y cifras de la empresa visibles para el cobrador — ✅ CORREGIDO (2026-09-26)
+
+**Dónde:** [cash-box.controller.ts](../apps/api/src/cash/cash-box.controller.ts),
+[cash.controller.ts](../apps/api/src/cash/cash.controller.ts),
+[dashboard.controller.ts](../apps/api/src/dashboard/dashboard.controller.ts)
+
+`GET /cash/dashboard` (saldos de todas las cajas), `GET /cash/transactions` (el **libro mayor
+completo**), `GET /cash/boxes`, `GET /reports/daily` (P&L del día) y `GET /dashboard/kpis`
+(tesorería, cartera, solicitudes y fraude de toda la empresa) respondían a `COLLECTOR`. El inicio
+de la app del cobrador mostraba esas cifras: contradice la regla de negocio de que el cobrador no
+dimensiona el negocio y facilita el fraude interno.
+
+**Corrección:** las cinco lecturas exigen `ADMIN`/`COORDINATOR`. El cobrador ve solo lo suyo
+(`/me/cash-box`, `/me/remittance`) y su inicio pasó a un panel propio (su caja, su rendición, su
+ruta). Cubierto por `treasury-access.spec.ts` (403 al cobrador, 200 al coordinador).
 
 ## 🟡 Medios (todos ⏳ pendientes)
 

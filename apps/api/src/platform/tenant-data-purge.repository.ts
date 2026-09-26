@@ -19,6 +19,7 @@ export const PURGE_ORDER: readonly string[] = [
   'cash_transaction', // → cash_box, payment, expense
   'cash_count', // → cash_box
   'collector_remittance', // → cash_box
+  'settlement_period', // fotografías de liquidación (sin FKs)
   'bank_reconciliation', // → cash_box
   'fraud_assessment', // → payment
   'incoming_credit', // → payment, field_order

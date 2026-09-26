@@ -578,6 +578,7 @@ const es = {
   "deposit.issue.submit": "Enviar orden",
   // Órdenes de ruta (Fase 5)
   "route.title": "Rutas de cobro",
+  "home.collector.title": "Mi día",
   "route.dispatched": "Rutas despachadas",
   "route.none": "Aún no se han despachado rutas.",
   "route.skip": "No incluir",
@@ -733,6 +734,16 @@ const es = {
   "config.planOfferTtl": "Vencimiento de la oferta (horas)",
   "config.visitThreshold": "Cuotas vencidas para agendar visita",
   "config.remittanceDeadline": "Hora límite de rendición (0–23)",
+  "config.settlement.frequency": "Período de liquidación",
+  "config.settlement.frequency.WEEKLY": "Semanal",
+  "config.settlement.frequency.BIWEEKLY": "Quincenal (1–15 y 16–fin de mes)",
+  "config.settlement.frequency.MONTHLY": "Mensual",
+  "config.settlement.anchor": "Día de inicio del período",
+  "config.settlement.anchorHint.WEEKLY": "1 = lunes … 7 = domingo",
+  "config.settlement.anchorHint.MONTHLY": "Del 1 al 28 (existe en todos los meses)",
+  "config.settlement.autoClose": "Cerrar la liquidación automáticamente al terminar cada período",
+  "config.settlement.autoCloseHint":
+    "Si lo apagas, el administrador cierra cada período a mano. Un cambio de período aplica desde el siguiente corte.",
   "config.remittanceDeadlineHint":
     "Hora local del tenant hasta la que el cobrador debe rendir el efectivo cobrado en el día. Después aparece atrasado.",
   "config.visitThresholdHint":

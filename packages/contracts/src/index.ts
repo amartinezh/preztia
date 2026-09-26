@@ -12,6 +12,7 @@ export * from "./cash-boxes";
 export * from "./remittances";
 export * from "./deposit-orders";
 export * from "./collection-routes";
+export * from "./settlements";
 export * from "./daily-report";
 export * from "./change-requests";
 export * from "./routes";

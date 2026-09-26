@@ -28,6 +28,12 @@ export const operationalSettings = z.object({
   visitOverdueThreshold: z.number().int().min(1).max(60),
   // Hora local (0–23) límite para que el cobrador rinda cuentas del efectivo del día.
   remittanceDeadlineHourLocal: z.number().int().min(0).max(23),
+  // Liquidación por períodos: semanal (inicio 1–7 = lunes a domingo), quincenal (1–15 / 16–fin) o
+  // mensual (inicio 1–28); con cierre automático al pasar el corte o manual por el ADMIN.
+  settlementFrequency: z.enum(["WEEKLY", "BIWEEKLY", "MONTHLY"]),
+  settlementAnchorDay: z.number().int().min(1).max(28),
+  // El tope por frecuencia (1–7 en semanal) lo valida el dominio al guardar.
+  settlementAutoClose: z.boolean(),
 });
 export type OperationalSettings = z.infer<typeof operationalSettings>;
 
