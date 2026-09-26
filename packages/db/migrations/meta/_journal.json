@@ -421,6 +421,13 @@
       "when": 1790389001379,
       "tag": "0059_collector_remittance_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1790390411063,
+      "tag": "0060_flashy_sasquatch",
+      "breakpoints": true
     }
   ]
 }

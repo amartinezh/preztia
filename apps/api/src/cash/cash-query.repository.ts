@@ -6,6 +6,7 @@ import {
   eq,
   exists,
   gte,
+  inArray,
   lte,
   or,
   sql,
@@ -23,7 +24,7 @@ import type {
   MyCashBoxOutput,
 } from '@preztiaos/contracts';
 import type { CashTxDirection, CashTxKind } from '@preztiaos/domain';
-import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { findRouteBox } from './payment-box-router';
 import { balanceOfBox } from './cash-ledger';
 
@@ -45,37 +46,67 @@ function maskAccountNumber(accountNumber: string | null): string | null {
 
 @Injectable()
 export class CashQueryRepository {
+  /**
+   * Gastos dentro del alcance (`access`: el propio cobrador, el subárbol del coordinador o todo el
+   * tenant para el ADMIN), más recientes primero. Enriquecidos por lote (sin N+1): quién lo pidió,
+   * su zona y la caja de ruta del solicitante (opción de pago al aprobar).
+   */
   async listExpenses(input: {
     tenantId: string;
     page: number;
     pageSize: number;
     status?: ExpenseStatus;
+    access: SQL | undefined;
   }): Promise<{ items: Expense[]; total: number }> {
     return withTenantTxFor(input.tenantId, async (tx) => {
-      const where = input.status
-        ? eq(schema.expense.status, input.status)
-        : undefined;
+      const where = and(
+        input.status ? eq(schema.expense.status, input.status) : undefined,
+        input.access,
+      );
       const [totalRow] = await tx
         .select({ value: count() })
         .from(schema.expense)
+        .leftJoin(schema.zone, eq(schema.zone.id, schema.expense.zoneId))
         .where(where);
       const rows = await tx
-        .select()
+        .select({
+          expense: schema.expense,
+          zoneName: schema.zone.name,
+          requesterEmail: schema.appUser.email,
+        })
         .from(schema.expense)
+        .leftJoin(schema.zone, eq(schema.zone.id, schema.expense.zoneId))
+        .leftJoin(
+          schema.appUser,
+          eq(schema.appUser.id, schema.expense.requestedBy),
+        )
         .where(where)
         .orderBy(desc(schema.expense.createdAt))
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize);
-      const items: Expense[] = rows.map((row) => ({
-        id: row.id,
-        requestedBy: row.requestedBy,
-        description: row.description,
-        amountMinor: row.amountMinor,
-        status: row.status,
-        reviewedBy: row.reviewedBy,
-        reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
-        createdAt: row.createdAt.toISOString(),
-      }));
+
+      const routeBoxes = await routeBoxesOf(tx, [
+        ...new Set(rows.map((r) => r.expense.requestedBy)),
+      ]);
+      const items: Expense[] = rows.map(
+        ({ expense: row, zoneName, requesterEmail }) => ({
+          id: row.id,
+          requestedBy: row.requestedBy,
+          requesterEmail: requesterEmail ?? null,
+          description: row.description,
+          amountMinor: row.amountMinor,
+          status: row.status,
+          zoneId: row.zoneId,
+          zoneName: zoneName ?? null,
+          reviewedBy: row.reviewedBy,
+          reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
+          rejectionReason: row.rejectionReason,
+          paidFromCashBoxId: row.paidFromCashBoxId,
+          hasReceipt: row.receiptStorageKey !== null,
+          requesterRouteBox: routeBoxes.get(row.requestedBy) ?? null,
+          createdAt: row.createdAt.toISOString(),
+        }),
+      );
       return { items, total: Number(totalRow?.value ?? 0) };
     });
   }
@@ -473,4 +504,36 @@ export class CashQueryRepository {
       };
     });
   }
+}
+
+/** Caja de ruta activa (la más antigua) de cada solicitante, con su saldo, en una sola consulta. */
+async function routeBoxesOf(
+  tx: Tx,
+  userIds: string[],
+): Promise<Map<string, { id: string; name: string; balanceMinor: number }>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await tx
+    .selectDistinctOn([schema.cashBox.assignedTo], {
+      userId: schema.cashBox.assignedTo,
+      id: schema.cashBox.id,
+      name: schema.cashBox.name,
+      balanceMinor: sql<string>`(SELECT ${signedSum} FROM cash_transaction WHERE cash_transaction.cash_box_id = ${schema.cashBox.id})`,
+    })
+    .from(schema.cashBox)
+    .where(
+      and(
+        inArray(schema.cashBox.assignedTo, userIds),
+        eq(schema.cashBox.active, true),
+        eq(schema.cashBox.type, 'CASH'),
+      ),
+    )
+    .orderBy(schema.cashBox.assignedTo, schema.cashBox.createdAt);
+  return new Map(
+    rows
+      .filter((r): r is typeof r & { userId: string } => r.userId !== null)
+      .map((r) => [
+        r.userId,
+        { id: r.id, name: r.name, balanceMinor: Number(r.balanceMinor ?? 0) },
+      ]),
+  );
 }

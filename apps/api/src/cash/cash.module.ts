@@ -3,6 +3,7 @@ import { CashController } from './cash.controller';
 import { CashBoxController } from './cash-box.controller';
 import { BankAccountController } from './bank-account.controller';
 import { ExpenseDrizzleRepository } from './expense.repository';
+import { MinioExpenseReceiptStorage } from './expense-receipt.storage';
 import { CashQueryRepository } from './cash-query.repository';
 import { CashBoxDrizzleRepository } from './cash-box.repository';
 import { BankAccountDrizzleRepository } from './bank-account.repository';
@@ -35,6 +36,7 @@ import { RemittanceQueryRepository } from './remittance-query.repository';
   ],
   providers: [
     ExpenseDrizzleRepository,
+    MinioExpenseReceiptStorage,
     CashQueryRepository,
     CashBoxDrizzleRepository,
     BankAccountDrizzleRepository,

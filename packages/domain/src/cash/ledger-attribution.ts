@@ -41,14 +41,16 @@ export interface LedgerAttribution {
 /**
  * Zona y cobrador que se sellan en un asiento:
  * - zona: la del hecho de negocio (crédito, gasto) si existe; si no, la de la caja.
- * - cobrador: el dueño de la caja de ruta; todo lo que entra o sale de ella es suyo.
+ * - cobrador: el del hecho de negocio si lo hay (quien pidió el gasto, aunque se pague desde la
+ *   oficina); si no, el dueño de la caja de ruta (todo lo que entra o sale de ella es suyo).
  */
 export function ledgerAttribution(input: {
   originZoneId: string | null;
+  originCollectorId?: string | null;
   box: AttributableBox;
 }): LedgerAttribution {
   return {
     zoneId: input.originZoneId ?? input.box.zoneId,
-    collectorId: input.box.assignedTo,
+    collectorId: input.originCollectorId ?? input.box.assignedTo,
   };
 }

@@ -55,4 +55,10 @@ describe("ledgerAttribution", () => {
     expect(ledgerAttribution({ originZoneId: "z", box: route }).collectorId).toBe("cobrador-1");
     expect(ledgerAttribution({ originZoneId: "z", box }).collectorId).toBeNull();
   });
+
+  it("el cobrador del origen (quien pidió el gasto) prevalece sobre el dueño de la caja", () => {
+    expect(ledgerAttribution({ originZoneId: "z", originCollectorId: "cobrador-2", box }).collectorId).toBe(
+      "cobrador-2",
+    );
+  });
 });

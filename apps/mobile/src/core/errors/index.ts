@@ -32,6 +32,7 @@ export type ErrorMessageKey =
   | "errors.remittance.invalidDestination"
   | "errors.remittance.inProgress"
   | "errors.remittance.debtExceeded"
+  | "errors.expenses.boxNotAllowed"
   | "errors.telegram.invalidToken"
   | "errors.telegram.disabled"
   | "errors.telegram.botMismatch"
@@ -59,6 +60,7 @@ const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
   INVALID_REMITTANCE_DESTINATION: "errors.remittance.invalidDestination",
   REMITTANCE_IN_PROGRESS: "errors.remittance.inProgress",
   DEBT_EXCEEDED: "errors.remittance.debtExceeded",
+  EXPENSE_BOX_NOT_ALLOWED: "errors.expenses.boxNotAllowed",
   // Canales de mensajería (ADR #40)
   TELEGRAM_INVALID_TOKEN: "errors.telegram.invalidToken",
   TELEGRAM_DISABLED: "errors.telegram.disabled",

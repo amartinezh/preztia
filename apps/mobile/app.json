@@ -42,6 +42,13 @@
         {
           "locationWhenInUsePermission": "PreztiaOS usa tu ubicación para trazar la ruta de cobro desde tu posición actual."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PreztiaOS usa tus fotos para adjuntar el comprobante de un gasto.",
+          "cameraPermission": "PreztiaOS usa la cámara para fotografiar el comprobante de un gasto."
+        }
       ]
     ],
     "experiments": {

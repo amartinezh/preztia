@@ -11,6 +11,7 @@ const DELETE_BATCH = 1000;
  * tenant. Las claves están prefijadas por tenant, así que se listan y borran por prefijo:
  *   - `${tenantId}/…`          → documentos KYC de solicitudes
  *   - `payments/${tenantId}/…` → comprobantes de pago
+ *   - `expenses/${tenantId}/…` → comprobantes de gastos
  * Es "best-effort" y va FUERA de la transacción de BD: registra fallos pero no los propaga
  * (un objeto huérfano no tiene referencias y no rompe la integridad).
  */
@@ -22,7 +23,11 @@ export class MinioTenantFilePurger implements TenantFilePurger {
 
   async purge(tenantId: string): Promise<number> {
     let deleted = 0;
-    for (const prefix of [`${tenantId}/`, `payments/${tenantId}/`]) {
+    for (const prefix of [
+      `${tenantId}/`,
+      `payments/${tenantId}/`,
+      `expenses/${tenantId}/`,
+    ]) {
       deleted += await this.deletePrefix(prefix);
     }
     return deleted;

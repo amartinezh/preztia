@@ -82,6 +82,7 @@ export async function postCashOut(
 
   const { zoneId, collectorId } = await attributionFor(tx, box.id, {
     creditId,
+    expenseId: input.origin?.expenseId,
   });
   const [posted] = await tx
     .insert(schema.cashTransaction)

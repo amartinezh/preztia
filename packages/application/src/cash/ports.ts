@@ -11,6 +11,14 @@ export interface NewExpense {
   readonly requestedBy: string;
   readonly description: string;
   readonly amountMinor: number;
+  /** Comprobante ya guardado (cifrado) por el `ExpenseReceiptStorage`. */
+  readonly receipt: StoredExpenseReceipt;
+}
+
+export interface StoredExpenseReceipt {
+  readonly storageKey: string;
+  readonly mimeType: string;
+  readonly sha256: string;
 }
 
 export interface ExpenseRecord {
@@ -19,18 +27,26 @@ export interface ExpenseRecord {
   readonly description: string;
   readonly amountMinor: number;
   readonly status: ExpenseStatus;
+  /** Ruta de la zona del gasto (alcance del coordinador); null = gasto del tenant. */
+  readonly zonePath: string | null;
   readonly reviewedBy: string | null;
   readonly reviewedAt: string | null;
+  readonly rejectionReason: string | null;
   readonly createdAt: string;
 }
 
 export interface ExpenseStore {
+  /**
+   * Crea la solicitud PENDING. La zona del gasto la resuelve la infraestructura: es la de la caja
+   * de ruta de quien lo pide (NULL si no tiene caja de ruta).
+   */
   create(expense: NewExpense): Promise<void>;
   findById(input: { tenantId: string; expenseId: string }): Promise<ExpenseRecord | null>;
   /**
    * Persiste la decisión de revisión; `null` si el gasto no existe en el tenant. Al APROBAR con
    * `paidFromCashBoxId`, debita el gasto de esa caja/cuenta (asiento EXPENSE OUT) en la MISMA
-   * transacción: si el saldo no alcanza, todo se revierte (sin gasto aprobado sin egreso).
+   * transacción, verificando que esa caja pueda pagarlo (`assertCanPayExpenseFrom`): si no puede
+   * o el saldo no alcanza, todo se revierte (sin gasto aprobado sin egreso).
    */
   updateReview(input: {
     tenantId: string;
@@ -38,9 +54,20 @@ export interface ExpenseStore {
     status: ExpenseStatus;
     reviewedBy: string;
     reviewedAt: Date;
+    rejectionReason: string | null;
     /** Caja/cuenta pagadora (presente solo al aprobar). */
     paidFromCashBoxId?: string;
   }): Promise<ExpenseRecord | null>;
+}
+
+/** Puerto: guarda el comprobante del gasto CIFRADO en reposo (evidencia; nunca se loguea). */
+export interface ExpenseReceiptStorage {
+  store(input: {
+    tenantId: string;
+    expenseId: string;
+    bytes: Uint8Array;
+    mimeType: string;
+  }): Promise<StoredExpenseReceipt>;
 }
 
 // --- Conciliación bancaria en línea (Req 7) ---------------------------------

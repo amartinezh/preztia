@@ -19,6 +19,8 @@ import {
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
+import { ExpenseRequestForm } from "@/features/cash/components/expenses/expense-request-form";
+import { ExpensesPanel } from "@/features/cash/components/expenses/expenses-panel";
 import { useMyRemittance, useMyRemittanceHistory, useSubmitRemittance } from "../api/queries";
 import {
   ObligationBadge,
@@ -29,7 +31,8 @@ import {
 /**
  * "Mi caja" del COBRADOR: el efectivo en su poder, lo que va desde su último corte ("recogí X,
  * gasté Y, entrego Z"), su obligación de rendir (con la hora límite o el atraso), la declaración
- * de lo que entrega y TODO su historial de rendiciones (para aclarar cuadres y malentendidos).
+ * de lo que entrega, sus solicitudes de gasto (con comprobante) y TODO su historial de rendiciones
+ * y gastos (para aclarar cuadres y malentendidos).
  */
 export function MyCashScreen() {
   const { t } = useT();
@@ -88,6 +91,10 @@ export function MyCashScreen() {
             )}
           </>
         )}
+
+        <Text variant="heading">{t("cash.expenses.mineTitle")}</Text>
+        <ExpenseRequestForm />
+        <ExpensesPanel mode="mine" currency={data.currency} />
 
         <Text variant="heading">{t("remittance.history")}</Text>
         <MyHistory currency={data.currency} />

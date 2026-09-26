@@ -36,6 +36,8 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
   await sql`DELETE FROM payment WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM installment WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM credit WHERE tenant_id = ${tenantId}`;
+  // expense referencia la caja pagadora (paid_from_cash_box_id): se borra antes que cash_box.
+  await sql`DELETE FROM expense WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM cash_box WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM bank_credential WHERE tenant_id = ${tenantId}`;
   await sql`DELETE FROM tenant_bank_account WHERE tenant_id = ${tenantId}`;

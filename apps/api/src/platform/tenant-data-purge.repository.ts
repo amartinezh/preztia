@@ -28,8 +28,8 @@ export const PURGE_ORDER: readonly string[] = [
   // Agregados de dinero.
   'payment',
   'installment', // → credit
+  'expense', // → cash_box (caja pagadora)
   'cash_box',
-  'expense',
   'collection_note', // → credit, borrower
   'collection_visit', // → credit, borrower
   'credit',

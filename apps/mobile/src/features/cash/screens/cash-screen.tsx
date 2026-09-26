@@ -1,43 +1,24 @@
-import { useState } from "react";
-import { Pressable } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import type { Expense } from "@preztiaos/contracts";
 import {
-  Badge,
   Banner,
   Button,
   Card,
-  Field,
-  Input,
-  ListItem,
-  majorToMinor,
   minorToMajor,
   MoneyText,
   Row,
   Spinner,
   Stack,
   Text,
-  type BadgeTone,
 } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { useSession } from "@/core/auth/session";
 import { can } from "@/core/auth/authorization";
-import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
-import {
-  useCreateExpense,
-  useDailyReport,
-  useExpensesList,
-  useReviewExpense,
-} from "../api/queries";
+import { useDailyReport } from "../api/queries";
+import { ExpenseRequestForm } from "../components/expenses/expense-request-form";
+import { ExpensesPanel } from "../components/expenses/expenses-panel";
 import { useCashDashboard } from "../api/boxes-queries";
-
-const EXPENSE_TONE: Record<Expense["status"], BadgeTone> = {
-  PENDING: "warning",
-  APPROVED: "success",
-  REJECTED: "danger",
-};
 
 /**
  * Resumen de Dinero / Tesorería: el dinero real al frente (liquidez del libro de cajas), seguido
@@ -148,120 +129,18 @@ function DailyReportCard() {
   );
 }
 
+/**
+ * Gastos en Dinero: solicitar (con comprobante) y, para ADMIN/COORDINATOR, la bandeja de revisión
+ * dentro de su zona. El historial completo queda con fechas, motivos y comprobantes.
+ */
 function ExpensesSection({ canManage }: { canManage: boolean }) {
   const { t } = useT();
-  const list = useExpensesList();
-  const create = useCreateExpense();
-  const review = useReviewExpense();
-  // Aprobar un gasto lo paga desde una caja/cuenta (asiento EXPENSE OUT): saldos desde el dashboard.
-  const dashboard = useCashDashboard();
-  const fundableBoxes = (dashboard.data?.boxes ?? []).filter((b) => b.type !== "TRANSIT");
-  const currency = dashboard.data?.currency ?? "BRL";
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [paidFromCashBoxId, setPaidFromCashBoxId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = () => {
-    setError(null);
-    const amountMinor = majorToMinor(Number(amount) || 0);
-    if (!description.trim() || amountMinor <= 0) {
-      setError(t("errors.validation"));
-      return;
-    }
-    create.mutate(
-      { description: description.trim(), amountMinor },
-      {
-        onSuccess: () => {
-          setDescription("");
-          setAmount("");
-        },
-        onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
-      },
-    );
-  };
-
-  const hasPending = canManage && (list.data?.items.some((e) => e.status === "PENDING") ?? false);
-
+  const currency = useCashDashboard().data?.currency ?? "";
   return (
     <Stack gap="sm">
       <Text variant="heading">{t("cash.expenses.title")}</Text>
-      {error ? <Banner tone="danger" title={error} /> : null}
-      <Card>
-        <Stack gap="sm">
-          <Field label={t("cash.expenses.description")} required>
-            <Input value={description} onChangeText={setDescription} />
-          </Field>
-          <Field label={t("cash.expenses.amount")} required>
-            <Input value={amount} onChangeText={setAmount} keyboardType="numeric" />
-          </Field>
-          <Button label={t("cash.expenses.request")} loading={create.isPending} block onPress={submit} />
-        </Stack>
-      </Card>
-
-      {/* Caja/cuenta pagadora: al aprobar, el gasto la debita (EXPENSE OUT). */}
-      {hasPending ? (
-        <Field label={t("cash.expenses.paidFrom")} hint={t("cash.expenses.paidFromHint")}>
-          {dashboard.isPending ? (
-            <Spinner label={t("common.loading")} />
-          ) : fundableBoxes.length === 0 ? (
-            <Banner tone="warning" title={t("cash.expenses.paidFromEmpty")} />
-          ) : (
-            <Stack gap="xs">
-              {fundableBoxes.map((b) => {
-                const isSelected = b.id === paidFromCashBoxId;
-                return (
-                  <Pressable
-                    key={b.id}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    onPress={() => setPaidFromCashBoxId(b.id)}
-                    className={`min-h-[48px] flex-row items-center justify-between rounded-xl border px-3 ${
-                      isSelected
-                        ? "border-brand-600 bg-brand-50 dark:bg-zinc-800"
-                        : "border-zinc-200 dark:border-zinc-700"
-                    }`}
-                  >
-                    <Text variant="label" tone={isSelected ? "primary" : "muted"}>
-                      {b.name}
-                    </Text>
-                    <MoneyText variant="label" amountMinor={b.balanceMinor} currency={b.currency} />
-                  </Pressable>
-                );
-              })}
-            </Stack>
-          )}
-        </Field>
-      ) : null}
-
-      {list.data?.items.map((e) => (
-        <ListItem
-          key={e.id}
-          title={e.description}
-          subtitle={t(`cash.status.${e.status}` as Parameters<typeof t>[0])}
-          trailing={
-            <Row className="items-center gap-2">
-              <MoneyText variant="body" amountMinor={e.amountMinor} currency={currency} />
-              {canManage && e.status === "PENDING" ? (
-                <>
-                  <Button
-                    label={t("cash.expenses.approve")}
-                    size="sm"
-                    disabled={!paidFromCashBoxId}
-                    onPress={() =>
-                      paidFromCashBoxId &&
-                      review.mutate({ id: e.id, approve: true, paidFromCashBoxId })
-                    }
-                  />
-                  <Button label={t("cash.expenses.reject")} variant="ghost" size="sm" onPress={() => review.mutate({ id: e.id, approve: false })} />
-                </>
-              ) : (
-                <Badge label={t(`cash.status.${e.status}` as Parameters<typeof t>[0])} tone={EXPENSE_TONE[e.status]} />
-              )}
-            </Row>
-          }
-        />
-      ))}
+      <ExpenseRequestForm />
+      <ExpensesPanel mode={canManage ? "review" : "mine"} currency={currency} />
     </Stack>
   );
 }

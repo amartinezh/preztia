@@ -35,6 +35,7 @@ export async function lockCashBox(tx: Tx, cashBoxId: string): Promise<void> {
 export interface LedgerOrigin {
   readonly creditId?: string | null;
   readonly paymentId?: string | null;
+  readonly expenseId?: string | null;
 }
 
 /**
@@ -55,8 +56,10 @@ export async function attributionFor(
     .from(schema.cashBox)
     .where(eq(schema.cashBox.id, cashBoxId))
     .limit(1);
+  const fromOrigin = await originAttribution(tx, origin);
   return ledgerAttribution({
-    originZoneId: await originZoneId(tx, origin),
+    originZoneId: fromOrigin.zoneId,
+    originCollectorId: fromOrigin.collectorId,
     box: { zoneId: box?.zoneId ?? null, assignedTo: box?.assignedTo ?? null },
   });
 }
@@ -103,17 +106,18 @@ async function boxZonePath(tx: Tx, cashBoxId: string): Promise<string | null> {
   return row?.path ?? null;
 }
 
-async function originZoneId(
+/** Zona (y cobrador, si aplica) del hecho de negocio que origina el asiento. */
+async function originAttribution(
   tx: Tx,
   origin: LedgerOrigin,
-): Promise<string | null> {
+): Promise<{ zoneId: string | null; collectorId: string | null }> {
   if (origin.creditId) {
     const [row] = await tx
       .select({ zoneId: schema.credit.zoneId })
       .from(schema.credit)
       .where(eq(schema.credit.id, origin.creditId))
       .limit(1);
-    return row?.zoneId ?? null;
+    return { zoneId: row?.zoneId ?? null, collectorId: null };
   }
   if (origin.paymentId) {
     const [row] = await tx
@@ -122,7 +126,22 @@ async function originZoneId(
       .innerJoin(schema.credit, eq(schema.credit.id, schema.payment.creditId))
       .where(eq(schema.payment.id, origin.paymentId))
       .limit(1);
-    return row?.zoneId ?? null;
+    return { zoneId: row?.zoneId ?? null, collectorId: null };
   }
-  return null;
+  if (origin.expenseId) {
+    // El gasto se atribuye a su zona y a quien lo pidió, aunque se pague desde la oficina.
+    const [row] = await tx
+      .select({
+        zoneId: schema.expense.zoneId,
+        requestedBy: schema.expense.requestedBy,
+      })
+      .from(schema.expense)
+      .where(eq(schema.expense.id, origin.expenseId))
+      .limit(1);
+    return {
+      zoneId: row?.zoneId ?? null,
+      collectorId: row?.requestedBy ?? null,
+    };
+  }
+  return { zoneId: null, collectorId: null };
 }

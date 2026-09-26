@@ -11,8 +11,10 @@
 > ([PLAN_TESORERIA_UNICA_FUENTE.md](PLAN_TESORERIA_UNICA_FUENTE.md)). Este plan no la resucita.
 >
 > **Estado:** diseño acordado con el usuario (2026-09-25). **Fases 1 y 2 implementadas y verificadas**
-> contra Postgres real (migraciones 0057–0059 aplicadas en local; 0059 = RLS de
-> `collector_remittance`; integración 49/49). **Falta** aplicarlas en producción.
+> contra Postgres real (migraciones 0057–0059 aplicadas en local; integración 49/49). **Fase 3
+> implementada** (verde en build + typecheck + lint + test); **falta** `pnpm db:generate` +
+> `pnpm db:migrate` (columnas de `expense`) y `pnpm --filter api test:integration`
+> (`expense.integration.spec.ts`). Nada aplicado aún en producción.
 > **ADR:** #41 registrado en [ARCHITECTURE.md](ARCHITECTURE.md) (ver §9).
 
 ---
@@ -377,7 +379,7 @@ Escenario: Cierre de deuda solo por el ADMIN
   Y cerrar más de la deuda arrastrada responde 409 DEBT_EXCEEDED
 ```
 
-### Fase 3 — Solicitudes de gasto v2
+### Fase 3 — Solicitudes de gasto v2 ✅ (implementada, migración pendiente)
 
 - Esquema: `zone_id`, `rejection_reason`, `receipt_document_id`, `paid_from_cash_box_id`.
 - Contrato: la solicitud exige comprobante (subida cifrada a MinIO); rechazar exige motivo; aprobar
@@ -385,6 +387,47 @@ Escenario: Cierre de deuda solo por el ADMIN
 - Móvil: el cobrador abre la solicitud desde su perfil y ve su historial con estados, motivos y
   fechas; el coordinador ve la bandeja por subárbol.
 - **Aceptación:** sin foto no hay solicitud; rechazo sin motivo → 400; aprobación → `EXPENSE` OUT sellado con zona.
+- **Decisiones de implementación:**
+  - Foto con `expo-image-picker` (autorizado; cámara o galería) y subida `multipart/form-data`
+    (`FileInterceptor` de NestJS, sin dependencias nuevas en la API). Cifrada en MinIO (AES-256-GCM)
+    como los comprobantes de pago; se sirve descifrada con `no-store`. JPEG/PNG/WEBP/HEIC/PDF, ≤ 8 MB.
+  - **Zona del gasto** = zona de la caja de ruta de quien lo pide (NULL si no tiene: solo el ADMIN
+    lo revisa). **Alcance:** el cobrador ve solo los suyos; el coordinador, los de su subárbol.
+    *(Corrige un hueco previo: `GET /expenses` listaba todo el tenant a cualquier rol.)*
+  - **Caja pagadora:** caja de oficina o banco que la zona puede usar, o la **caja de ruta de quien
+    pidió** (se descuenta de su efectivo y entra en su rendición). Nunca la de otro cobrador.
+  - El asiento `EXPENSE` sella la zona del gasto y `collector_id` = quien lo pidió.
+
+```gherkin
+Escenario: El cobrador pide un gasto con foto
+  Dado un cobrador con caja de ruta en la zona "Norte"
+  Cuando pide un gasto de 15.000 "Gasolina" adjuntando la foto del recibo
+  Entonces queda PENDIENTE en la zona "Norte" y aparece en su historial
+
+Escenario: Sin foto no hay solicitud
+  Cuando pide un gasto sin adjuntar foto
+  Entonces responde 400 y no se crea nada
+
+Escenario: El coordinador rechaza con motivo
+  Cuando rechaza el gasto sin motivo
+  Entonces responde 400
+  Cuando lo rechaza con motivo "Sin soporte válido"
+  Entonces queda RECHAZADO con motivo, fecha y hora, y el cobrador lo ve en su historial
+
+Escenario: Aprobado desde la caja de ruta del cobrador
+  Cuando el coordinador lo aprueba pagándolo desde la caja de ruta del propio cobrador
+  Entonces sale un asiento EXPENSE de esa caja con zona "Norte" y cobrador = quien lo pidió
+  Y su rendición lo muestra como "Gastos pagados"
+
+Escenario: No se paga desde la caja de otro cobrador
+  Cuando se intenta aprobar pagándolo desde la caja de ruta de otro cobrador
+  Entonces responde 409 EXPENSE_BOX_NOT_ALLOWED
+
+Escenario: Alcance
+  Dado un gasto de la zona "Sur"
+  Entonces un cobrador que no lo pidió no lo ve
+  Y un coordinador de "Norte" no lo ve ni lo puede revisar (404)
+```
 
 ### Fase 4 — Órdenes de consignación
 
