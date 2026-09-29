@@ -33,6 +33,8 @@ export const telegramChannel = z.object({
   zonePath: z.string(),
   // Estado SIN exponer secretos: el token del bot y el secret del webhook nunca salen del servidor.
   webhookRegistered: z.boolean(),
+  // Últimos caracteres del token para reconocerlo (•••KxC0) sin revelarlo; el resto nunca sale.
+  tokenLast4: z.string(),
   createdAt: z.string(),
 });
 export type TelegramChannel = z.infer<typeof telegramChannel>;

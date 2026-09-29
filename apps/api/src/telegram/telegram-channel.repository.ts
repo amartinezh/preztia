@@ -12,10 +12,14 @@ import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { mapUniqueViolation } from '../shared/persistence-errors';
 import { decryptSecret, encryptSecret } from '../shared/secret-cipher';
 
+// Caracteres del token que el ADMIN ve para reconocer qué token está activo (como una tarjeta).
+const TOKEN_VISIBLE_CHARS = 4;
+
 /**
  * Adaptador de `telegram_channel` (bot → zona, ADR #40) bajo el rol `app` + RLS. El zone_path se
  * denormaliza desde la zona elegida. El token del bot y el secret del webhook van CIFRADOS en reposo
- * y NUNCA salen por la API: el listado solo informa el estado (`webhookRegistered`).
+ * y NUNCA salen por la API: el listado solo informa el estado (`webhookRegistered`) y los últimos
+ * caracteres del token (`tokenLast4`), que no bastan para operar el bot.
  */
 @Injectable()
 export class TelegramChannelRepository implements TelegramChannelStore {
@@ -33,6 +37,7 @@ export class TelegramChannelRepository implements TelegramChannelStore {
         zoneId: r.zoneId,
         zonePath: r.zonePath,
         webhookRegistered: r.webhookRegisteredAt !== null,
+        tokenLast4: decryptSecret(r.botToken).slice(-TOKEN_VISIBLE_CHARS),
         createdAt: r.createdAt.toISOString(),
       }));
     });

@@ -14,6 +14,7 @@ import {
   Text,
 } from "@preztiaos/ui";
 
+import { copyToClipboard } from "@/core/clipboard";
 import { env } from "@/core/env";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
@@ -47,26 +48,6 @@ function nonEmptyCredentials(d: CredDraft): UpdateChannelInput {
     ...(d.verifyToken.trim() ? { verifyToken: d.verifyToken.trim() } : {}),
     ...(d.graphVersion.trim() ? { graphVersion: d.graphVersion.trim() } : {}),
   };
-}
-
-/**
- * Copia al portapapeles cuando la plataforma lo permite (web). Devuelve false si no hay
- * portapapeles disponible (nativo sin permiso): la URL queda seleccionable para copiar a mano.
- * Acceso vía globalThis para no depender de los tipos del DOM en el typecheck de React Native.
- */
-async function copyToClipboard(text: string): Promise<boolean> {
-  const nav = (
-    globalThis as {
-      navigator?: { clipboard?: { writeText(value: string): Promise<void> } };
-    }
-  ).navigator;
-  if (!nav?.clipboard) return false;
-  try {
-    await nav.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
