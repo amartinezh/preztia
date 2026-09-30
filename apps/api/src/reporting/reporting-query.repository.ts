@@ -53,10 +53,16 @@ export class ReportingQueryRepository {
           v: sql<number>`COALESCE(SUM(${schema.paymentAllocation.amountMinor}), 0)`,
         })
         .from(schema.paymentAllocation)
+        .innerJoin(
+          schema.payment,
+          eq(schema.payment.id, schema.paymentAllocation.paymentId),
+        )
         .where(
           and(
             gte(schema.paymentAllocation.createdAt, dayStart),
             lte(schema.paymentAllocation.createdAt, dayEnd),
+            // Los abonos históricos de créditos migrados no son recaudo del día.
+            eq(schema.payment.historical, false),
           ),
         );
 
@@ -69,6 +75,8 @@ export class ReportingQueryRepository {
           and(
             gte(schema.credit.createdAt, dayStart),
             lte(schema.credit.createdAt, dayEnd),
+            // Un crédito migrado no se prestó hoy: se otorgó en el sistema anterior.
+            eq(schema.credit.origin, 'ORIGINATED'),
           ),
         );
 

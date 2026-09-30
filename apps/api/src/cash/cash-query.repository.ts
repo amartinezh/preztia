@@ -319,14 +319,30 @@ export class CashQueryRepository {
           schema.installment,
           eq(schema.installment.id, schema.paymentAllocation.installmentId),
         )
-        .where(within(schema.paymentAllocation.createdAt));
+        .innerJoin(
+          schema.payment,
+          eq(schema.payment.id, schema.paymentAllocation.paymentId),
+        )
+        // Los abonos históricos de créditos migrados no son recaudo del día.
+        .where(
+          and(
+            within(schema.paymentAllocation.createdAt),
+            eq(schema.payment.historical, false),
+          ),
+        );
 
       const [prestado] = await tx
         .select({
           value: sql<number>`COALESCE(SUM(${schema.credit.principalMinor}), 0)`,
         })
         .from(schema.credit)
-        .where(within(schema.credit.createdAt));
+        // Un crédito migrado no se prestó hoy: se otorgó en el sistema anterior.
+        .where(
+          and(
+            within(schema.credit.createdAt),
+            eq(schema.credit.origin, 'ORIGINATED'),
+          ),
+        );
 
       const [gastos] = await tx
         .select({

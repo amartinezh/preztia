@@ -36,7 +36,7 @@ import { useGrantCredit } from "../api/queries";
 type FieldErrors = Partial<Record<keyof GrantCreditInput, string>>;
 
 // Datos mínimos del deudor que la pantalla necesita para mostrar y validar cupo/bloqueo.
-type SelectedBorrower = Pick<
+export type SelectedBorrower = Pick<
   BorrowerSummary,
   "id" | "nationalId" | "firstName" | "lastName" | "business" | "phone" | "creditBlocked" | "creditLimitMinor"
 >;
@@ -329,7 +329,7 @@ function borrowerSubtitle(b: BorrowerSummary): string {
  * Campo de selección del DEUDOR: abre un buscador (por nombre/cédula) con la cartera de clientes
  * y permite crear uno nuevo sin salir de la pantalla (alta rápida). El elegido queda seleccionado.
  */
-function BorrowerPickerField({
+export function BorrowerPickerField({
   selected,
   error,
   onSelect,

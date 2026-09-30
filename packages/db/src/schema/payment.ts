@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   index,
   check,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { installment } from "./installment";
@@ -73,6 +74,9 @@ export const payment = pgTable(
     // Clave de idempotencia del cliente (abonos en efectivo): garantiza que un
     // reintento/reenvío no produzca un doble abono. Null para pagos PIX entrantes.
     idempotencyKey: text("idempotency_key"),
+    // Abono HISTÓRICO de un crédito migrado: el dinero entró en el sistema anterior, así que no
+    // tiene asiento en el libro y la liquidación no lo cuenta como recaudo ni interés del período.
+    historical: boolean("historical").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

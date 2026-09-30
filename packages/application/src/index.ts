@@ -18,6 +18,7 @@ export * from "./tracking/ports";
 export * from "./tracking/record-location";
 export * from "./credit/grant-credit";
 export * from "./credit/interest-guard";
+export * from "./credit/migration/register-migrated-credit";
 export * from "./credit/plan/ports";
 export * from "./credit/plan/manage-payment-plans";
 export * from "./credit/plan/project-schedule";

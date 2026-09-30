@@ -1,9 +1,13 @@
-import { pgTable, uuid, bigint, integer, date, timestamp, text, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, bigint, integer, date, timestamp, text, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const creditStatus = pgEnum("credit_status",
   ["PENDING", "ACTIVE", "SETTLED", "DEFAULTED", "CANCELLED"]);
 export const frequency = pgEnum("frequency",
   ["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY"]);
+// Origen del crédito: ORIGINATED = otorgado en este sistema (sale dinero de una caja);
+// MIGRATED = deuda cargada del sistema anterior (sin desembolso ni abonos en el libro de hoy).
+export const creditOrigin = pgEnum("credit_origin", ["ORIGINATED", "MIGRATED"]);
 
 export const credit = pgTable("credit", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -20,5 +24,12 @@ export const credit = pgTable("credit", {
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   status: creditStatus("status").notNull().default("ACTIVE"),
+  origin: creditOrigin("origin").notNull().default("ORIGINATED"),
+  // Identificador del crédito en el sistema anterior (solo migrados): evita cargarlo dos veces.
+  legacyReference: text("legacy_reference"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byLegacyReference: uniqueIndex("credit_tenant_legacy_reference_idx")
+    .on(t.tenantId, t.legacyReference)
+    .where(sql`legacy_reference is not null`),
+}));

@@ -6,7 +6,7 @@ import { canChoosePaymentDate, resolvePaymentDate, type PaymentDateContext } fro
 const NOW = new Date("2026-09-29T15:00:00.000Z");
 const TZ = "America/Bogota";
 const ctx = (overrides: Partial<PaymentDateContext> = {}): PaymentDateContext => ({
-  policy: { locked: true, maxDaysBack: 3 },
+  policy: { locked: true, maxDaysBack: 3, relaxed: false },
   actorRole: "COLLECTOR",
   now: NOW,
   timeZone: TZ,
@@ -50,8 +50,8 @@ describe("resolvePaymentDate — captura offline (automática, cualquier rol)", 
   });
 
   it("con límite 0 solo vale lo capturado hoy", () => {
-    expect(resolvePaymentDate(offline("2026-09-29T05:10:00.000Z"), ctx({ policy: { locked: true, maxDaysBack: 0 } })).adjusted).toBeNull();
-    expect(resolvePaymentDate(offline("2026-09-29T04:50:00.000Z"), ctx({ policy: { locked: true, maxDaysBack: 0 } })).adjusted).toBe("TOO_OLD");
+    expect(resolvePaymentDate(offline("2026-09-29T05:10:00.000Z"), ctx({ policy: { locked: true, maxDaysBack: 0, relaxed: false } })).adjusted).toBeNull();
+    expect(resolvePaymentDate(offline("2026-09-29T04:50:00.000Z"), ctx({ policy: { locked: true, maxDaysBack: 0, relaxed: false } })).adjusted).toBe("TOO_OLD");
   });
 });
 
@@ -70,12 +70,12 @@ describe("resolvePaymentDate — fecha elegida a mano", () => {
     expect(run).toThrow(ForbiddenError);
     expect(run).toThrow(expect.objectContaining({ code: "BACKDATE_LOCKED" }));
     expect(
-      resolvePaymentDate(manual("2026-09-28"), ctx({ actorRole: "COORDINATOR", policy: { locked: false, maxDaysBack: 3 } })).backdated,
+      resolvePaymentDate(manual("2026-09-28"), ctx({ actorRole: "COORDINATOR", policy: { locked: false, maxDaysBack: 3, relaxed: false } })).backdated,
     ).toBe(true);
   });
 
   it("el cobrador nunca elige la fecha a mano (ni con el bloqueo apagado)", () => {
-    expect(() => resolvePaymentDate(manual("2026-09-28"), ctx({ policy: { locked: false, maxDaysBack: 3 } }))).toThrow(ForbiddenError);
+    expect(() => resolvePaymentDate(manual("2026-09-28"), ctx({ policy: { locked: false, maxDaysBack: 3, relaxed: false } }))).toThrow(ForbiddenError);
   });
 
   it("fuera de regla se rechaza explicando por qué: futuro, demasiado antiguo o período sellado", () => {
@@ -91,11 +91,37 @@ describe("resolvePaymentDate — fecha elegida a mano", () => {
 
 describe("canChoosePaymentDate", () => {
   it("ADMIN siempre; coordinador solo sin bloqueo; cobrador nunca", () => {
-    const locked = { locked: true, maxDaysBack: 3 };
-    const open = { locked: false, maxDaysBack: 3 };
+    const locked = { locked: true, maxDaysBack: 3, relaxed: false };
+    const open = { locked: false, maxDaysBack: 3, relaxed: false };
     expect(canChoosePaymentDate(locked, "ADMIN")).toBe(true);
     expect(canChoosePaymentDate(locked, "COORDINATOR")).toBe(false);
     expect(canChoosePaymentDate(open, "COORDINATOR")).toBe(true);
     expect(canChoosePaymentDate(open, "COLLECTOR")).toBe(false);
+  });
+});
+
+describe("resolvePaymentDate — modo flexible", () => {
+  const relaxed = { locked: true, maxDaysBack: 3, relaxed: true };
+
+  it("una captura offline de hace semanas, o en un período sellado, conserva su hora real", () => {
+    const old = resolvePaymentDate(offline("2026-09-01T15:00:00.000Z"), ctx({ policy: relaxed, sealedUntil: new Date("2026-09-28T05:00:00.000Z") }));
+    expect(old).toEqual({ paidAt: new Date("2026-09-01T15:00:00.000Z"), backdated: true, adjusted: null });
+  });
+
+  it("a mano: el coordinador puede aunque el bloqueo esté encendido, sin límite de días", () => {
+    const r = resolvePaymentDate(manual("2026-08-15"), ctx({ actorRole: "COORDINATOR", policy: relaxed }));
+    expect(r.backdated).toBe(true);
+    expect(canChoosePaymentDate(relaxed, "COORDINATOR")).toBe(true);
+  });
+
+  it("el cobrador sigue sin elegir fecha a mano (su cobro offline ya lleva la hora real)", () => {
+    expect(canChoosePaymentDate(relaxed, "COLLECTOR")).toBe(false);
+  });
+
+  it("única sensatez que se mantiene: nunca una fecha futura", () => {
+    expect(() => resolvePaymentDate(manual("2026-09-30"), ctx({ actorRole: "ADMIN", policy: relaxed }))).toThrow(
+      expect.objectContaining({ code: "PAYMENT_DATE_IN_FUTURE" }),
+    );
+    expect(resolvePaymentDate(offline("2026-09-29T16:00:00.000Z"), ctx({ policy: relaxed })).adjusted).toBe("FUTURE");
   });
 });

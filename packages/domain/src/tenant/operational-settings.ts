@@ -24,6 +24,8 @@ export interface OperationalSettings {
   readonly blockOverdueDatesForSales: boolean;
   /** Días de negocio hacia atrás que puede tener la fecha de un pago (0–30; offline y manual). */
   readonly backdateMaxDays: number;
+  /** Modo flexible de fechas: se reciben los pagos sin límite de días ni de período sellado. */
+  readonly relaxedPaymentDates: boolean;
   /** "Bloquear cambio de interés": el interés de un crédito sale de un plan activo (ver `interest-policy`). */
   readonly blockInterestChange: boolean;
   /** Con el bloqueo encendido, el ADMIN conserva la vía "Personalizado" (interés libre). */
@@ -108,6 +110,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   manualRoute: false,
   blockOverdueDatesForSales: true,
   backdateMaxDays: DEFAULT_BACKDATE_MAX_DAYS,
+  relaxedPaymentDates: false,
   blockInterestChange: true,
   adminCustomInterestAllowed: true,
   commissionPctBaseThousand: 0,
@@ -160,7 +163,11 @@ export function mergeOperationalSettings(
 
 /** Política de fechas atrasadas de pagos del tenant. */
 export function backdatePolicyOf(s: OperationalSettings): BackdatePolicy {
-  return { locked: s.blockOverdueDatesForSales, maxDaysBack: s.backdateMaxDays };
+  return {
+    locked: s.blockOverdueDatesForSales,
+    maxDaysBack: s.backdateMaxDays,
+    relaxed: s.relaxedPaymentDates,
+  };
 }
 
 /** Política antifraude del interés del tenant. */

@@ -240,14 +240,19 @@ async function readPortfolio(
              SUM(COALESCE(pa.principal_minor, 0)) AS principal,
              SUM(pa.amount_minor) AS collected
       FROM payment_allocation pa
+      JOIN payment p ON p.id = pa.payment_id
       JOIN installment i ON i.id = pa.installment_id
       JOIN credit c ON c.id = i.credit_id
       WHERE pa.created_at >= ${starts}::timestamptz AND pa.created_at < ${ends}::timestamptz
+        -- Abonos históricos de créditos migrados: ese dinero entró en el sistema anterior.
+        AND NOT p.historical
       GROUP BY c.zone_id
     ), granted AS (
       SELECT zone_id, count(*) AS credits, SUM(principal_minor) AS principal
       FROM credit
       WHERE created_at >= ${starts}::timestamptz AND created_at < ${ends}::timestamptz
+        -- Un crédito migrado no se prestó en el período: se otorgó en el sistema anterior.
+        AND origin <> 'MIGRATED'
       GROUP BY zone_id
     ), due AS (
       SELECT c.zone_id,

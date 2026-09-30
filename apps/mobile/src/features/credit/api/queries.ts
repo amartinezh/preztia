@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { GrantCreditInput } from "@preztiaos/contracts";
+import type { GrantCreditInput, RegisterMigratedCreditInput } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
 import { cashBoxKeys } from "@/features/cash/api/boxes-queries";
@@ -11,6 +11,16 @@ export const creditKeys = {
   list: () => [...creditKeys.all, "list"] as const,
   portfolio: (creditId: string) => [...creditKeys.all, "portfolio", creditId] as const,
 };
+
+/** Carga un crédito del sistema anterior con sus abonos históricos (ADMIN). No mueve cajas. */
+export function useRegisterMigratedCredit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RegisterMigratedCreditInput) =>
+      unwrap(await api.registerMigratedCredit({ headers: tenantHeader(), body: input })),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: creditKeys.all }),
+  });
+}
 
 /** Lista paginada de créditos (paginación obligatoria, §3.7). */
 export function useCreditsList() {

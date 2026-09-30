@@ -50,6 +50,8 @@ export function PortfolioScreen() {
 
   const canExport = can(role, "borrower:manage") && csvDownloadAvailable();
   const canCreate = can(role, "credit:create");
+  // Cargar deuda del sistema anterior es del ADMIN (el servidor lo exige igual).
+  const canMigrate = role === "ADMIN";
   const canRemind = can(role, "application:review");
   const runExport = () =>
     exportCsv.mutate(undefined, { onSuccess: (res) => downloadCsv(res.filename, res.csv) });
@@ -108,6 +110,14 @@ export function PortfolioScreen() {
                     size="sm"
                     loading={exportCsv.isPending}
                     onPress={runExport}
+                  />
+                ) : null}
+                {canMigrate ? (
+                  <Button
+                    label={t("migrate.open")}
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => router.push("/credit/migrate" as Href)}
                   />
                 ) : null}
                 {canCreate ? (

@@ -37,6 +37,7 @@ export type ErrorMessageKey =
   | "errors.payment.dateInFuture"
   | "errors.payment.dateTooOld"
   | "errors.payment.dateSealed"
+  | "errors.credit.legacyReferenceTaken"
   | "errors.credit.interestLocked"
   | "errors.credit.planInactive"
   | "errors.commission.aboveCap"
@@ -85,6 +86,7 @@ const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
   PAYMENT_DATE_SEALED: "errors.payment.dateSealed",
   // Bloqueo del interés (antifraude)
   INTEREST_LOCKED: "errors.credit.interestLocked",
+  LEGACY_REFERENCE_TAKEN: "errors.credit.legacyReferenceTaken",
   PLAN_INACTIVE: "errors.credit.planInactive",
   // Comisiones del cobrador
   COMMISSION_ABOVE_CAP: "errors.commission.aboveCap",

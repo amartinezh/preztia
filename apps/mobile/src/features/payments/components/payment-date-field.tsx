@@ -6,7 +6,7 @@ import { useOperationalSettings } from "@/features/settings/api/queries";
 
 /**
  * "Fecha del pago" para registrar un cobro de otro día. Solo lo ve quien puede elegirla: el ADMIN
- * siempre; el coordinador si las fechas atrasadas no están bloqueadas; el cobrador nunca (su cobro
+ * siempre; el coordinador si las fechas atrasadas no están bloqueadas o si está el modo flexible; el cobrador nunca (su cobro
  * sin señal ya viaja con la hora real de captura). El servidor valida el límite y el período sellado.
  */
 export function PaymentDateField({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
@@ -28,13 +28,16 @@ function ReviewerPaymentDateField({
   const { t } = useT();
   const settings = useOperationalSettings();
   const locked = settings.data?.blockOverdueDatesForSales ?? true;
-  if (!isAdmin && locked) return null;
+  const relaxed = settings.data?.relaxedPaymentDates ?? false;
+  if (!isAdmin && locked && !relaxed) return null;
   const maxDaysBack = settings.data?.backdateMaxDays;
+  const hint = relaxed
+    ? t("payments.paidOnRelaxedHint")
+    : maxDaysBack != null
+      ? `${t("payments.paidOnHint")} ${maxDaysBack}`
+      : t("payments.paidOnHint");
   return (
-    <Field
-      label={t("payments.paidOn")}
-      hint={maxDaysBack != null ? `${t("payments.paidOnHint")} ${maxDaysBack}` : t("payments.paidOnHint")}
-    >
+    <Field label={t("payments.paidOn")} hint={hint}>
       <Row gap="sm" className="items-center">
         <Input value={value ?? ""} placeholder={t("payments.paidOnToday")} onChangeText={(v) => onChange(v.trim() || null)} />
         {value ? <Button label={t("config.settlement.today")} variant="secondary" size="sm" onPress={() => onChange(null)} /> : null}

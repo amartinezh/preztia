@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { OperationalSettings } from "@preztiaos/contracts";
 import {
   Banner,
@@ -86,7 +86,7 @@ function SessionCard() {
   );
 }
 
-/** Configuración de cobro del tenant: recargos, comisión, cupo por defecto, bloqueos. */
+/** Configuración operativa del tenant, agrupada por tema (las opciones sin efecto, al final). */
 function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
   const { t } = useT();
   const query = useOperationalSettings();
@@ -112,48 +112,50 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
     });
   };
 
-  return (
-    <Card>
-      <Stack gap="sm">
-        <Text variant="heading">{t("config.title")}</Text>
-        {!canEdit ? <Banner tone="info" title="Solo lectura: tu rol no puede modificar esta configuración." /> : null}
-        {error ? <Banner tone="danger" title={error} /> : null}
-        {saved ? <Banner tone="success" title={t("config.saved")} /> : null}
+  const toggle = <K extends BooleanSettingKey>(key: K) => ({
+    value: form[key],
+    onChange: (v: boolean) => set(key, v),
+    disabled: !canEdit,
+  });
+  const feedback = (
+    <>
+      {error ? <Banner tone="danger" title={error} /> : null}
+      {saved ? <Banner tone="success" title={t("config.saved")} /> : null}
+    </>
+  );
 
-        <Switch value={form.rechargesEnabled} onValueChange={(v) => set("rechargesEnabled", v)} label={t("config.recharges")} disabled={!canEdit} />
-        <Switch value={form.manualRoute} onValueChange={(v) => set("manualRoute", v)} label={t("config.manualRoute")} disabled={!canEdit} />
-        <Switch value={form.blockOverdueDatesForSales} onValueChange={(v) => set("blockOverdueDatesForSales", v)} label={t("config.blockOverdue")} disabled={!canEdit} />
-        <Text variant="caption" tone="muted">{t("config.blockOverdueHint")}</Text>
-        <Field label={t("config.backdateMaxDays")} hint={t("config.backdateMaxDaysHint")}>
+  return (
+    <Stack gap="md">
+      <Stack gap="xs">
+        <Text variant="heading">{t("config.title")}</Text>
+        <Text variant="caption" tone="muted">{t("config.intro")}</Text>
+      </Stack>
+      {!canEdit ? <Banner tone="info" title="Solo lectura: tu rol no puede modificar esta configuración." /> : null}
+      {feedback}
+
+      <SettingsSection title={t("config.section.credits")} description={t("config.section.creditsHint")}>
+        <ToggleSetting label={t("config.blockInterest")} hint={t("config.blockInterestHint")} {...toggle("blockInterestChange")} />
+        {form.blockInterestChange ? (
+          <ToggleSetting
+            label={t("config.adminCustomInterest")}
+            hint={t("config.adminCustomInterestHint")}
+            {...toggle("adminCustomInterestAllowed")}
+          />
+        ) : null}
+        <ToggleSetting label={t("config.allowAdminOverride")} hint={t("config.allowAdminOverrideHint")} {...toggle("allowAdminOverride")} />
+        <Field label={t("config.defaultLimit")} hint={t("config.defaultLimitHint")}>
           <Input
-            keyboardType="number-pad"
+            keyboardType="numeric"
             editable={canEdit}
-            value={String(form.backdateMaxDays)}
-            onChangeText={(text) =>
-              set("backdateMaxDays", Math.min(MAX_BACKDATE_DAYS, Math.max(0, Math.round(Number(text) || 0))))
-            }
+            value={String(minorToMajor(form.defaultCreditLimitMinor))}
+            onChangeText={(text) => set("defaultCreditLimitMinor", majorToMinor(Number(text) || 0))}
           />
         </Field>
-        <Switch value={form.blockInterestChange} onValueChange={(v) => set("blockInterestChange", v)} label={t("config.blockInterest")} disabled={!canEdit} />
-        <Text variant="caption" tone="muted">{t("config.blockInterestHint")}</Text>
-        {form.blockInterestChange ? (
-          <>
-            <Switch
-              value={form.adminCustomInterestAllowed}
-              onValueChange={(v) => set("adminCustomInterestAllowed", v)}
-              label={t("config.adminCustomInterest")}
-              disabled={!canEdit}
-            />
-            <Text variant="caption" tone="muted">{t("config.adminCustomInterestHint")}</Text>
-          </>
-        ) : null}
-        <Switch value={form.applyColorByOverdue} onValueChange={(v) => set("applyColorByOverdue", v)} label={t("config.colorByOverdue")} disabled={!canEdit} />
-        <Switch value={form.clientChoosesPlan} onValueChange={(v) => set("clientChoosesPlan", v)} label={t("config.clientChoosesPlan")} disabled={!canEdit} />
-        <Switch value={form.allowAdminOverride} onValueChange={(v) => set("allowAdminOverride", v)} label={t("config.allowAdminOverride")} disabled={!canEdit} />
-        <Switch value={form.autoConfirmSettlement} onValueChange={(v) => set("autoConfirmSettlement", v)} label={t("config.autoConfirmSettlement")} disabled={!canEdit} />
-        <Text variant="caption" tone="muted">{t("config.autoConfirmSettlementHint")}</Text>
+      </SettingsSection>
 
-        <Field label={t("config.planOfferTtl")}>
+      <SettingsSection title={t("config.section.chatOffer")} description={t("config.section.chatOfferHint")}>
+        <ToggleSetting label={t("config.clientChoosesPlan")} hint={t("config.clientChoosesPlanHint")} {...toggle("clientChoosesPlan")} />
+        <Field label={t("config.planOfferTtl")} hint={t("config.planOfferTtlHint")}>
           <Input
             keyboardType="numeric"
             editable={canEdit}
@@ -161,7 +163,32 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
             onChangeText={(text) => set("planOfferTtlHours", Math.max(1, Math.round(Number(text) || 0)))}
           />
         </Field>
-        <Field label={t("config.visitThreshold")}>
+      </SettingsSection>
+
+      <SettingsSection title={t("config.section.payments")} description={t("config.section.paymentsHint")}>
+        <ToggleSetting label={t("config.autoConfirmSettlement")} hint={t("config.autoConfirmSettlementHint")} {...toggle("autoConfirmSettlement")} />
+        <ToggleSetting label={t("config.relaxedPaymentDates")} hint={t("config.relaxedPaymentDatesHint")} {...toggle("relaxedPaymentDates")} />
+        {form.relaxedPaymentDates ? (
+          <Banner tone="warning" title={t("config.relaxedPaymentDatesActive")} />
+        ) : (
+          <>
+            <ToggleSetting label={t("config.blockOverdue")} hint={t("config.blockOverdueHint")} {...toggle("blockOverdueDatesForSales")} />
+            <Field label={t("config.backdateMaxDays")} hint={t("config.backdateMaxDaysHint")}>
+              <Input
+                keyboardType="number-pad"
+                editable={canEdit}
+                value={String(form.backdateMaxDays)}
+                onChangeText={(text) =>
+                  set("backdateMaxDays", Math.min(MAX_BACKDATE_DAYS, Math.max(0, Math.round(Number(text) || 0))))
+                }
+              />
+            </Field>
+          </>
+        )}
+      </SettingsSection>
+
+      <SettingsSection title={t("config.section.field")} description={t("config.section.fieldHint")}>
+        <Field label={t("config.visitThreshold")} hint={t("config.visitThresholdHint")}>
           <Input
             keyboardType="numeric"
             editable={canEdit}
@@ -169,8 +196,7 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
             onChangeText={(text) => set("visitOverdueThreshold", Math.max(1, Math.round(Number(text) || 0)))}
           />
         </Field>
-        <Text variant="caption" tone="muted">{t("config.visitThresholdHint")}</Text>
-        <Field label={t("config.remittanceDeadline")}>
+        <Field label={t("config.remittanceDeadline")} hint={t("config.remittanceDeadlineHint")}>
           <Input
             keyboardType="numeric"
             editable={canEdit}
@@ -180,9 +206,10 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
             }
           />
         </Field>
-        <Text variant="caption" tone="muted">{t("config.remittanceDeadlineHint")}</Text>
+      </SettingsSection>
 
-        {/* Liquidación por períodos (el día de inicio se valida contra la frecuencia al guardar). */}
+      {/* Liquidación por períodos (el día de inicio se valida contra la frecuencia al guardar). */}
+      <SettingsSection title={t("config.section.settlement")} description={t("config.section.settlementHint")}>
         <Field label={t("config.settlement.frequency")}>
           <Select
             value={form.settlementFrequency}
@@ -217,23 +244,14 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
             />
           </Row>
         </Field>
-        <Switch
-          value={form.settlementAutoClose}
-          onValueChange={(v) => set("settlementAutoClose", v)}
-          label={t("config.settlement.autoClose")}
-          disabled={!canEdit}
-        />
-        <Text variant="caption" tone="muted">{t("config.settlement.autoCloseHint")}</Text>
-        <Switch
-          value={form.commissionsEnabled}
-          onValueChange={(v) => set("commissionsEnabled", v)}
-          label={t("config.commissionsEnabled")}
-          disabled={!canEdit}
-        />
-        <Text variant="caption" tone="muted">{t("config.commissionsEnabledHint")}</Text>
+        <ToggleSetting label={t("config.settlement.autoClose")} hint={t("config.settlement.autoCloseHint")} {...toggle("settlementAutoClose")} />
+      </SettingsSection>
+
+      <SettingsSection title={t("config.section.commissions")} description={t("config.section.commissionsHint")}>
+        <ToggleSetting label={t("config.commissionsEnabled")} hint={t("config.commissionsEnabledHint")} {...toggle("commissionsEnabled")} />
         {form.commissionsEnabled ? (
           <>
-            <Field label={t("config.commissionCap")}>
+            <Field label={t("config.commissionCap")} hint={t("config.commissionCapHint")}>
               <Input
                 keyboardType="numeric"
                 editable={canEdit}
@@ -241,7 +259,7 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
                 onChangeText={(text) => set("commissionMaxPctBaseThousand", percentToPerMille(text))}
               />
             </Field>
-            <Field label={t("config.commission")}>
+            <Field label={t("config.commission")} hint={t("config.commissionDefaultHint")}>
               <Input
                 keyboardType="numeric"
                 editable={canEdit}
@@ -249,29 +267,72 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
                 onChangeText={(text) => set("commissionPctBaseThousand", percentToPerMille(text))}
               />
             </Field>
-            <Field label={t("config.commissionBase")}>
+            <Field label={t("config.commissionBase")} hint={t("config.commissionBaseHint")}>
               <Select
                 value={form.commissionBase}
                 options={COMMISSION_BASES.map((b) => ({ value: b, label: t(`commission.base.${b}`) }))}
                 onChange={(v) => set("commissionBase", v)}
               />
             </Field>
-            <Text variant="caption" tone="muted">{t("config.commissionHint")}</Text>
           </>
         ) : null}
-        <Field label={t("config.defaultLimit")}>
-          <Input
-            keyboardType="numeric"
-            editable={canEdit}
-            value={String(minorToMajor(form.defaultCreditLimitMinor))}
-            onChangeText={(text) => set("defaultCreditLimitMinor", majorToMinor(Number(text) || 0))}
-          />
-        </Field>
+      </SettingsSection>
 
-        {canEdit ? (
-          <Button label={t("common.save")} loading={update.isPending} block onPress={save} />
-        ) : null}
+      {/* Opciones heredadas del sistema anterior que todavía no hacen nada: al final, para decidir. */}
+      <SettingsSection title={t("config.section.pending")} description={t("config.section.pendingHint")}>
+        <ToggleSetting label={t("config.recharges")} hint={t("config.rechargesHint")} {...toggle("rechargesEnabled")} />
+        <ToggleSetting label={t("config.manualRoute")} hint={t("config.manualRouteHint")} {...toggle("manualRoute")} />
+        <ToggleSetting label={t("config.colorByOverdue")} hint={t("config.colorByOverdueHint")} {...toggle("applyColorByOverdue")} />
+      </SettingsSection>
+
+      {feedback}
+      {canEdit ? <Button label={t("common.save")} loading={update.isPending} block onPress={save} /> : null}
+    </Stack>
+  );
+}
+
+/** Claves booleanas de los ajustes (las que se muestran como interruptor). */
+type BooleanSettingKey = {
+  [K in keyof OperationalSettings]: OperationalSettings[K] extends boolean ? K : never;
+}[keyof OperationalSettings];
+
+/** Grupo de ajustes de un mismo tema: título, para qué sirve y sus opciones. */
+function SettingsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return (
+    <Card>
+      <Stack gap="sm">
+        <Stack gap="xs">
+          <Text variant="heading">{title}</Text>
+          <Text variant="caption" tone="muted">
+            {description}
+          </Text>
+        </Stack>
+        {children}
       </Stack>
     </Card>
+  );
+}
+
+/** Interruptor con una ayuda breve debajo que explica qué hace. */
+function ToggleSetting({
+  label,
+  hint,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  disabled: boolean;
+}) {
+  return (
+    <Stack gap="xs">
+      <Switch value={value} onValueChange={onChange} label={label} disabled={disabled} />
+      <Text variant="caption" tone="muted">
+        {hint}
+      </Text>
+    </Stack>
   );
 }

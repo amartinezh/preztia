@@ -10,9 +10,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { GrantCreditHandler } from '@preztiaos/application';
+import {
+  GrantCreditHandler,
+  RegisterMigratedCreditHandler,
+} from '@preztiaos/application';
 import {
   grantCreditInput,
+  registerMigratedCreditInput,
   listAccountsQuery,
   paginationQuery,
 } from '@preztiaos/contracts';
@@ -20,6 +24,8 @@ import { CreditDrizzleRepository } from './credit.repository';
 import { CreditQueryRepository } from './credit-query.repository';
 import { AccountsQueryRepository } from './accounts-query.repository';
 import { BorrowerPolicyRepository } from './borrower-policy.repository';
+import { MigratedCreditRepository } from './migrated-credit.repository';
+import { requireAdmin } from '../auth/require-admin';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireRole } from '../auth/require-role';
@@ -50,6 +56,10 @@ export class CreditController {
       settings: new TenantConfigRepository(),
       plans: new PaymentPlanRepository(),
     },
+  );
+  // Carga de créditos del sistema anterior: sin cajas, sin cupo ni bloqueo de interés (solo ADMIN).
+  private readonly migrateHandler = new RegisterMigratedCreditHandler(
+    new MigratedCreditRepository(),
   );
   private readonly queries = new CreditQueryRepository();
   private readonly accounts = new AccountsQueryRepository();
@@ -90,6 +100,33 @@ export class CreditController {
       currency: await resolveTenantCurrency(tenant),
       grantedBy: reviewer.userId,
       grantedByRole: reviewer.role,
+    });
+  }
+
+  @Post('credits/migrated')
+  @Idempotent()
+  async registerMigrated(
+    @Body() body: unknown,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    // Cargar deuda heredada con condiciones libres y abonos pasados es una decisión del ADMIN.
+    const admin = requireAdmin(authorization);
+    const dto = registerMigratedCreditInput.parse(body);
+    return this.migrateHandler.execute({
+      tenantId: tenant,
+      borrowerId: dto.borrowerId,
+      zoneId: dto.zoneId,
+      principalMinor: dto.principalMinor,
+      interestPct: dto.interestPct,
+      installmentsCount: dto.installmentsCount,
+      frequency: dto.frequency,
+      currency: await resolveTenantCurrency(tenant),
+      startDate: dto.startDate,
+      legacyReference: dto.legacyReference ?? null,
+      payments: dto.payments,
+      migratedBy: admin.userId,
     });
   }
 

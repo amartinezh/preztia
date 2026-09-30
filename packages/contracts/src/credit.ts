@@ -53,6 +53,34 @@ export const grantCreditInput = z.object({
 });
 export type GrantCreditInput = z.infer<typeof grantCreditInput>;
 
+// CARGA DE UN CRÉDITO MIGRADO del sistema anterior (solo ADMIN): deuda que ya existe, con fecha de
+// inicio pasada y sus abonos históricos. No sale dinero de ninguna caja ni entran hoy los abonos.
+export const historicalPaymentInput = z.object({
+  paidOn: z.string().date(),
+  amountMinor: z.number().int().positive(),
+});
+export const registerMigratedCreditInput = z.object({
+  borrowerId: z.string().uuid(),
+  zoneId: z.string().uuid(),
+  principalMinor: z.number().int().positive(),
+  interestPct: z.number().int().min(0).max(1000),
+  installmentsCount: z.number().int().min(1).max(365),
+  frequency: planFrequency,
+  startDate: z.string().date(),
+  // Identificador en el sistema anterior (opcional): evita cargar dos veces el mismo crédito.
+  legacyReference: z.string().trim().min(1).max(80).optional(),
+  payments: z.array(historicalPaymentInput).max(500),
+});
+export type RegisterMigratedCreditInput = z.infer<typeof registerMigratedCreditInput>;
+
+export const registerMigratedCreditOutput = z.object({
+  id: z.string().uuid(),
+  installments: z.number().int(),
+  paidMinor: z.number().int(),
+  balanceMinor: z.number().int(),
+  settled: z.boolean(),
+});
+
 export const grantCreditOutput = z.object({
   id: z.string().uuid(),
   installments: z.number().int(),
@@ -68,6 +96,14 @@ export const creditContract = c.router({
     query: paginationQuery,
     responses: { 200: listCreditsOutput },
     summary: "Lista paginada de créditos dentro del alcance del usuario",
+  },
+  registerMigratedCredit: {
+    method: "POST",
+    path: "/credits/migrated",
+    headers: z.object({ "x-tenant-id": z.string().uuid() }),
+    body: registerMigratedCreditInput,
+    responses: { 201: registerMigratedCreditOutput },
+    summary: "Carga un crédito del sistema anterior con sus abonos históricos, sin mover cajas (ADMIN)",
   },
   grantCredit: {
     method: "POST",

@@ -42,6 +42,7 @@ export default function AppLayout() {
         <Stack.Screen name="zones" options={detail(t("zones.tab"), "/settings?tab=zones" as Href)} />
         <Stack.Screen name="users" options={detail(t("users.tab"), "/settings?tab=users" as Href)} />
         <Stack.Screen name="credit/new" options={{ title: t("credit.new.title"), presentation: "modal" }} />
+        <Stack.Screen name="credit/migrate" options={{ title: t("migrate.title"), presentation: "modal" }} />
         <Stack.Screen name="credit/[id]" options={detail(t("credit.list.title"), "/cartera" as Href)} />
         <Stack.Screen name="payment/[creditId]" options={{ title: t("payments.register"), presentation: "modal" }} />
         <Stack.Screen name="collectors/[id]" options={detail(t("collectors.assign.title"), "/cuentas?tab=cobradores" as Href)} />

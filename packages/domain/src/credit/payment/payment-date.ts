@@ -17,8 +17,13 @@ import type { Role } from "../../iam/role";
 // - FECHA MANUAL (`paidOn`): alguien elige el día. Nunca el cobrador; el coordinador solo con el
 //   bloqueo apagado; el ADMIN siempre. Fuera de la ventana se rechaza (409) diciendo por qué.
 //
-// Invariantes (probadas): la fecha del pago nunca es futura, nunca es anterior al último período
-// sellado y nunca es más antigua que `maxDaysBack` días de negocio del tenant.
+// MODO FLEXIBLE (`relaxed`): el tenant prioriza recibir el dinero sobre controlar la fecha. Se
+// ignoran el límite de días y el período sellado, y el coordinador también puede elegir la fecha
+// (el cobrador sigue usando la hora de captura). Solo queda una sensatez: nunca una fecha futura.
+// Todo sigue auditado; el libro de cajas sigue fechándose al registrar.
+//
+// Invariantes (probadas): la fecha del pago nunca es futura; sin modo flexible, además, nunca es
+// anterior al último período sellado ni más antigua que `maxDaysBack` días de negocio del tenant.
 
 /** Límite superior de días hacia atrás configurables (un mes). */
 export const MAX_BACKDATE_DAYS = 30;
@@ -31,6 +36,8 @@ export interface BackdatePolicy {
   readonly locked: boolean;
   /** Días de negocio hacia atrás permitidos (0 = solo hoy). */
   readonly maxDaysBack: number;
+  /** Modo flexible: sin límite de días ni de período sellado; el coordinador también elige. */
+  readonly relaxed: boolean;
 }
 
 /** Fecha pedida para el pago (ausente = ahora). */
@@ -61,7 +68,7 @@ export interface PaymentDateContext {
 /** ¿Este rol puede elegir a mano la fecha de un pago? */
 export function canChoosePaymentDate(policy: BackdatePolicy, actorRole: Role): boolean {
   if (actorRole === "ADMIN") return true;
-  return actorRole === "COORDINATOR" && !policy.locked;
+  return actorRole === "COORDINATOR" && (policy.relaxed || !policy.locked);
 }
 
 /** Resuelve la fecha del pago según la forma pedida y las reglas del tenant. */
@@ -111,6 +118,7 @@ function resolveManualDate(paidOn: string, ctx: PaymentDateContext): ResolvedPay
 /** Qué regla viola una fecha de pago (null = ninguna). */
 function violationOf(paidAt: Date, ctx: PaymentDateContext): PaymentDateAdjustment | null {
   if (paidAt > ctx.now) return "FUTURE";
+  if (ctx.policy.relaxed) return null;
   const oldestAllowed = addDays(businessDateOf(ctx.now, ctx.timeZone), -Math.max(0, ctx.policy.maxDaysBack));
   if (businessDateOf(paidAt, ctx.timeZone) < oldestAllowed) return "TOO_OLD";
   if (ctx.sealedUntil && paidAt < ctx.sealedUntil) return "SEALED";
