@@ -10,7 +10,10 @@ export const operationalSettings = z.object({
   rechargesEnabled: z.boolean(),
   manualRoute: z.boolean(),
   blockOverdueDatesForSales: z.boolean(),
+  // Antifraude del interés: con el bloqueo, el interés de un crédito sale de un plan activo; la
+  // excepción deja al ADMIN usar "Personalizado".
   blockInterestChange: z.boolean(),
+  adminCustomInterestAllowed: z.boolean(),
   // Comisión del cobrador (base-mil): valor por defecto para zonas sin configuración propia, su base
   // y el tope que fija el ADMIN (ninguna zona lo supera; 0 = nadie cobra comisión). El dominio valida
   // que el valor por defecto no supere el tope.

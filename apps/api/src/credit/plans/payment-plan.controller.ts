@@ -26,6 +26,7 @@ import {
 import { JwtGuard } from '../../auth/jwt.guard';
 import { requireTenant } from '../../auth/require-tenant';
 import { requireRole } from '../../auth/require-role';
+import { requireReviewer } from '../../auth/require-reviewer';
 import { PaymentPlanRepository } from './payment-plan.repository';
 
 const uuid = z.string().uuid();
@@ -51,6 +52,18 @@ export class PaymentPlanController {
     this.updateHandler = new UpdatePaymentPlanHandler(this.plans);
     this.setDefaultHandler = new SetDefaultPaymentPlanHandler(this.plans);
     this.deleteHandler = new DeletePaymentPlanHandler(this.plans);
+  }
+
+  // Quien otorga (ADMIN/COORDINATOR) necesita ver los planes activos: con el interés bloqueado son
+  // la única fuente del interés. Solo lectura; administrarlos sigue siendo del ADMIN.
+  @Get('payment-plans/active')
+  async listActive(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireReviewer(authorization);
+    return { items: await this.plans.listActive(tenant) };
   }
 
   @Get('payment-plans')

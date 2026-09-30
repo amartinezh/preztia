@@ -121,6 +121,18 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
         <Switch value={form.manualRoute} onValueChange={(v) => set("manualRoute", v)} label={t("config.manualRoute")} disabled={!canEdit} />
         <Switch value={form.blockOverdueDatesForSales} onValueChange={(v) => set("blockOverdueDatesForSales", v)} label={t("config.blockOverdue")} disabled={!canEdit} />
         <Switch value={form.blockInterestChange} onValueChange={(v) => set("blockInterestChange", v)} label={t("config.blockInterest")} disabled={!canEdit} />
+        <Text variant="caption" tone="muted">{t("config.blockInterestHint")}</Text>
+        {form.blockInterestChange ? (
+          <>
+            <Switch
+              value={form.adminCustomInterestAllowed}
+              onValueChange={(v) => set("adminCustomInterestAllowed", v)}
+              label={t("config.adminCustomInterest")}
+              disabled={!canEdit}
+            />
+            <Text variant="caption" tone="muted">{t("config.adminCustomInterestHint")}</Text>
+          </>
+        ) : null}
         <Switch value={form.applyColorByOverdue} onValueChange={(v) => set("applyColorByOverdue", v)} label={t("config.colorByOverdue")} disabled={!canEdit} />
         <Switch value={form.clientChoosesPlan} onValueChange={(v) => set("clientChoosesPlan", v)} label={t("config.clientChoosesPlan")} disabled={!canEdit} />
         <Switch value={form.allowAdminOverride} onValueChange={(v) => set("allowAdminOverride", v)} label={t("config.allowAdminOverride")} disabled={!canEdit} />

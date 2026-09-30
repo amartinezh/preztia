@@ -6,8 +6,11 @@ import {
   buildSchedule,
   scheduleDueDates,
   type Installment,
+  type Role,
   type ScheduleFrequency,
 } from "@preztiaos/domain";
+
+import { assertCreditInterestAllowed, type InterestGuardPorts } from "./interest-guard";
 
 /** Cuota del cronograma lista para persistir (plan + fecha de vencimiento). */
 export interface ScheduledInstallment extends Installment {
@@ -73,14 +76,26 @@ export interface GrantCreditCommand {
   fundingCashBoxId: string;
   /** app_user que otorga el crédito. */
   grantedBy: string;
+  /** Rol de quien otorga (del JWT): decide si puede usar un interés personalizado. */
+  grantedByRole: Role;
 }
 
 export class GrantCreditHandler {
   constructor(
     private readonly credits: CreditRepository,
     private readonly borrowerPolicy?: BorrowerCreditPolicyPort,
+    /** Bloqueo del interés (antifraude): sin él, el interés es libre (back-compat). */
+    private readonly interestGuard?: InterestGuardPorts,
   ) {}
   async execute(cmd: GrantCreditCommand): Promise<{ id: string; installments: number }> {
+    if (this.interestGuard) {
+      await assertCreditInterestAllowed(this.interestGuard, {
+        tenantId: cmd.tenantId,
+        actorRole: cmd.grantedByRole,
+        interestPct: cmd.interestPct,
+        paymentPlanId: cmd.paymentPlanId ?? null,
+      });
+    }
     await this.assertWithinCreditPolicy(cmd);
     const principal = Money.of(cmd.principalMinor, cmd.currency);
     const schedule = buildSchedule(principal, cmd.interestPct, cmd.installmentsCount);

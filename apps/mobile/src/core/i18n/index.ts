@@ -33,6 +33,13 @@ const es = {
   "credit.new.zone.required": "Selecciona una zona",
   "credit.new.plan": "Plan",
   "credit.new.plan.custom": "Personalizado (sin plan)",
+  "credit.new.interestLocked":
+    "Interés bloqueado: sale del plan de pago elegido y no se puede cambiar.",
+  "credit.new.interestLocked.admin":
+    "Interés bloqueado: sale del plan de pago elegido. Como administrador puedes usar \"Personalizado\".",
+  "credit.new.interest.fromPlan": "Definido por el plan (bloqueado)",
+  "credit.new.noActivePlans":
+    "No hay planes de pago activos y el interés está bloqueado. Pide al administrador que active un plan.",
   "credit.new.plan.placeholder": "Selecciona un plan",
   "credit.new.plan.hint": "Un plan pre-llena interés, cuotas y periodicidad. Puedes ajustarlos.",
   "credit.new.frequency": "Periodicidad",
@@ -862,6 +869,11 @@ const es = {
   "config.manualRoute": "Ruta manual",
   "config.blockOverdue": "Bloquear fechas atrasadas para ventas",
   "config.blockInterest": "Bloquear cambio de interés",
+  "config.blockInterestHint":
+    "Encendido: el interés de cada crédito sale de un plan de pago activo y no se puede modificar; así nadie inventa condiciones. Los planes solo los crea el administrador.",
+  "config.adminCustomInterest": "Permitir al administrador un interés personalizado",
+  "config.adminCustomInterestHint":
+    "Si lo apagas, ni el administrador puede otorgar fuera de los planes: todo crédito sale de un plan activo.",
   "config.colorByOverdue": "Aplicar color por atraso",
   "config.commission": "Comisión por defecto (%)",
   "config.commissionBase": "Base por defecto de la comisión",
@@ -1221,6 +1233,8 @@ const es = {
   "errors.remittance.inProgress": "Hay una rendición por recibir: recíbela antes de cerrar deuda.",
   "errors.remittance.debtExceeded": "El monto supera la deuda arrastrada del cobrador.",
   "errors.expenses.boxNotAllowed": "No se puede pagar un gasto desde la caja de ruta de otro cobrador.",
+  "errors.credit.interestLocked": "El interés está bloqueado: debe salir de un plan de pago activo.",
+  "errors.credit.planInactive": "El plan elegido ya no está activo. Elige otro.",
   "errors.commission.aboveCap": "La comisión supera el tope fijado por el administrador.",
   "errors.commission.boxNotAllowed": "No se puede pagar una comisión desde la caja de ruta de otro cobrador.",
   "errors.commission.alreadyPaid": "Esta comisión ya fue pagada. Recarga para ver el pago.",

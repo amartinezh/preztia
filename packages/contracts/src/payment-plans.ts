@@ -49,6 +49,16 @@ const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 const idParam = z.object({ id: z.string().uuid() });
 
 export const paymentPlansContract = c.router({
+  // Catálogo de planes ACTIVOS para quien otorga (ADMIN/COORDINATOR): con el interés bloqueado es la
+  // única fuente del interés de un crédito. Es un catálogo de configuración acotado (sin paginar,
+  // como el árbol de zonas); administrar planes sigue siendo solo del ADMIN.
+  listActivePlans: {
+    method: "GET",
+    path: "/payment-plans/active",
+    headers: tenantHeaders,
+    responses: { 200: z.object({ items: z.array(paymentPlanView) }) },
+    summary: "Planes de pago activos con los que se puede otorgar (ADMIN/COORDINATOR)",
+  },
   list: {
     method: "GET",
     path: "/payment-plans",

@@ -6,8 +6,11 @@ import {
   buildSchedule,
   nextDecisionStatus,
   scheduleDueDates,
+  type Role,
   type ScheduleFrequency,
 } from "@preztiaos/domain";
+
+import { assertCreditInterestAllowed } from "../interest-guard";
 
 import {
   assertBorrowerCanReceiveCredit,
@@ -28,6 +31,8 @@ export interface ApproveApplicationReviewCommand {
   readonly applicationId: string;
   /** Identidad del coordinador que decide (del JWT): queda en el audit log. */
   readonly decidedBy: string;
+  /** Rol de quien decide (del JWT): decide si puede usar un interés personalizado. */
+  readonly decidedByRole: Role;
   readonly reason: string;
   readonly borrowerId: string;
   readonly zoneId: string;
@@ -36,6 +41,8 @@ export interface ApproveApplicationReviewCommand {
   readonly installmentsCount: number;
   readonly currency: string;
   readonly frequency?: ScheduleFrequency;
+  /** Plan elegido por el coordinador cuando no hubo oferta negociada (fuente del interés). */
+  readonly paymentPlanId?: string;
   /** Caja/cuenta de la que sale el dinero del préstamo (asiento DISBURSEMENT atómico). */
   readonly fundingCashBoxId: string;
   /** Teléfono del deudor; por defecto el del solicitante del expediente. */
@@ -55,6 +62,8 @@ interface EffectiveTerms {
   readonly installmentsCount: number;
   readonly frequency: ScheduleFrequency;
   readonly paymentPlanId: string | null;
+  /** Los escribió una persona (sin plan negociado): pasan por la guarda del interés. */
+  readonly typedByReviewer: boolean;
 }
 
 /**
@@ -64,6 +73,8 @@ interface EffectiveTerms {
  *    administrador (`allowAdminOverride`); el override queda auditado;
  *  - toma los términos del PLAN negociado (no del comando) cuando hubo un plan ofertado y aceptado,
  *    garantizando que el crédito == lo que el cliente aceptó, y graba el `payment_plan_id`.
+ * Con configuración y planes, los términos escritos a mano (sin plan negociado) respetan el bloqueo
+ * del interés: solo el de un plan activo, salvo la excepción del ADMIN (`assertCreditInterestAllowed`).
  * Con el puerto de política, respeta el cupo y el bloqueo del cliente igual que el otorgamiento
  * directo, evaluados sobre el monto EFECTIVO (el del plan negociado, no el del comando).
  * Sin esos puertos conserva el comportamiento previo (términos del comando; sin guarda). La
@@ -99,6 +110,17 @@ export class ApproveApplicationReviewHandler {
     const override = await this.assertAcceptanceOrOverride(cmd.tenantId, accepted);
 
     const terms = await this.resolveTerms(cmd, snapshot);
+    if (terms.typedByReviewer && this.plans && this.settings) {
+      await assertCreditInterestAllowed(
+        { plans: this.plans, settings: this.settings },
+        {
+          tenantId: cmd.tenantId,
+          actorRole: cmd.decidedByRole,
+          interestPct: terms.interestPct,
+          paymentPlanId: terms.paymentPlanId,
+        },
+      );
+    }
     if (this.borrowerPolicy) {
       await assertBorrowerCanReceiveCredit(this.borrowerPolicy, {
         tenantId: cmd.tenantId,
@@ -197,6 +219,7 @@ export class ApproveApplicationReviewHandler {
           installmentsCount: plan.installmentsCount,
           frequency: plan.frequency,
           paymentPlanId: plan.id,
+          typedByReviewer: false,
         };
       }
     }
@@ -206,7 +229,8 @@ export class ApproveApplicationReviewHandler {
       interestPct: cmd.interestPct,
       installmentsCount: cmd.installmentsCount,
       frequency: cmd.frequency ?? "DAILY",
-      paymentPlanId: null,
+      paymentPlanId: cmd.paymentPlanId ?? null,
+      typedByReviewer: true,
     };
   }
 }

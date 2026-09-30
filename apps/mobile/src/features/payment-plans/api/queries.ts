@@ -11,7 +11,16 @@ import { api, tenantHeader, unwrap } from "@/core/api/client";
 export const paymentPlanKeys = {
   all: ["payment-plans"] as const,
   list: () => [...paymentPlanKeys.all, "list"] as const,
+  active: () => [...paymentPlanKeys.all, "active"] as const,
 };
+
+/** Planes ACTIVOS con los que se puede otorgar (ADMIN y coordinador). */
+export function useActivePaymentPlans() {
+  return useQuery({
+    queryKey: paymentPlanKeys.active(),
+    queryFn: async () => unwrap(await api.listActivePlans({ headers: tenantHeader() })),
+  });
+}
 
 export function usePaymentPlans() {
   return useQuery({

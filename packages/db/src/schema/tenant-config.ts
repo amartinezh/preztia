@@ -10,7 +10,8 @@ export interface OperationalSettings {
   readonly rechargesEnabled: boolean; // Activar Recargos
   readonly manualRoute: boolean; // Ruta Manual
   readonly blockOverdueDatesForSales: boolean; // Bloquear Fechas Atrasadas Para Ventas
-  readonly blockInterestChange: boolean; // Bloquear Cambio De Interés
+  readonly blockInterestChange: boolean; // Bloquear Cambio De Interés (el interés sale de un plan activo)
+  readonly adminCustomInterestAllowed: boolean; // Con el bloqueo, el ADMIN puede usar "Personalizado"
   readonly commissionPctBaseThousand: number; // Comisión por defecto del cobrador (base-mil)
   readonly commissionsEnabled: boolean; // ¿Se pagan comisiones a los cobradores? (default OFF)
   readonly commissionBase: "COLLECTED" | "REMITTED" | "PRINCIPAL_RECOVERED"; // Base por defecto de la comisión
@@ -51,6 +52,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   manualRoute: false,
   blockOverdueDatesForSales: true,
   blockInterestChange: true,
+  adminCustomInterestAllowed: true,
   commissionPctBaseThousand: 0,
   commissionsEnabled: false,
   commissionBase: "COLLECTED",

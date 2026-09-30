@@ -13,6 +13,7 @@ export * from "./iam/zone-path";
 export * from "./iam/tenant";
 export * from "./credit/schedule";
 export * from "./credit/plan/payment-plan";
+export * from "./credit/plan/interest-policy";
 export * from "./credit/plan/plan-offer";
 export * from "./credit/plan/plan-reply";
 export * from "./credit/application/required-document";

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { Role } from "@preztiaos/domain";
 import {
   ConflictError,
   NotFoundError,
@@ -58,6 +59,7 @@ const approveCmd = {
   tenantId: "t-1",
   applicationId: "app-1",
   decidedBy: "user-1",
+  decidedByRole: "ADMIN" as Role,
   reason: "Documentos verificados manualmente",
   borrowerId: "11111111-1111-1111-1111-111111111111",
   zoneId: "22222222-2222-2222-2222-222222222222",
@@ -277,6 +279,51 @@ describe("ApproveApplicationReviewHandler — cupo y bloqueo del cliente", () =>
       NotFoundError,
     );
     expect(store.approvals).toHaveLength(0);
+  });
+});
+
+// ── Bloqueo del interés: los términos escritos a mano solo con el interés de un plan activo ──────
+describe("ApproveApplicationReviewHandler — bloqueo del interés", () => {
+  const lockedSettings = (adminCustomInterestAllowed: boolean): TenantSettingsStore => ({
+    get: async () =>
+      ({ allowAdminOverride: true, blockInterestChange: true, adminCustomInterestAllowed } as OperationalSettings),
+    save: async () => {},
+  });
+  const plans = (plan: PaymentPlan | null): PaymentPlanStore => ({ findById: async () => plan }) as unknown as PaymentPlanStore;
+  const approve = (store: FakeStore, cmd: Partial<typeof approveCmd> & { paymentPlanId?: string; decidedByRole?: "ADMIN" | "COORDINATOR" }, adminCustom = true) =>
+    new ApproveApplicationReviewHandler(store, plans({ ...PLAN_30, isActive: true }), lockedSettings(adminCustom)).execute({
+      ...approveCmd,
+      ...cmd,
+    });
+
+  it("sin oferta, el coordinador aprueba con un plan activo y su interés exacto; queda el vínculo al plan", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW"));
+    await approve(store, { decidedByRole: "COORDINATOR", paymentPlanId: "plan-30", interestPct: 100 });
+    expect(store.approvals[0]!.credit).toMatchObject({ interestPct: 100, paymentPlanId: "plan-30" });
+  });
+
+  it("sin oferta, el coordinador no puede escribir otro interés ni usar 'Personalizado' (409, sin crédito)", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW"));
+    await expect(approve(store, { decidedByRole: "COORDINATOR", paymentPlanId: "plan-30", interestPct: 300 })).rejects.toMatchObject({
+      code: "INTEREST_LOCKED",
+    });
+    await expect(approve(store, { decidedByRole: "COORDINATOR" })).rejects.toMatchObject({ code: "INTEREST_LOCKED" });
+    expect(store.approvals).toHaveLength(0);
+  });
+
+  it("el ADMIN usa 'Personalizado' solo si la excepción está permitida", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW"));
+    await approve(store, { decidedByRole: "ADMIN", interestPct: 350 });
+    await expect(approve(store, { decidedByRole: "ADMIN", interestPct: 350 }, false)).rejects.toMatchObject({
+      code: "INTEREST_LOCKED",
+    });
+    expect(store.approvals).toHaveLength(1);
+  });
+
+  it("con plan negociado y aceptado por el cliente, el interés sale del plan: la guarda no aplica", async () => {
+    const store = new FakeStore(offerSnapshot("ACCEPTED"));
+    await approve(store, { decidedByRole: "COORDINATOR", interestPct: 999 });
+    expect(store.approvals[0]!.credit.interestPct).toBe(100);
   });
 });
 

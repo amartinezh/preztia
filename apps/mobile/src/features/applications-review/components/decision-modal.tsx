@@ -15,6 +15,7 @@ import {
   Input,
   Modal,
   Row,
+  Select,
   Stack,
   Text,
   majorToMinor,
@@ -24,6 +25,7 @@ import {
 import { useT } from "@/core/i18n";
 import { useFundingBoxes } from "@/features/cash/api/boxes-queries";
 import { FundingBoxPicker, isFundingInsufficient } from "@/features/cash/components/funding-box-picker";
+import { useInterestRules } from "@/features/credit/hooks/use-interest-rules";
 import { BorrowerPicker } from "./borrower-picker";
 
 // El dominio interpreta interestPct como base-mil (200 = 20%); la UI captura % y convierte.
@@ -32,6 +34,9 @@ const PERCENT_TO_BASE_THOUSAND = 10;
 // Longitud mínima del motivo (espejo de `approveApplicationInput.reason.min(3)` del contrato):
 // gatea el botón de aprobar/rechazar para que no se envíe una decisión sin justificación.
 const MIN_REASON_LENGTH = 3;
+
+// Valor centinela del selector de plan cuando los términos se escriben a mano (sin plan).
+const CUSTOM_PLAN = "CUSTOM";
 
 export type DecisionMode = "approve" | "reject" | null;
 
@@ -99,9 +104,44 @@ export function DecisionModal({
   const [reason, setReason] = useState("");
   const [fundingCashBoxId, setFundingCashBoxId] = useState<string | null>(null);
   const [errors, setErrors] = useState<ApproveErrors>({});
+  // Plan elegido cuando no hubo oferta negociada (`null` = aún no elige: cae al por defecto).
+  const [planChoice, setPlanChoice] = useState<string | null>(null);
+  const rules = useInterestRules();
 
   // Si hay un plan negociado, sus términos definen el crédito: no se piden a mano (se ocultan).
   const fromPlan = planTerms(planOffer);
+
+  // Sin plan negociado se elige un plan activo (o "Personalizado", si está permitido). Con el interés
+  // bloqueado, el del plan no se puede cambiar: el servidor rechaza cualquier diferencia (antifraude).
+  const planId = planChoice ?? rules.defaultPlan?.id ?? (rules.customAllowed ? CUSTOM_PLAN : (rules.activePlans[0]?.id ?? CUSTOM_PLAN));
+  const selectedPlan = rules.activePlans.find((p) => p.id === planId) ?? null;
+  const interestLocked = rules.locked && selectedPlan !== null;
+  const noPlanAvailable = !fromPlan && !rules.customAllowed && selectedPlan === null;
+  // Mientras no se elija ni edite nada, el plan por defecto pre-llena los términos.
+  const prefilled = planChoice === null && selectedPlan !== null;
+  const typedInterest = interestLocked || prefilled ? String(selectedPlan!.interestPct / 10) : interest;
+  const typedInstallments = prefilled ? String(selectedPlan!.installmentsCount) : installments;
+  // Editar un término fija la elección actual (deja de pre-llenarse desde el plan por defecto).
+  const editTerm = (setter: (v: string) => void) => (v: string) => {
+    if (planChoice === null && selectedPlan) {
+      setInterest(String(selectedPlan.interestPct / 10));
+      setInstallments(String(selectedPlan.installmentsCount));
+    }
+    setPlanChoice(planId);
+    setter(v);
+  };
+  const planOptions = [
+    ...rules.activePlans.map((p) => ({ value: p.id, label: p.name, hint: `${p.installmentsCount} cuotas · ${p.interestPct / 10}%` })),
+    ...(rules.customAllowed ? [{ value: CUSTOM_PLAN, label: t("credit.new.plan.custom") }] : []),
+  ];
+  const onChangePlan = (id: string) => {
+    setPlanChoice(id);
+    const plan = rules.activePlans.find((p) => p.id === id);
+    if (plan) {
+      setInterest(String(plan.interestPct / 10));
+      setInstallments(String(plan.installmentsCount));
+    }
+  };
 
   // Caja/cuenta de la que saldrá el dinero: solo las que la zona del crédito puede usar.
   const fundingBoxes = useFundingBoxes(zoneId);
@@ -119,6 +159,7 @@ export function DecisionModal({
     zoneId != null &&
     fundingCashBoxId != null &&
     !fundsInsufficient &&
+    !noPlanAvailable &&
     reasonValid;
 
   const submitApprove = () => {
@@ -127,8 +168,10 @@ export function DecisionModal({
       borrowerId: borrower.id,
       zoneId,
       principalMinor: fromPlan ? fromPlan.principalMinor : majorToMinor(Number(principal)),
-      interestPct: fromPlan ? fromPlan.interestPct : Number(interest) * PERCENT_TO_BASE_THOUSAND,
-      installmentsCount: fromPlan ? fromPlan.installmentsCount : Math.trunc(Number(installments)),
+      interestPct: fromPlan ? fromPlan.interestPct : Number(typedInterest) * PERCENT_TO_BASE_THOUSAND,
+      installmentsCount: fromPlan ? fromPlan.installmentsCount : Math.trunc(Number(typedInstallments)),
+      // Sin oferta negociada, el plan elegido es la fuente del interés y de la periodicidad.
+      ...(!fromPlan && selectedPlan ? { paymentPlanId: selectedPlan.id, frequency: selectedPlan.frequency } : {}),
       borrowerPhone: applicantPhone,
       reason: reason.trim(),
       fundingCashBoxId,
@@ -218,11 +261,37 @@ export function DecisionModal({
                   <Field label={t("credit.new.principal")} error={errors.principalMinor} hint="Monto en unidades mayores" required>
                     <Input keyboardType="numeric" value={principal} onChangeText={setPrincipal} invalid={!!errors.principalMinor} />
                   </Field>
-                  <Field label={t("credit.new.interest")} error={errors.interestPct} hint="20 = 20%" required>
-                    <Input keyboardType="numeric" value={interest} onChangeText={setInterest} invalid={!!errors.interestPct} />
+                  {rules.locked ? (
+                    <Banner
+                      tone="info"
+                      title={t(rules.customAllowed ? "credit.new.interestLocked.admin" : "credit.new.interestLocked")}
+                    />
+                  ) : null}
+                  {noPlanAvailable && !rules.loading ? <Banner tone="warning" title={t("credit.new.noActivePlans")} /> : null}
+                  <Field label={t("credit.new.plan")}>
+                    <Select value={planId} options={planOptions} onChange={onChangePlan} title={t("credit.new.plan")} />
+                  </Field>
+                  <Field
+                    label={t("credit.new.interest")}
+                    error={errors.interestPct}
+                    hint={interestLocked ? t("credit.new.interest.fromPlan") : "20 = 20%"}
+                    required
+                  >
+                    <Input
+                      keyboardType="numeric"
+                      editable={!interestLocked}
+                      value={typedInterest}
+                      onChangeText={editTerm(setInterest)}
+                      invalid={!!errors.interestPct}
+                    />
                   </Field>
                   <Field label={t("credit.new.installments")} error={errors.installmentsCount} required>
-                    <Input keyboardType="number-pad" value={installments} onChangeText={setInstallments} invalid={!!errors.installmentsCount} />
+                    <Input
+                      keyboardType="number-pad"
+                      value={typedInstallments}
+                      onChangeText={editTerm(setInstallments)}
+                      invalid={!!errors.installmentsCount}
+                    />
                   </Field>
                 </>
               )}

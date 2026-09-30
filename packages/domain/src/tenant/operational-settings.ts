@@ -11,6 +11,7 @@ import {
   type CommissionConfig,
   type ZoneCommissionSetting,
 } from "../cash/commission";
+import type { InterestPolicy } from "../credit/plan/interest-policy";
 
 // Ajustes operativos del tenant (configuración de cobro del legado). Tipo canónico + valores por
 // defecto + mezcla pura de un parche parcial. El esquema de BD refleja esta forma (mirror).
@@ -19,7 +20,10 @@ export interface OperationalSettings {
   readonly rechargesEnabled: boolean;
   readonly manualRoute: boolean;
   readonly blockOverdueDatesForSales: boolean;
+  /** "Bloquear cambio de interés": el interés de un crédito sale de un plan activo (ver `interest-policy`). */
   readonly blockInterestChange: boolean;
+  /** Con el bloqueo encendido, el ADMIN conserva la vía "Personalizado" (interés libre). */
+  readonly adminCustomInterestAllowed: boolean;
   /**
    * Comisión POR DEFECTO del cobrador en base-mil (200 = 20%), igual que el interés: aplica a las
    * zonas sin configuración propia (ni heredada). Ver `cash/commission.ts`.
@@ -97,6 +101,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   manualRoute: false,
   blockOverdueDatesForSales: true,
   blockInterestChange: true,
+  adminCustomInterestAllowed: true,
   commissionPctBaseThousand: 0,
   commissionsEnabled: false,
   commissionBase: "COLLECTED",
@@ -143,6 +148,11 @@ export function mergeOperationalSettings(
     merged.commissionMaxPctBaseThousand,
   );
   return merged;
+}
+
+/** Política antifraude del interés del tenant. */
+export function interestPolicyOf(s: OperationalSettings): InterestPolicy {
+  return { locked: s.blockInterestChange, adminCustomAllowed: s.adminCustomInterestAllowed };
 }
 
 /** Configuración de comisiones: la del tenant (ajustes) más lo configurado por zona. */

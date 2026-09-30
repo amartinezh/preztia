@@ -27,7 +27,7 @@ import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useBorrowersList, useCreateBorrower } from "@/features/borrowers/api/queries";
-import { usePaymentPlans } from "@/features/payment-plans/api/queries";
+import { useInterestRules } from "../hooks/use-interest-rules";
 import { useZonesList } from "@/features/zones/api/queries";
 import { useFundingBoxes } from "@/features/cash/api/boxes-queries";
 import { FundingBoxPicker, isFundingInsufficient } from "@/features/cash/components/funding-box-picker";
@@ -66,7 +66,7 @@ export function GrantCreditScreen() {
   const router = useRouter();
   const grant = useGrantCredit();
   const zones = useZonesList();
-  const plans = usePaymentPlans();
+  const rules = useInterestRules();
 
   const [borrower, setBorrower] = useState<SelectedBorrower | null>(null);
   const [zoneId, setZoneId] = useState("");
@@ -82,17 +82,22 @@ export function GrantCreditScreen() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const activePlans = (plans.data?.items ?? []).filter((p) => p.isActive);
+  const { activePlans, defaultPlan, customAllowed } = rules;
 
-  // Plan efectivo: el elegido por el usuario o, mientras no elija, el "por defecto" del tenant.
-  const defaultPlan = activePlans.find((p) => p.isDefault) ?? null;
-  const planId = planChoice ?? defaultPlan?.id ?? CUSTOM_PLAN;
+  // Plan efectivo: el elegido por el usuario o, mientras no elija, el "por defecto" del tenant (o el
+  // primero activo si "Personalizado" no está permitido).
+  const fallbackPlanId = defaultPlan?.id ?? (customAllowed ? CUSTOM_PLAN : (activePlans[0]?.id ?? CUSTOM_PLAN));
+  const planId = planChoice ?? fallbackPlanId;
   const selectedPlan = activePlans.find((p) => p.id === planId) ?? null;
+  // Con el interés bloqueado, el de un plan elegido no se puede cambiar (antifraude).
+  const interestLocked = rules.locked && selectedPlan !== null;
+  // Bloqueado y sin "Personalizado": sin planes activos no hay con qué otorgar.
+  const noPlanAvailable = !customAllowed && selectedPlan === null;
 
   // Los términos se derivan del plan y se sobrescriben en cuanto el usuario edita el campo. Así el
   // plan por defecto pre-llena sin un efecto (patrón "you might not need an effect").
-  const interest =
-    interestOverride ?? (selectedPlan ? String(toPercent(selectedPlan.interestPct)) : "");
+  const planInterest = selectedPlan ? String(toPercent(selectedPlan.interestPct)) : "";
+  const interest = interestLocked ? planInterest : (interestOverride ?? planInterest);
   const installments =
     installmentsOverride ?? (selectedPlan ? String(selectedPlan.installmentsCount) : "");
   const frequency = frequencyOverride ?? selectedPlan?.frequency ?? "DAILY";
@@ -112,7 +117,7 @@ export function GrantCreditScreen() {
       label: p.name,
       hint: `${p.installmentsCount} cuotas · ${FREQUENCY_SHORT[p.frequency]} · ${toPercent(p.interestPct)}%`,
     })),
-    { value: CUSTOM_PLAN, label: t("credit.new.plan.custom") },
+    ...(customAllowed ? [{ value: CUSTOM_PLAN, label: t("credit.new.plan.custom") }] : []),
   ];
 
   const zoneOptions: SelectOption<string>[] = (zones.data?.items ?? []).map((z) => ({
@@ -219,6 +224,14 @@ export function GrantCreditScreen() {
           />
         </Field>
 
+        {rules.locked ? (
+          <Banner
+            tone="info"
+            title={t(customAllowed ? "credit.new.interestLocked.admin" : "credit.new.interestLocked")}
+          />
+        ) : null}
+        {noPlanAvailable && !rules.loading ? <Banner tone="warning" title={t("credit.new.noActivePlans")} /> : null}
+
         <Field label={t("credit.new.plan")} hint={t("credit.new.plan.hint")}>
           <Select
             value={planId}
@@ -244,9 +257,15 @@ export function GrantCreditScreen() {
         </Field>
         {overLimit ? <Banner tone="warning" title={t("credit.new.borrower.overLimit")} /> : null}
 
-        <Field label={t("credit.new.interest")} error={errors.interestPct} hint="20 = 20%" required>
+        <Field
+          label={t("credit.new.interest")}
+          error={errors.interestPct}
+          hint={interestLocked ? t("credit.new.interest.fromPlan") : "20 = 20%"}
+          required
+        >
           <Input
             keyboardType="numeric"
+            editable={!interestLocked}
             value={interest}
             onChangeText={setInterestOverride}
             invalid={!!errors.interestPct}
@@ -288,7 +307,7 @@ export function GrantCreditScreen() {
         <Button
           label={t("credit.new.submit")}
           loading={grant.isPending}
-          disabled={blocked || fundsInsufficient}
+          disabled={blocked || fundsInsufficient || noPlanAvailable}
           block
           onPress={onSubmit}
         />

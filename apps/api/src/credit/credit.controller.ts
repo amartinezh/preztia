@@ -26,6 +26,8 @@ import { requireRole } from '../auth/require-role';
 import { requireReviewer } from '../auth/require-reviewer';
 import { Idempotent } from '../observability/idempotent.decorator';
 import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
+import { TenantConfigRepository } from '../tenant-config/tenant-config.repository';
+import { PaymentPlanRepository } from './plans/payment-plan.repository';
 
 const uuid = z.string().uuid();
 
@@ -39,10 +41,15 @@ const DATA_PLANE_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
 @Controller()
 @UseGuards(JwtGuard)
 export class CreditController {
-  // El otorgamiento respeta el cupo/bloqueo del cliente (puerto de política sobre `borrower`).
+  // El otorgamiento respeta el cupo/bloqueo del cliente (puerto de política sobre `borrower`) y el
+  // bloqueo antifraude del interés (solo el de un plan activo, salvo la excepción del ADMIN).
   private readonly handler = new GrantCreditHandler(
     new CreditDrizzleRepository(),
     new BorrowerPolicyRepository(),
+    {
+      settings: new TenantConfigRepository(),
+      plans: new PaymentPlanRepository(),
+    },
   );
   private readonly queries = new CreditQueryRepository();
   private readonly accounts = new AccountsQueryRepository();
@@ -82,6 +89,7 @@ export class CreditController {
       tenantId: tenant,
       currency: await resolveTenantCurrency(tenant),
       grantedBy: reviewer.userId,
+      grantedByRole: reviewer.role,
     });
   }
 
