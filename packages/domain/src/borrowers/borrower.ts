@@ -1,4 +1,4 @@
-import { DomainError } from "../shared/money";
+import { ConflictError, DomainError } from "../shared/money";
 
 // Dominio puro del CLIENTE (deudor). Reglas e invariantes del registro de clientes que el
 // sistema legado llama "Cliente": color de etiqueta, cupo (límite de crédito) y bloqueo de
@@ -90,4 +90,25 @@ export function canReceiveCredit(
     return { allowed: false, reason: CREDIT_DENIED_OVER_LIMIT };
   }
   return { allowed: true };
+}
+
+/** Mensajes estables del rechazo (los ve el coordinador tal cual). */
+const CREDIT_DENIAL_MESSAGES: Record<CreditDenialReason, string> = {
+  [CREDIT_DENIED_BLOCKED]: "El cliente está bloqueado para nuevos créditos",
+  [CREDIT_DENIED_OVER_LIMIT]: "El crédito solicitado excede el cupo del cliente",
+};
+
+/**
+ * Variante que falla rápido de `canReceiveCredit`: lanza `ConflictError` (409) con el motivo como
+ * `code`. La usan todas las vías que crean créditos, tanto la verificación previa del caso de uso
+ * como la re-verificación dentro de la transacción, para que la regla y el mensaje sean únicos.
+ */
+export function assertCanReceiveCredit(
+  policy: BorrowerCreditPolicy,
+  request: CreditRequest,
+): void {
+  const decision = canReceiveCredit(policy, request);
+  if (!decision.allowed) {
+    throw new ConflictError(CREDIT_DENIAL_MESSAGES[decision.reason], decision.reason);
+  }
 }

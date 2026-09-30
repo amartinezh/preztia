@@ -9,6 +9,7 @@ import type {
 import type { ScheduledInstallment } from '@preztiaos/application';
 import { withTenantTxFor, type Tx } from '../../tenancy/unit-of-work';
 import { postCashOut } from '../../cash/cash-out-poster';
+import { lockBorrowerAndAssertCreditPolicy } from '../../credit/borrower-credit-lock';
 
 const DECISION_EVENT = 'MANUAL_REVIEW_DECISION';
 
@@ -69,6 +70,11 @@ export class ApplicationDecisionRepository implements ApplicationDecisionStore {
     override?: boolean;
   }): Promise<void> {
     await withTenantTxFor(input.tenantId, async (tx) => {
+      // Garantía final de cupo/bloqueo, serializada por cliente (ver el helper).
+      await lockBorrowerAndAssertCreditPolicy(tx, {
+        borrowerId: input.credit.borrowerId,
+        requestedMinor: input.credit.principalMinor,
+      });
       await this.transition(tx, input.applicationId, 'APPROVED');
       await this.audit(tx, {
         tenantId: input.tenantId,

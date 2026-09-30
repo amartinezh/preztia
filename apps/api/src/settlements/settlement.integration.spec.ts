@@ -8,7 +8,13 @@ import { CashPaymentDrizzleRepository } from '../payments/cash-payment.repositor
 import { tenantStorage } from '../tenancy/tenant-context';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { SettlementRepository } from './settlement.repository';
-import { owner, cleanupTenant, closeOwner, hasDb } from '../../test/db-helpers';
+import {
+  owner,
+  cleanupTenant,
+  closeOwner,
+  hasDb,
+  seedBorrower,
+} from '../../test/db-helpers';
 
 // Integración de la Fase 6 (liquidación por períodos) contra Postgres real con RLS: reconstrucción
 // retroactiva en orden, encadenamiento de saldos entre períodos (I2), cuadre contra el libro (I4),
@@ -58,12 +64,12 @@ async function seed(): Promise<Fixture> {
            (${tenant}, ${office.id}, ${zone}, 'OUT', 'WITHDRAWAL', 100000, ${CURRENCY}, 'retiro socio', ${daysAgo(8)})`;
   // Esta semana: crédito de 100.000 al 20% (desembolso) y un cobro en efectivo de 60.000.
   const creditId = randomUUID();
-  await tenantStorage.run({ tenantId: tenant }, () =>
+  await tenantStorage.run({ tenantId: tenant }, async () =>
     credits.save(
       {
         id: creditId,
         tenantId: tenant,
-        borrowerId: randomUUID(),
+        borrowerId: await seedBorrower(tenant),
         zoneId: zone,
         principalMinor: 100_000,
         interestPct: 200,
@@ -127,6 +133,7 @@ describeDb('Fase 6 — liquidación por períodos (integración)', () => {
     const db = owner();
     for (const f of fixtures) {
       await cleanupTenant(f.tenant);
+      await db`DELETE FROM borrower WHERE tenant_id = ${f.tenant}`;
       await db`DELETE FROM audit_log WHERE tenant_id = ${f.tenant}`;
       await db`DELETE FROM app_user WHERE tenant_id = ${f.tenant}`;
       await db`DELETE FROM zone WHERE tenant_id = ${f.tenant}`;

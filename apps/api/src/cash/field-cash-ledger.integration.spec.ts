@@ -4,7 +4,13 @@ import { CashBoxDrizzleRepository } from './cash-box.repository';
 import { CashPaymentDrizzleRepository } from '../payments/cash-payment.repository';
 import { CreditDrizzleRepository } from '../credit/credit.repository';
 import { tenantStorage } from '../tenancy/tenant-context';
-import { owner, cleanupTenant, closeOwner, hasDb } from '../../test/db-helpers';
+import {
+  owner,
+  cleanupTenant,
+  closeOwner,
+  hasDb,
+  seedBorrower,
+} from '../../test/db-helpers';
 
 // Integración de la Fase 1 del plan de control de campo y liquidación
 // (docs/PLAN_CONTROL_CAMPO_Y_LIQUIDACION.md): el efectivo entra a la caja de ruta, el
@@ -66,12 +72,12 @@ async function fund(tenant: string, boxId: string, amountMinor: number) {
 
 async function grant(f: Fixture, zoneId: string, cashBoxId: string) {
   const id = randomUUID();
-  await tenantStorage.run({ tenantId: f.tenant }, () =>
+  await tenantStorage.run({ tenantId: f.tenant }, async () =>
     credits.save(
       {
         id,
         tenantId: f.tenant,
-        borrowerId: randomUUID(),
+        borrowerId: await seedBorrower(f.tenant),
         zoneId,
         principalMinor: PRINCIPAL,
         interestPct: 200,
@@ -111,6 +117,7 @@ describeDb('Fase 1 — libro de campo (integración)', () => {
     const sql = owner();
     for (const f of fixtures) {
       await cleanupTenant(f.tenant);
+      await sql`DELETE FROM borrower WHERE tenant_id = ${f.tenant}`;
       await sql`DELETE FROM app_user WHERE tenant_id = ${f.tenant}`;
       await sql`DELETE FROM zone WHERE tenant_id = ${f.tenant}`;
     }

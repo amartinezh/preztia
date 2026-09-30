@@ -8,7 +8,13 @@ import { CashPaymentDrizzleRepository } from '../payments/cash-payment.repositor
 import { CreditDrizzleRepository } from '../credit/credit.repository';
 import { tenantStorage } from '../tenancy/tenant-context';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
-import { owner, cleanupTenant, closeOwner, hasDb } from '../../test/db-helpers';
+import {
+  owner,
+  cleanupTenant,
+  closeOwner,
+  hasDb,
+  seedBorrower,
+} from '../../test/db-helpers';
 
 // Integración de la Fase 2 (rendición diaria y deuda del cobrador) contra Postgres real con RLS:
 // declarar → contar/recibir → el faltante queda como deuda; cobros posteriores al corte; cierre de
@@ -66,12 +72,12 @@ async function seed(): Promise<Fixture> {
     zoneId: f.zone,
   });
   const creditId = randomUUID();
-  await tenantStorage.run({ tenantId: f.tenant }, () =>
+  await tenantStorage.run({ tenantId: f.tenant }, async () =>
     credits.save(
       {
         id: creditId,
         tenantId: f.tenant,
-        borrowerId: randomUUID(),
+        borrowerId: await seedBorrower(f.tenant),
         zoneId: f.zone,
         principalMinor: PRINCIPAL,
         interestPct: 200,
@@ -150,6 +156,7 @@ describeDb('Fase 2 — rendición del cobrador (integración)', () => {
     const db = owner();
     for (const f of fixtures) {
       await cleanupTenant(f.tenant);
+      await db`DELETE FROM borrower WHERE tenant_id = ${f.tenant}`;
       await db`DELETE FROM audit_log WHERE tenant_id = ${f.tenant}`;
       await db`DELETE FROM app_user WHERE tenant_id = ${f.tenant}`;
       await db`DELETE FROM zone WHERE tenant_id = ${f.tenant}`;

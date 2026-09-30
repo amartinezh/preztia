@@ -7,6 +7,7 @@ import { ScheduleFrequency } from '@preztiaos/domain';
 import { schema } from '@preztiaos/db';
 import { withTenantTx } from '../tenancy/unit-of-work';
 import { postCashOut } from '../cash/cash-out-poster';
+import { lockBorrowerAndAssertCreditPolicy } from './borrower-credit-lock';
 
 // Motivo del asiento de desembolso de un otorgamiento directo.
 const DIRECT_DISBURSEMENT_REASON =
@@ -33,6 +34,11 @@ export class CreditDrizzleRepository implements CreditRepository {
     contact?: { phone: string },
   ): Promise<void> {
     await withTenantTx(async (tx) => {
+      // Garantía final de cupo/bloqueo, serializada por cliente (ver el helper).
+      await lockBorrowerAndAssertCreditPolicy(tx, {
+        borrowerId: c.borrowerId,
+        requestedMinor: c.principalMinor,
+      });
       await tx.insert(schema.credit).values({
         id: c.id,
         tenantId: c.tenantId,

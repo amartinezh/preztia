@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
-  ConflictError,
   Money,
   NotFoundError,
+  assertCanReceiveCredit,
   buildSchedule,
-  canReceiveCredit,
   scheduleDueDates,
-  CREDIT_DENIED_BLOCKED,
   type Installment,
   type ScheduleFrequency,
 } from "@preztiaos/domain";
@@ -129,9 +127,11 @@ export class GrantCreditHandler {
 }
 
 /**
- * Guarda de cupo/bloqueo compartida por TODA vía que crea un crédito (otorgamiento directo y
- * aprobación de solicitudes): la decisión la toma el dominio (`canReceiveCredit`); aquí solo se
- * carga la política y se traduce el rechazo a `DomainError` (404 cliente inexistente, 409 regla).
+ * Verificación previa de cupo/bloqueo compartida por TODA vía que crea un crédito (otorgamiento
+ * directo y aprobación de solicitudes): rechaza pronto, antes de calcular el cronograma. La regla
+ * es del dominio (`assertCanReceiveCredit`). No es la garantía final: dos otorgamientos
+ * simultáneos al mismo cliente pasarían ambos; por eso el adaptador que persiste el crédito
+ * re-verifica la misma regla dentro de su transacción, con la fila del cliente bloqueada.
  */
 export async function assertBorrowerCanReceiveCredit(
   borrowerPolicy: BorrowerCreditPolicyPort,
@@ -142,15 +142,8 @@ export async function assertBorrowerCanReceiveCredit(
     borrowerId: input.borrowerId,
   });
   if (!policy) throw new NotFoundError("El cliente no está registrado");
-  const decision = canReceiveCredit(
+  assertCanReceiveCredit(
     { creditBlocked: policy.creditBlocked, creditLimitMinor: policy.creditLimitMinor },
     { requestedMinor: input.requestedMinor, outstandingMinor: policy.outstandingMinor },
   );
-  if (!decision.allowed) {
-    throw new ConflictError(
-      decision.reason === CREDIT_DENIED_BLOCKED
-        ? "El cliente está bloqueado para nuevos créditos"
-        : "El crédito solicitado excede el cupo del cliente",
-    );
-  }
 }

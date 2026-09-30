@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { DomainError } from "../shared/money";
+import { ConflictError, DomainError } from "../shared/money";
 import {
+  assertCanReceiveCredit,
   assertCreditLimitMinor,
   canReceiveCredit,
   CREDIT_DENIED_BLOCKED,
@@ -78,5 +79,32 @@ describe("canReceiveCredit", () => {
       { requestedMinor: 90000, outstandingMinor: 0 },
     );
     expect(d).toEqual({ allowed: false, reason: CREDIT_DENIED_BLOCKED });
+  });
+});
+
+describe("assertCanReceiveCredit", () => {
+  const conCupo = { creditBlocked: false, creditLimitMinor: 150_000 };
+
+  it("no lanza si cabe exactamente en el cupo (saldo + solicitado == cupo)", () => {
+    expect(() =>
+      assertCanReceiveCredit(conCupo, { requestedMinor: 100_000, outstandingMinor: 50_000 }),
+    ).not.toThrow();
+  });
+
+  it("excede el cupo por una unidad: ConflictError con código OVER_LIMIT", () => {
+    const run = () =>
+      assertCanReceiveCredit(conCupo, { requestedMinor: 100_000, outstandingMinor: 50_001 });
+    expect(run).toThrow(ConflictError);
+    expect(run).toThrow(expect.objectContaining({ code: CREDIT_DENIED_OVER_LIMIT }));
+  });
+
+  it("cliente bloqueado: ConflictError con código BLOCKED (aunque quepa en el cupo)", () => {
+    const run = () =>
+      assertCanReceiveCredit(
+        { creditBlocked: true, creditLimitMinor: 0 },
+        { requestedMinor: 1, outstandingMinor: 0 },
+      );
+    expect(run).toThrow(ConflictError);
+    expect(run).toThrow(expect.objectContaining({ code: CREDIT_DENIED_BLOCKED }));
   });
 });

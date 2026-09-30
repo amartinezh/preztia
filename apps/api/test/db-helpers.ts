@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 
 // Cliente de SETUP/TEARDOWN para los tests de integración. Usa el rol `platform`
@@ -50,6 +51,20 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
   await sql`DELETE FROM tenant_bank_account WHERE tenant_id = ${tenantId}`;
   // Sin esto, un canal de WhatsApp de prueba (índice único) queda ocupado y rompe la corrida siguiente.
   await sql`DELETE FROM tenant_config WHERE tenant_id = ${tenantId}`;
+}
+
+/**
+ * Siembra un cliente mínimo (sin cupo, no bloqueado) para otorgarle créditos: la transacción que
+ * crea un crédito bloquea y valida la fila del cliente, así que debe existir. El test lo borra.
+ */
+export async function seedBorrower(
+  tenantId: string,
+  policy: { creditLimitMinor?: number; creditBlocked?: boolean } = {},
+): Promise<string> {
+  const id = randomUUID();
+  await owner()`INSERT INTO borrower (id, tenant_id, national_id, first_name, credit_limit_minor, credit_blocked)
+    VALUES (${id}, ${tenantId}, ${id.slice(0, 8)}, 'Cliente', ${policy.creditLimitMinor ?? 0}, ${policy.creditBlocked ?? false})`;
+  return id;
 }
 
 export async function closeOwner(): Promise<void> {
