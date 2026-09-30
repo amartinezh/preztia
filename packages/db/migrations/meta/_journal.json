@@ -484,6 +484,13 @@
       "when": 1790737118977,
       "tag": "0068_bitter_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1790739869786,
+      "tag": "0069_pink_bug",
+      "breakpoints": true
     }
   ]
 }

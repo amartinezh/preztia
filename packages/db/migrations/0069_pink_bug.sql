@@ -1,0 +1,6 @@
+CREATE TYPE "public"."credit_origin" AS ENUM('ORIGINATED', 'MIGRATED');--> statement-breakpoint
+ALTER TABLE "tenant_config" ALTER COLUMN "operational_settings" SET DEFAULT '{"rechargesEnabled":false,"manualRoute":false,"blockOverdueDatesForSales":true,"backdateMaxDays":3,"relaxedPaymentDates":false,"blockInterestChange":true,"adminCustomInterestAllowed":true,"commissionPctBaseThousand":0,"commissionsEnabled":false,"commissionBase":"COLLECTED","commissionMaxPctBaseThousand":0,"defaultCreditLimitMinor":0,"applyColorByOverdue":false,"clientChoosesPlan":false,"planOfferTtlHours":24,"allowAdminOverride":true,"autoConfirmSettlement":false,"visitOverdueThreshold":3,"remittanceDeadlineHourLocal":20,"settlementFrequency":"WEEKLY","settlementAnchorDay":1,"settlementAutoClose":true,"settlementStartDate":null}'::jsonb;--> statement-breakpoint
+ALTER TABLE "credit" ADD COLUMN "origin" "credit_origin" DEFAULT 'ORIGINATED' NOT NULL;--> statement-breakpoint
+ALTER TABLE "credit" ADD COLUMN "legacy_reference" text;--> statement-breakpoint
+ALTER TABLE "payment" ADD COLUMN "historical" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "credit_tenant_legacy_reference_idx" ON "credit" USING btree ("tenant_id","legacy_reference") WHERE legacy_reference is not null;
