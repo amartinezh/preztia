@@ -25,6 +25,11 @@ export interface OperationalSettings {
    * zonas sin configuración propia (ni heredada). Ver `cash/commission.ts`.
    */
   readonly commissionPctBaseThousand: number;
+  /**
+   * ¿El tenant paga comisiones a sus cobradores? Lo decide el ADMIN. Apagadas (por defecto), las
+   * liquidaciones no causan ninguna; lo ya causado en fotos anteriores sigue pagándose.
+   */
+  readonly commissionsEnabled: boolean;
   /** Base por defecto de la comisión (lo cobrado, lo rendido o el capital recuperado). */
   readonly commissionBase: CommissionBase;
   /**
@@ -93,6 +98,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   blockOverdueDatesForSales: true,
   blockInterestChange: true,
   commissionPctBaseThousand: 0,
+  commissionsEnabled: false,
   commissionBase: "COLLECTED",
   commissionMaxPctBaseThousand: 0,
   defaultCreditLimitMinor: 0,
@@ -145,6 +151,7 @@ export function commissionConfigOf(
   zoneSettings: readonly ZoneCommissionSetting[],
 ): CommissionConfig {
   return {
+    enabled: s.commissionsEnabled,
     tenantDefault: { ratePerMille: s.commissionPctBaseThousand, base: s.commissionBase },
     capPerMille: s.commissionMaxPctBaseThousand,
     zoneSettings,

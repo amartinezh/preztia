@@ -82,6 +82,7 @@ export class CommissionSettingsRepository implements ZoneCommissionStore {
         (z) => input.scopes === null || isWithinScope(z.path, input.scopes),
       );
       return {
+        enabled: config.enabled,
         tenantDefault: config.tenantDefault,
         capPerMille: config.capPerMille,
         zones: visible.map((z) => ({

@@ -61,7 +61,7 @@ interface Fixture {
   otherRoute: string;
 }
 
-async function seed(): Promise<Fixture> {
+async function seed(commissionsEnabled: boolean): Promise<Fixture> {
   const db = owner();
   const f = {
     tenant: randomUUID(),
@@ -75,6 +75,7 @@ async function seed(): Promise<Fixture> {
     (${f.otherCollector}, ${f.tenant}, ${`c2-${f.otherCollector}@t.test`}, 'x', 'COLLECTOR', ${['norte']})`;
   // Tope del ADMIN y "Liquidar desde" antes del cobro (el resto, valores por defecto).
   const settings = {
+    commissionsEnabled,
     commissionMaxPctBaseThousand: CAP_PER_MILLE,
     settlementStartDate: businessDateOf(daysAgo(15), TIME_ZONE),
   };
@@ -204,8 +205,8 @@ const commissionEntries = async (f: Fixture) =>
 
 describeDb('Comisión del cobrador (integración)', () => {
   const fixtures: Fixture[] = [];
-  async function setup(): Promise<Fixture> {
-    const f = await seed();
+  async function setup(commissionsEnabled = true): Promise<Fixture> {
+    const f = await seed(commissionsEnabled);
     fixtures.push(f);
     await setZone.execute({
       tenantId: f.tenant,
@@ -268,6 +269,22 @@ describeDb('Comisión del cobrador (integración)', () => {
     const [audit] = await owner()`SELECT count(*)::int AS n FROM audit_log
       WHERE tenant_id = ${f.tenant} AND action = 'SET zone-commission'`;
     expect(audit.n).toBe(1);
+  });
+
+  it('apagadas: la foto no causa comisión (aunque la zona esté configurada) y no hay nada que pagar', async () => {
+    const f = await setup(false);
+    const { id, snapshot } = await closeUntilCurrent(f);
+    const line = snapshot.collectors.find(
+      (c) => c.collectorId === f.collector,
+    )!;
+    expect(line.commission).toBeNull();
+    expect(snapshot.result.commissionsMinor).toBe(0);
+    await expect(pay(f, id, f.route)).rejects.toMatchObject({
+      code: 'NOTHING_TO_PAY',
+    });
+    expect(await commissionEntries(f)).toHaveLength(0);
+    const view = await settingsRepo.view({ tenantId: f.tenant, scopes: null });
+    expect(view.enabled).toBe(false);
   });
 
   it('al cerrar, la foto sella la comisión causada y la resta de la utilidad', async () => {

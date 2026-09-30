@@ -40,6 +40,8 @@ export const zoneCommissionView = z.object({
 export type ZoneCommissionView = z.infer<typeof zoneCommissionView>;
 
 export const commissionSettingsView = z.object({
+  /** ¿El tenant paga comisiones? Apagadas, la configuración se guarda pero no se causa nada. */
+  enabled: z.boolean(),
   tenantDefault: commissionPolicy,
   /** Tope del ADMIN (base mil); 0 = nadie cobra comisión. */
   capPerMille: z.number().int(),

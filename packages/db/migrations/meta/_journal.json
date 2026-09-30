@@ -477,6 +477,13 @@
       "when": 1790451475991,
       "tag": "0067_bumpy_nick_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1790737118977,
+      "tag": "0068_bitter_red_ghost",
+      "breakpoints": true
     }
   ]
 }

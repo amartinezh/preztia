@@ -12,6 +12,9 @@
 // que manda sobre todas: ninguna zona se puede configurar por encima y, si el tope baja después,
 // la tasa efectiva se recorta al tope.
 //
+// Las comisiones se ENCIENDEN o APAGAN para todo el tenant (`enabled`, lo decide el ADMIN). Apagadas,
+// no se causa ninguna al cerrar; la configuración por zona se conserva para cuando se enciendan.
+//
 // Invariantes (probadas):
 // - 0 ≤ tasa efectiva ≤ tope ≤ 1000.
 // - comisión = ⌊ base × tasa / 1000 ⌋, así que 0 ≤ comisión ≤ base (enteros, sin coma flotante).
@@ -43,6 +46,8 @@ export interface ZoneCommissionSetting {
 
 /** Configuración de comisiones del tenant: valor por defecto, tope y lo definido por zona. */
 export interface CommissionConfig {
+  /** ¿El tenant paga comisiones? Apagadas, la liquidación no causa ninguna. */
+  readonly enabled: boolean;
   readonly tenantDefault: CommissionPolicy;
   /** Tope que fija el ADMIN (base mil). Con 0, nadie cobra comisión hasta que lo suba. */
   readonly capPerMille: number;

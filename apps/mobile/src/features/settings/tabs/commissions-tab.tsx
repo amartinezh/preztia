@@ -41,7 +41,11 @@ export function CommissionsTab({ canEdit }: { canEdit: boolean }) {
             <Text tone="muted">{t("commission.settings.cap")}</Text>
             <Text variant="label">{perMille(settings.capPerMille)}</Text>
           </Row>
-          {settings.capPerMille === 0 ? <Banner tone="warning" title={t("commission.settings.capZero")} /> : null}
+          {!settings.enabled ? (
+            <Banner tone="warning" title={t("commission.settings.disabled")} />
+          ) : settings.capPerMille === 0 ? (
+            <Banner tone="warning" title={t("commission.settings.capZero")} />
+          ) : null}
         </Stack>
       </Card>
 

@@ -13,6 +13,7 @@ import {
 } from "./commission";
 
 const config = (overrides: Partial<CommissionConfig> = {}): CommissionConfig => ({
+  enabled: true,
   tenantDefault: { ratePerMille: 20, base: "COLLECTED" },
   capPerMille: 100,
   zoneSettings: [

@@ -52,3 +52,11 @@ describe("mergeOperationalSettings — comisión del cobrador", () => {
     expect(() => mergeOperationalSettings(DEFAULT_OPERATIONAL_SETTINGS, { commissionMaxPctBaseThousand: 1001 })).toThrow(DomainError);
   });
 });
+
+describe("mergeOperationalSettings — interruptor de comisiones", () => {
+  it("las comisiones nacen apagadas y el ADMIN las enciende sin tocar el resto", () => {
+    expect(DEFAULT_OPERATIONAL_SETTINGS.commissionsEnabled).toBe(false);
+    const on = mergeOperationalSettings(DEFAULT_OPERATIONAL_SETTINGS, { commissionsEnabled: true });
+    expect(on).toEqual({ ...DEFAULT_OPERATIONAL_SETTINGS, commissionsEnabled: true });
+  });
+});

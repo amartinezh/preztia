@@ -102,8 +102,9 @@ export interface CollectorPrincipal {
   readonly principalRecoveredMinor: number;
 }
 
-/** Sin configuración de comisiones nadie cobra comisión (tope 0). */
+/** Sin configuración de comisiones, están apagadas. */
 const NO_COMMISSION: CommissionConfig = {
+  enabled: false,
   tenantDefault: { ratePerMille: 0, base: "COLLECTED" },
   capPerMille: 0,
   zoneSettings: [],
@@ -215,8 +216,11 @@ export interface SettlementCollectorLine {
   readonly remittedMinor: number;
   /** Capital recuperado en sus cobros en efectivo. */
   readonly principalRecoveredMinor: number;
-  /** Comisión causada con la política vigente al calcular (sellada al cerrar). */
-  readonly commission: CollectorCommission;
+  /**
+   * Comisión causada con la política vigente al calcular (sellada al cerrar); null = las comisiones
+   * estaban apagadas (no se causó ni se puede pagar nada).
+   */
+  readonly commission: CollectorCommission | null;
   readonly performance: CollectorPerformance;
 }
 
@@ -350,7 +354,7 @@ function commissionsByZone(
 ): Map<string | null, number> {
   const byZone = new Map<string | null, number>();
   refs.forEach((ref, i) => {
-    const amount = lines[i]!.commission.amountMinor;
+    const amount = lines[i]!.commission?.amountMinor ?? 0;
     if (amount > 0) byZone.set(ref.zoneId, (byZone.get(ref.zoneId) ?? 0) + amount);
   });
   return byZone;
@@ -497,7 +501,9 @@ function collectorLine(
     closingCashMinor,
     remittedMinor: figures.remittedMinor,
     principalRecoveredMinor: figures.principalRecoveredMinor,
-    commission: computeCommission(resolveCommissionPolicy(ref.zonePath, extra.commission), figures),
+    commission: extra.commission.enabled
+      ? computeCommission(resolveCommissionPolicy(ref.zonePath, extra.commission), figures)
+      : null,
     performance: collectorPerformance(extra.activity),
   };
 }

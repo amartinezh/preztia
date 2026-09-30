@@ -36,6 +36,14 @@ const CONCEPT_ORDER: SettlementConcept[] = [
   "OTHER_OUT",
 ];
 
+/**
+ * ¿Esta liquidación tiene comisiones que mostrar? Solo si se causó alguna (estaban encendidas al
+ * calcularla) o ya se pagó alguna. Apagadas, la vista queda como antes de existir las comisiones.
+ */
+function hasCommissions(view: View): boolean {
+  return view.snapshot.collectors.some((c) => c.commission != null) || view.commissionPayments.length > 0;
+}
+
 /** Tasa en base mil como porcentaje legible ("75,0 %"); "—" si no aplica. */
 export function perMille(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : `${(value / PER_MILLE_TO_PERCENT).toFixed(1)} %`;
@@ -50,6 +58,7 @@ export function SettlementView({ view }: { view: View }) {
   const { t } = useT();
   const s = view.snapshot;
   const money = (v: number) => formatMoney(v, view.currency);
+  const withCommissions = hasCommissions(view);
   return (
     <Stack gap="lg">
       <Row className="flex-wrap items-center justify-between gap-2">
@@ -68,15 +77,15 @@ export function SettlementView({ view }: { view: View }) {
         </Text>
       ) : null}
 
-      <ResultCards snapshot={s} money={money} />
+      <ResultCards snapshot={s} money={money} withCommissions={withCommissions} />
 
       <Text variant="heading">{t("settlement.treasury")}</Text>
       <TreasuryTable snapshot={s} money={money} />
 
       <Text variant="heading">{t("settlement.collectors")}</Text>
-      <CollectorsTable snapshot={s} money={money} />
+      <CollectorsTable snapshot={s} money={money} withCommissions={withCommissions} />
 
-      {s.collectors.length > 0 ? (
+      {withCommissions ? (
         <>
           <Text variant="heading">{t("settlement.commissions.title")}</Text>
           <CommissionsSection view={view} money={money} />
@@ -89,7 +98,15 @@ export function SettlementView({ view }: { view: View }) {
   );
 }
 
-function ResultCards({ snapshot, money }: { snapshot: SettlementSnapshot; money: (v: number) => string }) {
+function ResultCards({
+  snapshot,
+  money,
+  withCommissions,
+}: {
+  snapshot: SettlementSnapshot;
+  money: (v: number) => string;
+  withCommissions: boolean;
+}) {
   const { t } = useT();
   const r = snapshot.result;
   const tiles: { key: string; label: string; value: string; strong?: boolean }[] = [
@@ -98,7 +115,9 @@ function ResultCards({ snapshot, money }: { snapshot: SettlementSnapshot; money:
     { key: "principal", label: t("settlement.result.principal"), value: money(r.principalRecoveredMinor) },
     { key: "expenses", label: t("settlement.result.expenses"), value: money(r.expensesMinor) },
     { key: "writeOff", label: t("settlement.result.writeOff"), value: money(r.writeOffMinor) },
-    { key: "commissions", label: t("settlement.result.commissions"), value: money(r.commissionsMinor ?? 0) },
+    ...(withCommissions
+      ? [{ key: "commissions", label: t("settlement.result.commissions"), value: money(r.commissionsMinor ?? 0) }]
+      : []),
     { key: "rate", label: t("settlement.result.collectionRate"), value: perMille(r.collectionRatePerMille) },
     { key: "newCredits", label: t("settlement.result.newCredits"), value: `${r.newCreditsCount} · ${money(r.newCreditsPrincipalMinor)}` },
     { key: "overdue", label: t("settlement.result.overdue"), value: money(r.overdueAtCutMinor) },
@@ -173,7 +192,15 @@ function TreasuryTable({ snapshot, money }: { snapshot: SettlementSnapshot; mone
   );
 }
 
-function CollectorsTable({ snapshot, money }: { snapshot: SettlementSnapshot; money: (v: number) => string }) {
+function CollectorsTable({
+  snapshot,
+  money,
+  withCommissions,
+}: {
+  snapshot: SettlementSnapshot;
+  money: (v: number) => string;
+  withCommissions: boolean;
+}) {
   const { t } = useT();
   const collectors = snapshot.collectors;
   const columns = collectors.map((c) => ({ key: c.collectorId, label: c.email ?? c.collectorId }));
@@ -190,10 +217,14 @@ function CollectorsTable({ snapshot, money }: { snapshot: SettlementSnapshot; mo
     row("payroll", t("settlement.collector.payroll"), (c) => money(c.payrollMinor)),
     row("writeOff", t("settlement.collector.writeOff"), (c) => money(c.writeOffMinor)),
     row("closingCash", t("settlement.collector.closingCash"), (c) => money(c.closingCashMinor), true),
-    row("commissionBase", t("settlement.collector.commissionBase"), (c) =>
-      c.commission ? `${money(c.commission.baseAmountMinor)} · ${t(`commission.base.short.${c.commission.base}`)}` : "—",
-    ),
-    row("commission", t("settlement.collector.commission"), (c) => (c.commission ? money(c.commission.amountMinor) : "—"), true),
+    ...(withCommissions
+      ? [
+          row("commissionBase", t("settlement.collector.commissionBase"), (c) =>
+            c.commission ? `${money(c.commission.baseAmountMinor)} · ${t(`commission.base.short.${c.commission.base}`)}` : "—",
+          ),
+          row("commission", t("settlement.collector.commission"), (c) => (c.commission ? money(c.commission.amountMinor) : "—"), true),
+        ]
+      : []),
     row("stops", t("settlement.collector.stops"), (c) =>
       c.performance ? `${c.performance.stopsResolved} / ${c.performance.stopsDispatched}` : "—",
     ),

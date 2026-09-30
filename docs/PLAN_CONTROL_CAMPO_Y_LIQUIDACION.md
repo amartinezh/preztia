@@ -627,6 +627,7 @@ Cierra el ciclo "cuánto le debo al cobrador" dentro del sistema. Decisiones aco
 
 | Tema | Decisión |
 |---|---|
+| **Encendido** | Interruptor del **ADMIN** en Ajustes → General (apagado por defecto). Apagadas, las liquidaciones no causan comisión y la vista no las muestra; la configuración por zona se conserva y lo ya causado se sigue pagando. |
 | **Base** | Configurable: **lo cobrado** (solo su efectivo en ruta), **lo rendido** (entregado + consignado, neto de la base recibida) o **el capital recuperado** de esos cobros. |
 | **Dónde se configura** | **Por zona con herencia** (Ajustes → Comisiones); sin configuración en la rama, el valor por defecto del tenant (Ajustes → General). |
 | **Quién** | El **coordinador** edita las zonas de su subárbol; el **ADMIN** fija un **tope** que nadie supera (con 0 %, nadie cobra comisión). Todo cambio va a `audit_log`. |

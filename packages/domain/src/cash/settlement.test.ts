@@ -180,7 +180,11 @@ describe("collectorPerformance", () => {
 describe("buildSettlement — comisión del cobrador", () => {
   const ANA = { collectorId: "ana", email: "ana@t.test", zoneId: "z-norte", zonePath: "norte" };
   // Ana: cobró 300.000, entregó 250.000 (sin base recibida), capital recuperado 240.000.
-  const build = (policy: { ratePerMille: number; base: "COLLECTED" | "REMITTED" | "PRINCIPAL_RECOVERED" }, cap = 1000) =>
+  const build = (
+    policy: { ratePerMille: number; base: "COLLECTED" | "REMITTED" | "PRINCIPAL_RECOVERED" },
+    cap = 1000,
+    enabled = true,
+  ) =>
     buildSettlement({
       boxes,
       flows,
@@ -188,7 +192,7 @@ describe("buildSettlement — comisión del cobrador", () => {
       collectors: [ANA],
       portfolio,
       collectorPrincipal: [{ collectorId: "ana", principalRecoveredMinor: 240_000 }],
-      commission: { tenantDefault: { ratePerMille: 0, base: "COLLECTED" }, capPerMille: cap, zoneSettings: [{ zoneId: "z-norte", path: "norte", policy }] },
+      commission: { enabled, tenantDefault: { ratePerMille: 0, base: "COLLECTED" }, capPerMille: cap, zoneSettings: [{ zoneId: "z-norte", path: "norte", policy }] },
     });
 
   it.each([
@@ -220,8 +224,15 @@ describe("buildSettlement — comisión del cobrador", () => {
     expect(ana.commission).toMatchObject({ ratePerMille: 50, cappedByLimit: true, amountMinor: 15_000 });
   });
 
-  it("sin configuración de comisiones nadie cobra comisión y la utilidad no cambia", () => {
-    expect(snapshot.collectors[0]!.commission.amountMinor).toBe(0);
+  it("apagadas: no se causa ninguna (null) aunque las zonas estén configuradas, y la utilidad no cambia", () => {
+    const off = build({ ratePerMille: 50, base: "COLLECTED" }, 1000, false);
+    expect(off.collectors[0]!.commission).toBeNull();
+    expect(off.result.commissionsMinor).toBe(0);
+    expect(off.result.utilityMinor).toBe(snapshot.result.utilityMinor);
+  });
+
+  it("sin configuración de comisiones están apagadas y la utilidad no cambia", () => {
+    expect(snapshot.collectors[0]!.commission).toBeNull();
     expect(snapshot.result.commissionsMinor).toBe(0);
     expect(snapshot.result.utilityMinor).toBe(30_000);
   });

@@ -198,30 +198,41 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
           disabled={!canEdit}
         />
         <Text variant="caption" tone="muted">{t("config.settlement.autoCloseHint")}</Text>
-        <Field label={t("config.commissionCap")}>
-          <Input
-            keyboardType="numeric"
-            editable={canEdit}
-            value={String(form.commissionMaxPctBaseThousand / PER_MILLE_PER_PERCENT)}
-            onChangeText={(text) => set("commissionMaxPctBaseThousand", percentToPerMille(text))}
-          />
-        </Field>
-        <Field label={t("config.commission")}>
-          <Input
-            keyboardType="numeric"
-            editable={canEdit}
-            value={String(form.commissionPctBaseThousand / PER_MILLE_PER_PERCENT)}
-            onChangeText={(text) => set("commissionPctBaseThousand", percentToPerMille(text))}
-          />
-        </Field>
-        <Field label={t("config.commissionBase")}>
-          <Select
-            value={form.commissionBase}
-            options={COMMISSION_BASES.map((b) => ({ value: b, label: t(`commission.base.${b}`) }))}
-            onChange={(v) => set("commissionBase", v)}
-          />
-        </Field>
-        <Text variant="caption" tone="muted">{t("config.commissionHint")}</Text>
+        <Switch
+          value={form.commissionsEnabled}
+          onValueChange={(v) => set("commissionsEnabled", v)}
+          label={t("config.commissionsEnabled")}
+          disabled={!canEdit}
+        />
+        <Text variant="caption" tone="muted">{t("config.commissionsEnabledHint")}</Text>
+        {form.commissionsEnabled ? (
+          <>
+            <Field label={t("config.commissionCap")}>
+              <Input
+                keyboardType="numeric"
+                editable={canEdit}
+                value={String(form.commissionMaxPctBaseThousand / PER_MILLE_PER_PERCENT)}
+                onChangeText={(text) => set("commissionMaxPctBaseThousand", percentToPerMille(text))}
+              />
+            </Field>
+            <Field label={t("config.commission")}>
+              <Input
+                keyboardType="numeric"
+                editable={canEdit}
+                value={String(form.commissionPctBaseThousand / PER_MILLE_PER_PERCENT)}
+                onChangeText={(text) => set("commissionPctBaseThousand", percentToPerMille(text))}
+              />
+            </Field>
+            <Field label={t("config.commissionBase")}>
+              <Select
+                value={form.commissionBase}
+                options={COMMISSION_BASES.map((b) => ({ value: b, label: t(`commission.base.${b}`) }))}
+                onChange={(v) => set("commissionBase", v)}
+              />
+            </Field>
+            <Text variant="caption" tone="muted">{t("config.commissionHint")}</Text>
+          </>
+        ) : null}
         <Field label={t("config.defaultLimit")}>
           <Input
             keyboardType="numeric"

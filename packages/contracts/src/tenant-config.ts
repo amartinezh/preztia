@@ -15,6 +15,8 @@ export const operationalSettings = z.object({
   // y el tope que fija el ADMIN (ninguna zona lo supera; 0 = nadie cobra comisión). El dominio valida
   // que el valor por defecto no supere el tope.
   commissionPctBaseThousand: z.number().int().min(0).max(1000),
+  // Interruptor general de comisiones (ADMIN). Apagadas, la liquidación no causa ninguna.
+  commissionsEnabled: z.boolean(),
   commissionBase: z.enum(["COLLECTED", "REMITTED", "PRINCIPAL_RECOVERED"]),
   commissionMaxPctBaseThousand: z.number().int().min(0).max(1000),
   defaultCreditLimitMinor: z.number().int().min(0),

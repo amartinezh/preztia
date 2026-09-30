@@ -125,7 +125,8 @@ export const settlementSnapshot = z.object({
       remittedMinor: money.optional(),
       /** Capital recuperado en sus cobros en efectivo. */
       principalRecoveredMinor: money.optional(),
-      commission: collectorCommission.optional(),
+      /** null = comisiones apagadas al calcular; ausente en fotos anteriores a las comisiones. */
+      commission: collectorCommission.nullable().optional(),
       /** Desempeño de campo del período; ausente en fotos anteriores a la Fase 7. */
       performance: z
         .object({

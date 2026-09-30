@@ -12,6 +12,7 @@ export interface OperationalSettings {
   readonly blockOverdueDatesForSales: boolean; // Bloquear Fechas Atrasadas Para Ventas
   readonly blockInterestChange: boolean; // Bloquear Cambio De Interés
   readonly commissionPctBaseThousand: number; // Comisión por defecto del cobrador (base-mil)
+  readonly commissionsEnabled: boolean; // ¿Se pagan comisiones a los cobradores? (default OFF)
   readonly commissionBase: "COLLECTED" | "REMITTED" | "PRINCIPAL_RECOVERED"; // Base por defecto de la comisión
   readonly commissionMaxPctBaseThousand: number; // Tope de comisión del ADMIN (base-mil; 0 = sin comisiones)
   readonly defaultCreditLimitMinor: number; // Cupo por Defecto
@@ -51,6 +52,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   blockOverdueDatesForSales: true,
   blockInterestChange: true,
   commissionPctBaseThousand: 0,
+  commissionsEnabled: false,
   commissionBase: "COLLECTED",
   commissionMaxPctBaseThousand: 0,
   defaultCreditLimitMinor: 0,

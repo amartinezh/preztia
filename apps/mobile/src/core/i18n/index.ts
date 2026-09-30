@@ -478,6 +478,8 @@ const es = {
     "Define el porcentaje y la base de la comisión de los cobradores de cada zona. Una zona sin configuración propia hereda la de su zona superior; si ninguna tiene, se usa el valor por defecto.",
   "commission.settings.default": "Valor por defecto",
   "commission.settings.cap": "Tope fijado por el administrador",
+  "commission.settings.disabled":
+    "Las comisiones están apagadas: las liquidaciones no causan ninguna. Puedes dejar la configuración lista; el administrador las enciende en Ajustes → General.",
   "commission.settings.capZero":
     "El tope es 0 %: nadie cobra comisión. El administrador lo fija en Ajustes → General.",
   "commission.settings.own": "Propia",
@@ -863,6 +865,9 @@ const es = {
   "config.colorByOverdue": "Aplicar color por atraso",
   "config.commission": "Comisión por defecto (%)",
   "config.commissionBase": "Base por defecto de la comisión",
+  "config.commissionsEnabled": "Pagar comisiones a los cobradores",
+  "config.commissionsEnabledHint":
+    "Encendido: cada liquidación causa la comisión de cada cobrador según la configuración de su zona. Apagado: no se causa ninguna; lo ya causado en liquidaciones cerradas se puede seguir pagando.",
   "config.commissionCap": "Tope de comisión (%)",
   "config.commissionHint":
     "El valor por defecto aplica a las zonas sin configuración propia. El tope es el máximo que un coordinador puede asignar a una zona; con 0 % nadie cobra comisión.",
