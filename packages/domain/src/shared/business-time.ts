@@ -8,6 +8,28 @@ const HOURS_PER_DAY = 24;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+/** Zona horaria por defecto de una empresa que aún no la configuró. */
+export const DEFAULT_TIME_ZONE = "America/Bogota";
+
+/** ¿Es una zona horaria IANA que el motor reconoce (p. ej. "America/Sao_Paulo")? */
+export function isValidTimeZone(timeZone: string): boolean {
+  if (timeZone.trim() === "") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return true;
+  } catch {
+    // RangeError: zona desconocida.
+    return false;
+  }
+}
+
+/** Falla rápido (400) con una zona horaria inválida: movería los cortes de todo el sistema. */
+export function assertValidTimeZone(timeZone: string): void {
+  if (!isValidTimeZone(timeZone)) {
+    throw new DomainError(`Zona horaria desconocida: "${timeZone}"`);
+  }
+}
+
 /** Fecha de negocio (`YYYY-MM-DD`) de un instante en la zona horaria dada. */
 export function businessDateOf(instant: Date, timeZone: string): string {
   const p = localParts(instant, timeZone);

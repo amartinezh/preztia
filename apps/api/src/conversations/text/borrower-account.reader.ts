@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { asc, inArray, sql } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import {
+  DEFAULT_TIME_ZONE,
   dailyDueMinor,
   overdueBalanceMinor,
   summarizeAccount,
@@ -23,7 +24,6 @@ import {
 const RECENT_MOVEMENTS_LIMIT = 6;
 
 /** Zona horaria por defecto para resolver la fecha de negocio (mora) si el tenant no la configuró. */
-const DEFAULT_TIMEZONE = 'America/Bogota';
 
 interface CreditRow {
   credit_id: string;
@@ -63,8 +63,8 @@ export class BorrowerAccountDrizzleReader implements BorrowerAccountReader {
           c.currency      AS currency,
           c.start_date::text AS start_date,
           (now() AT TIME ZONE coalesce(
-            (SELECT collection_reminder_settings->>'timezone' FROM tenant_config WHERE tenant_id = ${tenantId}),
-            ${DEFAULT_TIMEZONE}))::date::text AS today
+            (SELECT operational_settings->>'timeZone' FROM tenant_config WHERE tenant_id = ${tenantId}),
+            ${DEFAULT_TIME_ZONE}))::date::text AS today
         FROM credit c
         JOIN borrower b ON b.id = c.borrower_id
         WHERE c.status = 'ACTIVE' AND b.phone = ${input.phone}
@@ -156,8 +156,8 @@ export class BorrowerAccountDrizzleReader implements BorrowerAccountReader {
       SELECT
         p.credit_id AS credit_id,
         to_char((coalesce(p.paid_at, p.created_at) AT TIME ZONE coalesce(
-          (SELECT collection_reminder_settings->>'timezone' FROM tenant_config WHERE tenant_id = p.tenant_id),
-          ${DEFAULT_TIMEZONE}))::date, 'YYYY-MM-DD') AS date,
+          (SELECT operational_settings->>'timeZone' FROM tenant_config WHERE tenant_id = p.tenant_id),
+          ${DEFAULT_TIME_ZONE}))::date, 'YYYY-MM-DD') AS date,
         coalesce(sum(a.amount_minor), 0)::bigint AS amount_minor
       FROM payment p
       JOIN payment_allocation a ON a.payment_id = p.id

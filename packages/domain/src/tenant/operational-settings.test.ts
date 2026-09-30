@@ -60,3 +60,17 @@ describe("mergeOperationalSettings — interruptor de comisiones", () => {
     expect(on).toEqual({ ...DEFAULT_OPERATIONAL_SETTINGS, commissionsEnabled: true });
   });
 });
+
+describe("mergeOperationalSettings — zona horaria de la empresa", () => {
+  it("por defecto es Bogotá y acepta cualquier zona IANA válida", () => {
+    expect(DEFAULT_OPERATIONAL_SETTINGS.timeZone).toBe("America/Bogota");
+    expect(mergeOperationalSettings(DEFAULT_OPERATIONAL_SETTINGS, { timeZone: "America/Sao_Paulo" }).timeZone).toBe(
+      "America/Sao_Paulo",
+    );
+  });
+
+  it("rechaza una zona inexistente o vacía (movería los cortes de todo el sistema)", () => {
+    expect(() => mergeOperationalSettings(DEFAULT_OPERATIONAL_SETTINGS, { timeZone: "America/Medellin" })).toThrow(DomainError);
+    expect(() => mergeOperationalSettings(DEFAULT_OPERATIONAL_SETTINGS, { timeZone: "" })).toThrow(DomainError);
+  });
+});

@@ -6,6 +6,7 @@ import type {
 } from '@preztiaos/application';
 import type { CreditCollectionPanel } from '@preztiaos/contracts';
 import {
+  DEFAULT_TIME_ZONE,
   channelProviderOf,
   chooseProactiveChannel,
   DEFAULT_MESSAGING_CHANNELS,
@@ -123,7 +124,7 @@ export class DueCreditsRepository implements DueCreditsReader {
   ): Promise<TenantCollectionContext> {
     const rows = (await tx.execute(sql`
       SELECT
-        (now() AT TIME ZONE coalesce(collection_reminder_settings->>'timezone', 'America/Bogota'))::date::text AS as_of,
+        (now() AT TIME ZONE coalesce(operational_settings->>'timeZone', ${DEFAULT_TIME_ZONE}))::date::text AS as_of,
         collection_reminder_settings->>'pixKey'  AS pix_key,
         whatsapp_phone_number_id                 AS fallback_channel,
         messaging_channels                       AS messaging

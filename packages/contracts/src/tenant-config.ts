@@ -7,6 +7,9 @@ const c = initContract();
 // Dinero en unidades menores; comisión en base-mil (200 = 20%), igual que el interés.
 
 export const operationalSettings = z.object({
+  // Zona horaria IANA de la EMPRESA: el "hoy" y los cortes de todo el sistema (liquidación, fecha de
+  // los pagos, rendición, cartera, recordatorios, migrados). El dominio valida que exista.
+  timeZone: z.string().min(1).max(64),
   rechargesEnabled: z.boolean(),
   manualRoute: z.boolean(),
   // Fechas atrasadas de pagos: con el bloqueo, solo el ADMIN elige una fecha pasada a mano (la
@@ -59,13 +62,12 @@ export type OperationalSettings = z.infer<typeof operationalSettings>;
 export const updateOperationalSettingsInput = operationalSettings.partial();
 export type UpdateOperationalSettingsInput = z.infer<typeof updateOperationalSettingsInput>;
 
-// ── Configuración del CRON DE COBRANZA por WhatsApp (hora local + zona horaria + llave PIX) ──
-// `sendHourLocal` es la hora (0–23) en la `timezone` del tenant; el cron horario la compara con
-// la hora actual. Default del modelo: deshabilitado, 7:00 AM, America/Bogota.
+// ── Configuración del CRON DE COBRANZA por WhatsApp (hora local + llave PIX) ──────────────────
+// `sendHourLocal` es la hora (0–23) en la zona horaria de la EMPRESA (`operationalSettings.timeZone`);
+// el cron horario la compara con la hora actual. Default: deshabilitado, 7:00 AM.
 export const collectionReminderSettings = z.object({
   enabled: z.boolean(),
   sendHourLocal: z.number().int().min(0).max(23),
-  timezone: z.string().min(1).max(64),
   pixKey: z.string().trim().min(1).max(140).nullable(),
 });
 export type CollectionReminderSettings = z.infer<typeof collectionReminderSettings>;

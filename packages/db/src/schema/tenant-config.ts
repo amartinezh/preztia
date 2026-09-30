@@ -7,6 +7,7 @@ export const aiProvider = pgEnum("ai_provider", ["GEMINI", "OPENAI", "CLAUDE"]);
 // Ajustes operativos configurables por tenant (los toggles de "Configuración de cobro" del
 // legado). Dinero en unidades menores; comisión en base-mil (200 = 20%) como el interés.
 export interface OperationalSettings {
+  readonly timeZone: string; // Zona horaria IANA de la EMPRESA: define el "hoy" y los cortes de todo el sistema
   readonly rechargesEnabled: boolean; // Activar Recargos
   readonly manualRoute: boolean; // Ruta Manual
   readonly blockOverdueDatesForSales: boolean; // Bloquear fechas atrasadas (solo el ADMIN fecha pagos a mano)
@@ -32,24 +33,23 @@ export interface OperationalSettings {
   readonly settlementStartDate: string | null; // Liquidar desde (YYYY-MM-DD); null = sin definir
 }
 
-// Configuración del recordatorio de cobro por WhatsApp (Cron por tenant). La hora es LOCAL del
-// tenant (su zona horaria), por lo que el cron horario evalúa `sendHourLocal` contra la hora
-// actual en `timezone`. La llave PIX se incluye en el mensaje para invitar al pago.
+// Configuración del recordatorio de cobro por WhatsApp (Cron por tenant). La hora es LOCAL de la
+// empresa (`OperationalSettings.timeZone`), por lo que el cron horario evalúa `sendHourLocal` contra
+// la hora actual en esa zona. La llave PIX se incluye en el mensaje para invitar al pago.
 export interface CollectionReminderSettings {
   readonly enabled: boolean; // ¿Enviar recordatorios automáticos?
   readonly sendHourLocal: number; // Hora local de envío (0–23). Default: 7 (primera hora de la mañana).
-  readonly timezone: string; // Zona horaria IANA del tenant (ej. "America/Bogota", "America/Sao_Paulo").
   readonly pixKey: string | null; // Llave PIX del tenant para recibir el pago (se incluye en el mensaje).
 }
 
 export const DEFAULT_COLLECTION_REMINDER_SETTINGS: CollectionReminderSettings = {
   enabled: false,
   sendHourLocal: 7,
-  timezone: "America/Bogota",
   pixKey: null,
 };
 
 export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
+  timeZone: "America/Bogota",
   rechargesEnabled: false,
   manualRoute: false,
   blockOverdueDatesForSales: true,

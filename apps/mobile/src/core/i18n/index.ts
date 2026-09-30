@@ -884,6 +884,12 @@ const es = {
   // Configuración de cobro (tenant)
   "config.title": "Configuración de la operación",
   "config.intro": "Agrupada por tema. Debajo de cada opción hay una explicación breve de lo que hace.",
+  "config.section.company": "Empresa",
+  "config.section.companyHint": "Datos de la empresa que afectan a todo el sistema.",
+  "config.timeZone": "Zona horaria de la empresa",
+  "config.timeZoneHint":
+    "Define qué es \"hoy\" y a qué hora se corta cada día: liquidaciones, fecha de los pagos, rendición del cobrador, cartera vencida y hora de los recordatorios. Cámbiala solo si la empresa opera en otro país.",
+  "reminder.sendHourHint": "Hora local de la zona horaria de la empresa (Ajustes → General).",
   "config.section.credits": "Créditos",
   "config.section.creditsHint": "Cómo se otorgan los créditos y de dónde salen sus condiciones.",
   "config.section.chatOffer": "Oferta de planes por chat",

@@ -13,11 +13,17 @@ import {
 } from "../cash/commission";
 import type { InterestPolicy } from "../credit/plan/interest-policy";
 import type { BackdatePolicy } from "../credit/payment/payment-date";
+import { assertValidTimeZone, DEFAULT_TIME_ZONE } from "../shared/business-time";
 
 // Ajustes operativos del tenant (configuración de cobro del legado). Tipo canónico + valores por
 // defecto + mezcla pura de un parche parcial. El esquema de BD refleja esta forma (mirror).
 
 export interface OperationalSettings {
+  /**
+   * Zona horaria IANA de la EMPRESA. Define el "hoy" y los cortes de todo el sistema: liquidación,
+   * fecha de los pagos, rendición del cobrador, cartera, recordatorios y créditos migrados.
+   */
+  readonly timeZone: string;
   readonly rechargesEnabled: boolean;
   readonly manualRoute: boolean;
   /** "Bloquear fechas atrasadas": solo el ADMIN elige a mano una fecha pasada para un pago. */
@@ -106,6 +112,7 @@ export const DEFAULT_BACKDATE_MAX_DAYS = 3;
 export const DEFAULT_REMITTANCE_DEADLINE_HOUR = 20;
 
 export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
+  timeZone: DEFAULT_TIME_ZONE,
   rechargesEnabled: false,
   manualRoute: false,
   blockOverdueDatesForSales: true,
@@ -151,6 +158,7 @@ export function mergeOperationalSettings(
   patch: Partial<OperationalSettings>,
 ): OperationalSettings {
   const merged = { ...current, ...patch };
+  assertValidTimeZone(merged.timeZone);
   assertValidSettlementSettings(settlementSettingsOf(merged));
   // El valor por defecto también respeta el tope (bajar el tope exige bajar primero el defecto).
   assertValidCommissionCap(merged.commissionMaxPctBaseThousand);

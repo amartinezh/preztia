@@ -19,6 +19,7 @@ import {
 import { useSession } from "@/core/auth/session";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
+import { timeZoneOptions } from "../time-zones";
 import {
   useOperationalSettings,
   useUpdateOperationalSettings,
@@ -132,6 +133,18 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
       </Stack>
       {!canEdit ? <Banner tone="info" title="Solo lectura: tu rol no puede modificar esta configuración." /> : null}
       {feedback}
+
+      <SettingsSection title={t("config.section.company")} description={t("config.section.companyHint")}>
+        <Field label={t("config.timeZone")} hint={t("config.timeZoneHint")}>
+          <Select
+            value={form.timeZone}
+            options={timeZoneOptions(form.timeZone)}
+            onChange={(v) => set("timeZone", v)}
+            title={t("config.timeZone")}
+            disabled={!canEdit}
+          />
+        </Field>
+      </SettingsSection>
 
       <SettingsSection title={t("config.section.credits")} description={t("config.section.creditsHint")}>
         <ToggleSetting label={t("config.blockInterest")} hint={t("config.blockInterestHint")} {...toggle("blockInterestChange")} />

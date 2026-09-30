@@ -1,3 +1,4 @@
+import { DEFAULT_TIME_ZONE } from '@preztiaos/domain';
 import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type {
@@ -51,8 +52,8 @@ export class ChargeableCreditDrizzleReader implements ChargeableCreditReader {
           ) AS installment_minor,
           coalesce(sum(
             CASE WHEN i.due_date <= (now() AT TIME ZONE coalesce(
-                   (SELECT collection_reminder_settings->>'timezone' FROM tenant_config WHERE tenant_id = ${tenantId}),
-                   'America/Bogota'))::date
+                   (SELECT operational_settings->>'timeZone' FROM tenant_config WHERE tenant_id = ${tenantId}),
+                   ${DEFAULT_TIME_ZONE}))::date
                  AND i.status <> 'PAID'
                  THEN i.amount_due_minor - i.paid_minor ELSE 0 END
           ), 0)::bigint AS overdue_minor

@@ -1,3 +1,4 @@
+import { DEFAULT_TIME_ZONE } from '@preztiaos/domain';
 import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { DueTenantsReader } from '@preztiaos/application';
@@ -22,7 +23,7 @@ export class DueTenantsRepository implements DueTenantsReader {
         WHERE (collection_reminder_settings->>'enabled')::boolean IS TRUE
           AND (collection_reminder_settings->>'sendHourLocal')::int
               = EXTRACT(HOUR FROM (
-                  now() AT TIME ZONE coalesce(collection_reminder_settings->>'timezone', 'America/Bogota')
+                  now() AT TIME ZONE coalesce(operational_settings->>'timeZone', ${DEFAULT_TIME_ZONE})
                 ))::int
       `)) as unknown as Array<{ tenant_id: string }>;
       return rows.map((r) => r.tenant_id);

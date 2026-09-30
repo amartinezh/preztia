@@ -6,12 +6,10 @@ import {
   Card,
   Field,
   Input,
-  Select,
   Spinner,
   Stack,
   Switch,
   Text,
-  type SelectOption,
 } from "@preztiaos/ui";
 
 import { isApiError } from "@/core/errors";
@@ -21,17 +19,10 @@ import {
   useUpdateCollectionReminderSettings,
 } from "../api/queries";
 
-// Zonas horarias frecuentes de la operación (LatAm + Brasil por el contexto PIX).
-const TIMEZONE_OPTIONS: SelectOption<string>[] = [
-  { value: "America/Bogota", label: "Colombia (America/Bogota)" },
-  { value: "America/Sao_Paulo", label: "Brasil (America/Sao_Paulo)" },
-  { value: "America/Mexico_City", label: "México (America/Mexico_City)" },
-  { value: "America/Lima", label: "Perú (America/Lima)" },
-  { value: "America/Argentina/Buenos_Aires", label: "Argentina (Buenos Aires)" },
-];
-
 /**
- * Tab COBRANZA: cron de recordatorios por WhatsApp (hora local + zona + llave PIX). Compartido:
+ * Tab COBRANZA: cron de recordatorios por WhatsApp (hora local + llave PIX). La hora es la de la
+ * zona horaria de la EMPRESA, que se configura en Ajustes → General (define los cortes de todo el
+ * sistema, no solo el recordatorio). Compartido:
  * con `canEdit=false` (Coordinador) se muestra en solo lectura.
  */
 export function CollectionReminderTab({ canEdit }: { canEdit: boolean }) {
@@ -89,7 +80,7 @@ export function CollectionReminderTab({ canEdit }: { canEdit: boolean }) {
           label="Activar envío automático"
           disabled={!canEdit}
         />
-        <Field label="Hora de envío (0–23, hora local)">
+        <Field label="Hora de envío (0–23)" hint={t("reminder.sendHourHint")}>
           <Input
             keyboardType="numeric"
             editable={canEdit}
@@ -97,15 +88,6 @@ export function CollectionReminderTab({ canEdit }: { canEdit: boolean }) {
             onChangeText={(text) =>
               set("sendHourLocal", Math.min(23, Math.max(0, Math.round(Number(text) || 0))))
             }
-          />
-        </Field>
-        <Field label="Zona horaria">
-          <Select
-            value={form.timezone}
-            options={TIMEZONE_OPTIONS}
-            onChange={(v) => set("timezone", v)}
-            title="Zona horaria"
-            disabled={!canEdit}
           />
         </Field>
         <Field label="Llave PIX (para recibir el pago)">
