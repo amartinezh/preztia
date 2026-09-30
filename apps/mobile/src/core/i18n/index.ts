@@ -366,6 +366,14 @@ const es = {
   "borrowers.field.phone": "Teléfono",
   "borrowers.field.color": "Color",
   "borrowers.field.creditLimit": "Cupo",
+  "borrowers.field.creditUnlimited": "Sin límite de cupo",
+  "borrowers.field.creditUnlimitedShort": "sin límite",
+  "borrowers.field.creditUnlimitedHint": "El cliente puede tener varios créditos sin tope de saldo.",
+  "borrowers.field.creditLimitDefault": "Cupo por defecto de la empresa",
+  "borrowers.field.creditLimitDefaultHint":
+    "Déjalo vacío para usar el cupo por defecto (Ajustes → General), o escribe un monto.",
+  "borrowers.field.creditLimitEditHint": "Tope de saldo vigente más lo solicitado.",
+  "borrowers.field.creditLimitRequired": "Escribe el cupo o marca \"Sin límite de cupo\".",
   "borrowers.field.creditBlocked": "Créditos bloqueados",
   "borrowers.new.title": "Nuevo cliente",
   "borrowers.new.submit": "Crear cliente",
@@ -907,7 +915,8 @@ const es = {
     "Opciones heredadas del sistema anterior que hoy no cambian nada. Encenderlas o apagarlas no tiene efecto hasta que se decida implementarlas o quitarlas.",
   "config.allowAdminOverrideHint":
     "Encendido: el coordinador o el administrador pueden aprobar aunque el cliente no haya aceptado la oferta por chat (queda registrado). Apagado: se exige la aceptación del cliente.",
-  "config.defaultLimitHint": "Cupo que recibe un cliente nuevo si no se le asigna uno. 0 = sin límite.",
+  "config.defaultLimitHint":
+    "Cupo con el que nace un cliente si no se le escribe uno. 0 = sin límite. Un cliente puede crearse \"sin límite\" a propósito aunque aquí haya un monto.",
   "config.clientChoosesPlanHint":
     "Encendido: el cliente recibe el menú de planes activos y elige. Apagado: se le ofrece el plan por defecto para que lo acepte.",
   "config.planOfferTtlHint": "Horas que tiene el cliente para responder la oferta. Después hay que ofertar de nuevo.",
@@ -925,8 +934,8 @@ const es = {
   "config.saved": "Configuración guardada ✓",
   "config.recharges": "Activar recargos",
   "config.manualRoute": "Ruta manual",
-  "config.blockOverdue": "Bloquear fechas atrasadas",
-  "config.blockOverdueHint":
+  "config.blockBackdatedPayments": "Bloquear fechas atrasadas",
+  "config.blockBackdatedPaymentsHint":
     "Encendido: solo el administrador puede registrar un pago con una fecha pasada. Los cobros capturados sin señal siempre llevan su hora real. Todo pago atrasado queda en la auditoría.",
   "config.backdateMaxDays": "Días hacia atrás permitidos en la fecha de un pago",
   "config.backdateMaxDaysHint":

@@ -27,7 +27,7 @@ export interface OperationalSettings {
   readonly rechargesEnabled: boolean;
   readonly manualRoute: boolean;
   /** "Bloquear fechas atrasadas": solo el ADMIN elige a mano una fecha pasada para un pago. */
-  readonly blockOverdueDatesForSales: boolean;
+  readonly blockBackdatedPayments: boolean;
   /** Días de negocio hacia atrás que puede tener la fecha de un pago (0–30; offline y manual). */
   readonly backdateMaxDays: number;
   /** Modo flexible de fechas: se reciben los pagos sin límite de días ni de período sellado. */
@@ -115,7 +115,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   timeZone: DEFAULT_TIME_ZONE,
   rechargesEnabled: false,
   manualRoute: false,
-  blockOverdueDatesForSales: true,
+  blockBackdatedPayments: true,
   backdateMaxDays: DEFAULT_BACKDATE_MAX_DAYS,
   relaxedPaymentDates: false,
   blockInterestChange: true,
@@ -172,7 +172,7 @@ export function mergeOperationalSettings(
 /** Política de fechas atrasadas de pagos del tenant. */
 export function backdatePolicyOf(s: OperationalSettings): BackdatePolicy {
   return {
-    locked: s.blockOverdueDatesForSales,
+    locked: s.blockBackdatedPayments,
     maxDaysBack: s.backdateMaxDays,
     relaxed: s.relaxedPaymentDates,
   };

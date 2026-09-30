@@ -10,7 +10,7 @@ export interface OperationalSettings {
   readonly timeZone: string; // Zona horaria IANA de la EMPRESA: define el "hoy" y los cortes de todo el sistema
   readonly rechargesEnabled: boolean; // Activar Recargos
   readonly manualRoute: boolean; // Ruta Manual
-  readonly blockOverdueDatesForSales: boolean; // Bloquear fechas atrasadas (solo el ADMIN fecha pagos a mano)
+  readonly blockBackdatedPayments: boolean; // Bloquear fechas atrasadas (solo el ADMIN fecha pagos a mano)
   readonly backdateMaxDays: number; // Días hacia atrás permitidos en la fecha de un pago (0–30)
   readonly relaxedPaymentDates: boolean; // Modo flexible: sin límite de días ni período sellado
   readonly blockInterestChange: boolean; // Bloquear Cambio De Interés (el interés sale de un plan activo)
@@ -52,7 +52,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   timeZone: "America/Bogota",
   rechargesEnabled: false,
   manualRoute: false,
-  blockOverdueDatesForSales: true,
+  blockBackdatedPayments: true,
   backdateMaxDays: 3,
   relaxedPaymentDates: false,
   blockInterestChange: true,

@@ -39,6 +39,21 @@ export function assertCreditLimitMinor(creditLimitMinor: number): void {
   }
 }
 
+/** Cupo 0 = "sin límite": el cliente puede tener varios créditos sin tope de exposición. */
+export const UNLIMITED_CREDIT_LIMIT = 0;
+
+/**
+ * Cupo con el que NACE un cliente. Distingue tres casos que antes se confundían en el 0:
+ * - sin especificar (`undefined`) → el cupo por defecto de la empresa;
+ * - `0` → sin límite, a propósito (aunque la empresa tenga un cupo por defecto);
+ * - un monto → ese cupo.
+ */
+export function resolveInitialCreditLimit(requestedMinor: number | undefined, tenantDefaultMinor: number): number {
+  const limit = requestedMinor ?? tenantDefaultMinor;
+  assertCreditLimitMinor(limit);
+  return limit;
+}
+
 export interface BorrowerCreditPolicy {
   /** Si el cliente está bloqueado para recibir nuevos créditos (Créditos → Bloquear). */
   readonly creditBlocked: boolean;

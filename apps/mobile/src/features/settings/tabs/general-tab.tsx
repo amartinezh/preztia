@@ -185,7 +185,7 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
           <Banner tone="warning" title={t("config.relaxedPaymentDatesActive")} />
         ) : (
           <>
-            <ToggleSetting label={t("config.blockOverdue")} hint={t("config.blockOverdueHint")} {...toggle("blockOverdueDatesForSales")} />
+            <ToggleSetting label={t("config.blockBackdatedPayments")} hint={t("config.blockBackdatedPaymentsHint")} {...toggle("blockBackdatedPayments")} />
             <Field label={t("config.backdateMaxDays")} hint={t("config.backdateMaxDaysHint")}>
               <Input
                 keyboardType="number-pad"

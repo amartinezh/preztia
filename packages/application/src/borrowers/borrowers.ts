@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   NotFoundError,
   assertCreditLimitMinor,
+  resolveInitialCreditLimit,
+  UNLIMITED_CREDIT_LIMIT,
   normalizeNationalId,
   type BorrowerColor,
 } from "@preztiaos/domain";
@@ -28,11 +30,12 @@ export interface CreateBorrowerCommand {
   lng: number | null;
   color: BorrowerColor;
   creditBlocked: boolean;
-  creditLimitMinor: number;
+  /** Ausente = cupo por defecto de la empresa; 0 = sin límite a propósito; > 0 = ese cupo. */
+  creditLimitMinor?: number | undefined;
 }
 
-// Puerto opcional: cupo por defecto del tenant (config). Si se inyecta y el cliente se crea sin
-// cupo (0), se aplica el cupo por defecto configurado ("Cupo por Defecto" del legado).
+// Puerto opcional: cupo por defecto del tenant (config). Si se inyecta y el cliente se crea SIN
+// especificar cupo, nace con el cupo por defecto; un 0 explícito es "sin límite" a propósito.
 export interface DefaultCreditLimitProvider {
   defaultCreditLimitMinor(tenantId: string): Promise<number>;
 }
@@ -43,13 +46,14 @@ export class CreateBorrowerHandler {
     private readonly defaults?: DefaultCreditLimitProvider,
   ) {}
 
-  async execute(cmd: CreateBorrowerCommand): Promise<{ id: string }> {
-    assertCreditLimitMinor(cmd.creditLimitMinor);
-    // Cupo sin especificar (0) → toma el cupo por defecto del tenant si hay proveedor.
-    const creditLimitMinor =
-      cmd.creditLimitMinor === 0 && this.defaults
+  /** Devuelve también el cupo con el que nació (puede venir del cupo por defecto). */
+  async execute(cmd: CreateBorrowerCommand): Promise<{ id: string; creditLimitMinor: number }> {
+    // Sin especificar → cupo por defecto de la empresa; 0 explícito → sin límite (regla de dominio).
+    const tenantDefault =
+      cmd.creditLimitMinor === undefined && this.defaults
         ? await this.defaults.defaultCreditLimitMinor(cmd.tenantId)
-        : cmd.creditLimitMinor;
+        : UNLIMITED_CREDIT_LIMIT;
+    const creditLimitMinor = resolveInitialCreditLimit(cmd.creditLimitMinor, tenantDefault);
     const id = randomUUID();
     await this.borrowers.create({
       id,
@@ -66,7 +70,7 @@ export class CreateBorrowerHandler {
       creditBlocked: cmd.creditBlocked,
       creditLimitMinor,
     });
-    return { id };
+    return { id, creditLimitMinor };
   }
 }
 

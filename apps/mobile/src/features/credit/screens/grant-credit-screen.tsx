@@ -443,7 +443,8 @@ function QuickCreateBorrowerModal({
       return;
     }
     create.mutate(parsed.data, {
-      onSuccess: ({ id }) =>
+      // El cupo viene del servidor: sin especificarlo, el cliente nace con el cupo por defecto.
+      onSuccess: ({ id, creditLimitMinor }) =>
         onCreated({
           id,
           nationalId: parsed.data.nationalId,
@@ -452,7 +453,7 @@ function QuickCreateBorrowerModal({
           business: parsed.data.business,
           phone: parsed.data.phone,
           creditBlocked: parsed.data.creditBlocked,
-          creditLimitMinor: parsed.data.creditLimitMinor,
+          creditLimitMinor,
         }),
       onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
     });

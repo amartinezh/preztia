@@ -43,7 +43,7 @@ async function seed(): Promise<Fixture> {
   await db`INSERT INTO app_user (id, tenant_id, email, password_hash, role, zone_paths)
     VALUES (${collector}, ${tenant}, ${`c-${collector}@t.test`}, 'x', 'COLLECTOR', ${['norte']})`;
   const settings = {
-    blockOverdueDatesForSales: true,
+    blockBackdatedPayments: true,
     backdateMaxDays: MAX_DAYS_BACK,
   };
   await db`INSERT INTO tenant_config (tenant_id, operational_settings) VALUES (${tenant}, ${db.json(settings)})`;

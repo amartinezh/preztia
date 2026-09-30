@@ -153,7 +153,9 @@ export function BorrowersScreen() {
 }
 
 function subtitleOf(b: BorrowerSummary): string {
-  const cupo = `${t("borrowers.field.creditLimit")}: ${minorToMajor(b.creditLimitMinor)}`;
+  const cupo = `${t("borrowers.field.creditLimit")}: ${
+    b.creditLimitMinor === 0 ? t("borrowers.field.creditUnlimitedShort") : minorToMajor(b.creditLimitMinor)
+  }`;
   const parts = [b.nationalId, b.business, b.phone].filter(Boolean) as string[];
   const blocked = b.creditBlocked ? ` · ${t("borrowers.field.creditBlocked")}` : "";
   return `${parts.join(" · ")} · ${cupo}${blocked}`;
@@ -281,9 +283,12 @@ function BorrowerFormModal({
   const [address, setAddress] = useState(borrower?.address ?? "");
   const [phone, setPhone] = useState(borrower?.phone ?? "");
   const [color, setColor] = useState<BorrowerColor>(borrower?.color ?? "NONE");
+  // Cupo en tres estados: vacío al crear = cupo por defecto de la empresa; "sin límite" = 0 a
+  // propósito; un monto = ese cupo. Al editar no hay "por defecto": o monto o sin límite.
   const [creditLimit, setCreditLimit] = useState(
-    borrower ? String(minorToMajor(borrower.creditLimitMinor)) : "0",
+    borrower && borrower.creditLimitMinor > 0 ? String(minorToMajor(borrower.creditLimitMinor)) : "",
   );
+  const [unlimited, setUnlimited] = useState(borrower ? borrower.creditLimitMinor === 0 : false);
   const [creditBlocked, setCreditBlocked] = useState(borrower?.creditBlocked ?? false);
   const [error, setError] = useState<string | null>(null);
 
@@ -292,8 +297,21 @@ function BorrowerFormModal({
     label: t(`borrowers.color.${c}` as MessageKey),
   }));
 
+  /** El cupo a enviar: sin límite → 0; con monto → ese monto; vacío al crear → se omite (por defecto). */
+  const creditLimitField = (): { creditLimitMinor?: number } => {
+    if (unlimited) return { creditLimitMinor: 0 };
+    const amount = Number(creditLimit);
+    if (creditLimit.trim() !== "" && Number.isFinite(amount)) return { creditLimitMinor: majorToMinor(amount) };
+    return {};
+  };
+
   const submit = () => {
     setError(null);
+    // Al editar el cupo es obligatorio: un monto o "sin límite" (no existe "por defecto" después).
+    if (isEdit && !unlimited && creditLimit.trim() === "") {
+      setError(t("borrowers.field.creditLimitRequired"));
+      return;
+    }
     // lat/lng NO se envían: la ubicación llega del flujo de WhatsApp (se propaga al aprobar el
     // crédito) y el PATCH parcial la preserva; incluirlos aquí en null la borraría al editar.
     const fields = {
@@ -305,7 +323,7 @@ function BorrowerFormModal({
       phone: phone.trim() || null,
       color,
       creditBlocked,
-      creditLimitMinor: majorToMinor(Number(creditLimit) || 0),
+      ...creditLimitField(),
     };
     const onError = (err: unknown) =>
       setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
@@ -356,9 +374,24 @@ function BorrowerFormModal({
         <Field label={t("borrowers.field.color")}>
           <Select value={color} options={colorOptions} onChange={setColor} title={t("borrowers.field.color")} />
         </Field>
-        <Field label={t("borrowers.field.creditLimit")}>
-          <Input value={creditLimit} onChangeText={setCreditLimit} keyboardType="numeric" />
-        </Field>
+        <Switch value={unlimited} onValueChange={setUnlimited} label={t("borrowers.field.creditUnlimited")} />
+        {unlimited ? (
+          <Text variant="caption" tone="muted">
+            {t("borrowers.field.creditUnlimitedHint")}
+          </Text>
+        ) : (
+          <Field
+            label={t("borrowers.field.creditLimit")}
+            hint={isEdit ? t("borrowers.field.creditLimitEditHint") : t("borrowers.field.creditLimitDefaultHint")}
+          >
+            <Input
+              value={creditLimit}
+              onChangeText={setCreditLimit}
+              keyboardType="numeric"
+              placeholder={isEdit ? undefined : t("borrowers.field.creditLimitDefault")}
+            />
+          </Field>
+        )}
         <Switch
           value={creditBlocked}
           onValueChange={setCreditBlocked}

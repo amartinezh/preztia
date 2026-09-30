@@ -56,7 +56,7 @@ export function BorrowerPicker({ extractedIdentity, applicantPhone, selected, on
       lng: null,
       color: "NONE",
       creditBlocked: false,
-      creditLimitMinor: 0,
+      // Sin cupo explícito: nace con el cupo por defecto de la empresa (0 sería "sin límite").
     };
     create.mutate(input, {
       onSuccess: ({ id }) =>

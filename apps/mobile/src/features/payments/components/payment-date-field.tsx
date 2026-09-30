@@ -27,7 +27,7 @@ function ReviewerPaymentDateField({
 }) {
   const { t } = useT();
   const settings = useOperationalSettings();
-  const locked = settings.data?.blockOverdueDatesForSales ?? true;
+  const locked = settings.data?.blockBackdatedPayments ?? true;
   const relaxed = settings.data?.relaxedPaymentDates ?? false;
   if (!isAdmin && locked && !relaxed) return null;
   const maxDaysBack = settings.data?.backdateMaxDays;

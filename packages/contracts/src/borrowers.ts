@@ -65,7 +65,8 @@ export const createBorrowerInput = z.object({
   lng: z.number().nullable().default(null),
   color: borrowerColor.default("NONE"),
   creditBlocked: z.boolean().default(false),
-  creditLimitMinor: z.number().int().nonnegative().default(0),
+  // Ausente = cupo por defecto de la empresa; 0 = sin límite a propósito; > 0 = ese cupo.
+  creditLimitMinor: z.number().int().nonnegative().optional(),
 });
 export type CreateBorrowerInput = z.infer<typeof createBorrowerInput>;
 
@@ -126,7 +127,8 @@ export const borrowersContract = c.router({
     path: "/borrowers",
     headers: tenantHeaders,
     body: createBorrowerInput,
-    responses: { 201: z.object({ id: z.string().uuid() }) },
+    // Devuelve el cupo con el que nació (puede venir del cupo por defecto de la empresa).
+    responses: { 201: z.object({ id: z.string().uuid(), creditLimitMinor: z.number().int() }) },
     summary: "Registra un cliente",
   },
   updateBorrower: {

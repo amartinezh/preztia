@@ -8,6 +8,8 @@ import {
   CREDIT_DENIED_OVER_LIMIT,
   isBorrowerColor,
   normalizeNationalId,
+  resolveInitialCreditLimit,
+  UNLIMITED_CREDIT_LIMIT,
 } from "./borrower";
 
 describe("normalizeNationalId", () => {
@@ -106,5 +108,26 @@ describe("assertCanReceiveCredit", () => {
       );
     expect(run).toThrow(ConflictError);
     expect(run).toThrow(expect.objectContaining({ code: CREDIT_DENIED_BLOCKED }));
+  });
+});
+
+describe("resolveInitialCreditLimit", () => {
+  it("sin especificar, el cliente nace con el cupo por defecto de la empresa", () => {
+    expect(resolveInitialCreditLimit(undefined, 500_000)).toBe(500_000);
+    expect(resolveInitialCreditLimit(undefined, 0)).toBe(0);
+  });
+
+  it("0 explícito es 'sin límite' aunque la empresa tenga un cupo por defecto", () => {
+    expect(resolveInitialCreditLimit(UNLIMITED_CREDIT_LIMIT, 500_000)).toBe(0);
+  });
+
+  it("un monto explícito manda sobre el cupo por defecto", () => {
+    expect(resolveInitialCreditLimit(80_000, 500_000)).toBe(80_000);
+  });
+
+  it("rechaza cupos negativos o no enteros, vengan de donde vengan", () => {
+    expect(() => resolveInitialCreditLimit(-1, 0)).toThrow(DomainError);
+    expect(() => resolveInitialCreditLimit(10.5, 0)).toThrow(DomainError);
+    expect(() => resolveInitialCreditLimit(undefined, -5)).toThrow(DomainError);
   });
 });
