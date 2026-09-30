@@ -27,6 +27,7 @@ export const settlementConcept = z.enum([
   "ADJUSTMENTS_OUT",
   "DEBT_PAYROLL",
   "DEBT_WRITE_OFF",
+  "COMMISSIONS",
   "OTHER_IN",
   "OTHER_OUT",
 ]);
@@ -39,7 +40,9 @@ export const settlementResult = z.object({
   expensesMinor: money,
   writeOffMinor: money,
   payrollRecoveredMinor: money,
-  /** interés ganado − gastos − condonado. */
+  /** Comisiones de cobradores causadas en el período; ausente en fotos anteriores a las comisiones. */
+  commissionsMinor: money.optional(),
+  /** interés ganado − gastos − condonado − comisiones causadas. */
   utilityMinor: money,
   newCreditsCount: z.number().int(),
   newCreditsPrincipalMinor: money,
@@ -50,6 +53,23 @@ export const settlementResult = z.object({
   overdueAtCutMinor: money,
 });
 export type SettlementResult = z.infer<typeof settlementResult>;
+
+export const commissionBase = z.enum(["COLLECTED", "REMITTED", "PRINCIPAL_RECOVERED"]);
+export type CommissionBase = z.infer<typeof commissionBase>;
+
+/** Comisión causada del cobrador, sellada en la foto con la política que se aplicó. */
+export const collectorCommission = z.object({
+  base: commissionBase,
+  /** Porcentaje aplicado en base mil (50 = 5 %). */
+  ratePerMille: z.number().int(),
+  /** Zona de la que se heredó la política; null = valor por defecto del tenant. */
+  sourceZoneId: z.string().uuid().nullable(),
+  /** La tasa configurada superaba el tope del ADMIN y se recortó. */
+  cappedByLimit: z.boolean(),
+  baseAmountMinor: money,
+  amountMinor: money,
+});
+export type CollectorCommission = z.infer<typeof collectorCommission>;
 
 const treasuryTotals = z.object({
   openingMinor: money,
@@ -99,6 +119,13 @@ export const settlementSnapshot = z.object({
       payrollMinor: money,
       writeOffMinor: money,
       closingCashMinor: money,
+      // Comisión del cobrador: ausentes en fotos anteriores a las comisiones.
+      zoneId: z.string().uuid().nullable().optional(),
+      /** Lo rendido: salidas de su caja de ruta netas de lo que se le entregó. */
+      remittedMinor: money.optional(),
+      /** Capital recuperado en sus cobros en efectivo. */
+      principalRecoveredMinor: money.optional(),
+      commission: collectorCommission.optional(),
       /** Desempeño de campo del período; ausente en fotos anteriores a la Fase 7. */
       performance: z
         .object({
@@ -128,6 +155,18 @@ const periodFields = {
   currency: z.string(),
 };
 
+/** Pago de la comisión de un cobrador (asiento COMMISSION del libro que liga a la liquidación). */
+export const commissionPayment = z.object({
+  collectorId: z.string().uuid(),
+  cashTransactionId: z.string().uuid(),
+  cashBoxId: z.string().uuid(),
+  cashBoxName: z.string(),
+  amountMinor: money,
+  paidAt: z.string(),
+  paidBy: z.string().uuid().nullable(),
+});
+export type CommissionPayment = z.infer<typeof commissionPayment>;
+
 /** Período abierto (en vivo) o cerrado (fotografía sellada). */
 export const settlementView = z.object({
   /** null en el período abierto (todavía no es una foto). */
@@ -139,6 +178,8 @@ export const settlementView = z.object({
   /** null = cierre automático del sistema (o período abierto). */
   closedBy: z.string().uuid().nullable(),
   snapshot: settlementSnapshot,
+  /** Comisiones ya pagadas de esta liquidación (vacío en el período abierto: aún no se causan). */
+  commissionPayments: z.array(commissionPayment),
 });
 export type SettlementView = z.infer<typeof settlementView>;
 
@@ -192,6 +233,16 @@ export const settlementsContract = c.router({
     headers: tenantHeaders,
     responses: { 200: settlementView },
     summary: "Fotografía de una liquidación cerrada",
+  },
+  payCollectorCommission: {
+    method: "POST",
+    path: "/settlements/:id/commissions/:collectorId/pay",
+    pathParams: z.object({ id: z.string().uuid(), collectorId: z.string().uuid() }),
+    headers: tenantHeaders,
+    // El monto NO viaja: se paga exactamente lo causado y sellado en la foto.
+    body: z.object({ cashBoxId: z.string().uuid() }),
+    responses: { 201: z.object({ cashTransactionId: z.string().uuid(), amountMinor: money }) },
+    summary: "Paga la comisión causada de un cobrador en una liquidación cerrada (ADMIN/COORDINATOR)",
   },
   closeSettlement: {
     method: "POST",

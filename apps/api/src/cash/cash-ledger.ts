@@ -36,6 +36,8 @@ export interface LedgerOrigin {
   readonly creditId?: string | null;
   readonly paymentId?: string | null;
   readonly expenseId?: string | null;
+  /** Pago a nombre de un cobrador (su comisión): se le atribuye a él y a su zona. */
+  readonly beneficiary?: { collectorId: string; zoneId: string | null } | null;
 }
 
 /**
@@ -127,6 +129,13 @@ async function originAttribution(
       .where(eq(schema.payment.id, origin.paymentId))
       .limit(1);
     return { zoneId: row?.zoneId ?? null, collectorId: null };
+  }
+  if (origin.beneficiary) {
+    // Como el gasto: se atribuye al cobrador y a su zona aunque se pague desde la oficina.
+    return {
+      zoneId: origin.beneficiary.zoneId,
+      collectorId: origin.beneficiary.collectorId,
+    };
   }
   if (origin.expenseId) {
     // El gasto se atribuye a su zona y a quien lo pidió, aunque se pague desde la oficina.

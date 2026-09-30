@@ -621,6 +621,43 @@ Escenario: Alcance del coordinador
   comparativa de los últimos 12 períodos; tocar un período abre su fotografía.
 - De paso: el libro (`/cash/transactions`) ahora recorta al coordinador a su subárbol de zonas.
 
+### Extensión — Comisión del cobrador (ADR #42) ✅
+
+Cierra el ciclo "cuánto le debo al cobrador" dentro del sistema. Decisiones acordadas (2026-09-29):
+
+| Tema | Decisión |
+|---|---|
+| **Base** | Configurable: **lo cobrado** (solo su efectivo en ruta), **lo rendido** (entregado + consignado, neto de la base recibida) o **el capital recuperado** de esos cobros. |
+| **Dónde se configura** | **Por zona con herencia** (Ajustes → Comisiones); sin configuración en la rama, el valor por defecto del tenant (Ajustes → General). |
+| **Quién** | El **coordinador** edita las zonas de su subárbol; el **ADMIN** fija un **tope** que nadie supera (con 0 %, nadie cobra comisión). Todo cambio va a `audit_log`. |
+| **Causación** | Al **cerrar** el período: la foto sella base, tasa, zona de origen y monto; la utilidad de la zona del cobrador la resta. El período abierto muestra un estimado. |
+| **Pago** | Botón **Pagar** en la liquidación cerrada: se elige la caja (su caja de ruta —se la queda del efectivo y baja su deuda— u oficina/banco de su zona). Asiento `COMMISSION` OUT, **una sola vez** por liquidación y cobrador. |
+
+- **Invariantes (probados):** 0 ≤ tasa efectiva ≤ tope ≤ 100 %; comisión = ⌊base × tasa / 1000⌋ ⇒ 0 ≤ comisión ≤ base;
+  lo rendido ≥ 0; causar no mueve tesorería y pagar no toca el resultado (sin doble resta); un pago por
+  (liquidación, cobrador), también ante dos pagos simultáneos (índice único parcial `cash_tx_commission_idx`).
+- **Compatibilidad:** las fotos selladas antes de esta extensión no traen comisión (campos opcionales en el
+  contrato; cuentan como 0 y no se pueden pagar).
+- **Tema abierto:** si la base de caja entregada en un período se devuelve en el siguiente, "lo rendido" de
+  ese período la cuenta (el neteo es por período).
+
+```gherkin
+Escenario: Comisión heredada con tope
+  Dado el tope del administrador en 10 % y la zona "Norte" con 5 % sobre lo cobrado
+  Y la zona "Norte.Centro" sin configuración propia
+  Cuando un cobrador de "Norte.Centro" cobra 60.000 en efectivo en la semana
+  Entonces al cerrar la semana la foto le causa 3.000 heredados de "Norte"
+  Y la utilidad de "Norte.Centro" baja 3.000
+
+Escenario: Pago único desde su caja de ruta
+  Dado una comisión causada de 3.000 en una liquidación cerrada
+  Cuando el coordinador la paga desde la caja de ruta del cobrador
+  Entonces el libro registra un egreso COMMISSION de 3.000 atribuido al cobrador y a su zona
+  Y un segundo intento de pago responde "ya fue pagada" sin mover dinero
+```
+
+---
+
 ## 8. Seguridad, auditoría y operación (checklist transversal)
 
 - **AuthZ en cada endpoint:** `requireTenant` + `requireRole`. COORDINATOR acotado por subárbol;

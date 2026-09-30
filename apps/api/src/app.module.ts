@@ -19,6 +19,7 @@ import { TelegramModule } from './telegram/telegram.module';
 import { PaymentPlanModule } from './credit/plans/payment-plan.module';
 import { CollectionsModule } from './collections/collections.module';
 import { SettlementsModule } from './settlements/settlements.module';
+import { CommissionsModule } from './commissions/commissions.module';
 import { NewsModule } from './news/news.module';
 import { tenantMiddleware } from './tenancy/tenant-context';
 
@@ -44,6 +45,7 @@ import { tenantMiddleware } from './tenancy/tenant-context';
     PaymentPlanModule,
     CollectionsModule,
     SettlementsModule,
+    CommissionsModule,
     NewsModule,
   ],
   controllers: [CreditController],

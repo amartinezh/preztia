@@ -1,10 +1,11 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
+import { withRequestOptions } from "@/core/api/request-context";
 import { authState } from "@/core/auth/auth-state";
 import { env } from "@/core/env";
 import { normalizeHttpError } from "@/core/errors";
-import { transactionQuery, type TransactionFilters } from "@/features/cash/api/boxes-queries";
+import { cashBoxKeys, transactionQuery, type TransactionFilters } from "@/features/cash/api/boxes-queries";
 
 // Períodos del histórico que se comparan en la tabla y la gráfica de tendencia.
 export const HISTORY_PERIODS = 12;
@@ -52,6 +53,32 @@ export function useCloseSettlement() {
   return useMutation({
     mutationFn: async () => unwrap(await api.closeSettlement({ headers: tenantHeader(), body: {} })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: settlementKeys.all }),
+  });
+}
+
+/**
+ * Paga la comisión causada de un cobrador en una liquidación cerrada, desde la caja elegida. La
+ * clave de idempotencia es la de la comisión misma (liquidación + cobrador): un reintento tras
+ * perder la respuesta devuelve el mismo pago en vez de intentar otro.
+ */
+export function usePayCommission(settlementId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { collectorId: string; cashBoxId: string }) =>
+      unwrap(
+        await withRequestOptions({ idempotencyKey: `commission:${settlementId}:${input.collectorId}` }, () =>
+          api.payCollectorCommission({
+            headers: tenantHeader(),
+            params: { id: settlementId, collectorId: input.collectorId },
+            body: { cashBoxId: input.cashBoxId },
+          }),
+        ),
+      ),
+    // El pago mueve dinero: refresca la liquidación y las cajas.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: settlementKeys.all });
+      void qc.invalidateQueries({ queryKey: cashBoxKeys.all });
+    },
   });
 }
 

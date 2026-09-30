@@ -14,7 +14,8 @@ export type CashTxKind =
   | "TRANSFER"
   | "ADJUSTMENT"
   | "UNIDENTIFIED"
-  | "DEBT_CLOSURE";
+  | "DEBT_CLOSURE"
+  | "COMMISSION";
 
 /** Asiento ya registrado, reducido a lo que importa para el saldo. */
 export interface LedgerEntry {

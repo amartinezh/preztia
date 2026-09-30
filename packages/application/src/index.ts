@@ -13,6 +13,7 @@ export * from "./tenant/document-requirements";
 export * from "./tenant/messaging-channels";
 export * from "./cash/ports";
 export * from "./cash/expenses";
+export * from "./cash/commissions";
 export * from "./tracking/ports";
 export * from "./tracking/record-location";
 export * from "./credit/grant-credit";

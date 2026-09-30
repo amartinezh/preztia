@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  CommissionPolicy,
   CreateChannelInput,
   CreateTelegramChannelInput,
   UpdateMessagingChannelsInput,
@@ -205,5 +206,29 @@ export function useDeleteTelegramChannel() {
         await api.deleteTelegramChannel({ headers: tenantHeader(), params: { id }, body: {} }),
       ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: telegramKeys.all }),
+  });
+}
+
+export const commissionKeys = { all: ["commission-settings"] as const };
+
+/** Configuración de comisiones: defecto, tope y política propia/efectiva de cada zona al alcance. */
+export function useCommissionSettings() {
+  return useQuery({
+    queryKey: commissionKeys.all,
+    queryFn: async () => unwrap(await api.getCommissionSettings({ headers: tenantHeader() })),
+  });
+}
+
+/** Fija (`policy`) o quita (`null`, vuelve a heredar) la comisión propia de una zona. */
+export function useSetZoneCommission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { zoneId: string; policy: CommissionPolicy | null }) =>
+      unwrap(
+        input.policy
+          ? await api.setZoneCommission({ headers: tenantHeader(), params: { zoneId: input.zoneId }, body: input.policy })
+          : await api.clearZoneCommission({ headers: tenantHeader(), params: { zoneId: input.zoneId }, body: {} }),
+      ),
+    onSuccess: (view) => qc.setQueryData(commissionKeys.all, view),
   });
 }

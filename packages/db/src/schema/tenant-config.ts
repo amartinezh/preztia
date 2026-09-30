@@ -11,7 +11,9 @@ export interface OperationalSettings {
   readonly manualRoute: boolean; // Ruta Manual
   readonly blockOverdueDatesForSales: boolean; // Bloquear Fechas Atrasadas Para Ventas
   readonly blockInterestChange: boolean; // Bloquear Cambio De Interés
-  readonly commissionPctBaseThousand: number; // Porcentaje Comisión (base-mil)
+  readonly commissionPctBaseThousand: number; // Comisión por defecto del cobrador (base-mil)
+  readonly commissionBase: "COLLECTED" | "REMITTED" | "PRINCIPAL_RECOVERED"; // Base por defecto de la comisión
+  readonly commissionMaxPctBaseThousand: number; // Tope de comisión del ADMIN (base-mil; 0 = sin comisiones)
   readonly defaultCreditLimitMinor: number; // Cupo por Defecto
   readonly applyColorByOverdue: boolean; // Aplicar color a clientes con atrasos
   readonly clientChoosesPlan: boolean; // El cliente elige plan por WhatsApp (Fase 10)
@@ -49,6 +51,8 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   blockOverdueDatesForSales: true,
   blockInterestChange: true,
   commissionPctBaseThousand: 0,
+  commissionBase: "COLLECTED",
+  commissionMaxPctBaseThousand: 0,
   defaultCreditLimitMinor: 0,
   applyColorByOverdue: false,
   clientChoosesPlan: false,

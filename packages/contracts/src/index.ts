@@ -13,6 +13,7 @@ export * from "./remittances";
 export * from "./deposit-orders";
 export * from "./collection-routes";
 export * from "./settlements";
+export * from "./commissions";
 export * from "./daily-report";
 export * from "./change-requests";
 export * from "./routes";

@@ -1,8 +1,8 @@
 // Dominio puro del GASTO de cobro ("Solicitud Gastos" del legado): el cobrador solicita, el
 // socio/coordinador aprueba o rechaza (maker-checker). Solo los gastos APROBADOS afectan la caja.
 
-import { ConflictError, DomainError } from "../shared/money";
-import { assertZoneCanUseBox } from "./ledger-attribution";
+import { DomainError } from "../shared/money";
+import { assertCanPayOnBehalfOf, type PayingBox } from "./ledger-attribution";
 import { assertValidReceiptFile, RECEIPT_MAX_BYTES, RECEIPT_MIME_TYPES } from "../shared/receipt-file";
 
 export type ExpenseStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -60,26 +60,14 @@ export const assertValidExpenseReceipt = assertValidReceiptFile;
 export function assertCanPayExpenseFrom(input: {
   requestedBy: string;
   expenseZonePath: string | null;
-  box: { assignedTo: string | null; zonePath: string | null };
+  box: PayingBox;
 }): void {
-  const { box } = input;
-  if (box.assignedTo !== null) {
-    if (box.assignedTo !== input.requestedBy) {
-      throw new ConflictError(
-        "No se puede pagar un gasto desde la caja de ruta de otro cobrador",
-        "EXPENSE_BOX_NOT_ALLOWED",
-      );
-    }
-    return;
-  }
-  if (input.expenseZonePath === null) {
-    if (box.zonePath !== null) {
-      throw new ConflictError(
-        "Un gasto sin zona se paga con una caja general del tenant",
-        "BOX_NOT_USABLE_BY_ZONE",
-      );
-    }
-    return;
-  }
-  assertZoneCanUseBox(input.expenseZonePath, box.zonePath);
+  assertCanPayOnBehalfOf(
+    { beneficiaryId: input.requestedBy, zonePath: input.expenseZonePath, box: input.box },
+    {
+      foreignRouteBoxMessage: "No se puede pagar un gasto desde la caja de ruta de otro cobrador",
+      foreignRouteBoxCode: "EXPENSE_BOX_NOT_ALLOWED",
+      noZoneMessage: "Un gasto sin zona se paga con una caja general del tenant",
+    },
+  );
 }

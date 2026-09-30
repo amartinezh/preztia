@@ -35,6 +35,7 @@ const KINDS: readonly Kind[] = [
   "ADJUSTMENT",
   "UNIDENTIFIED",
   "DEBT_CLOSURE",
+  "COMMISSION",
 ];
 
 // Una fecha local YYYY-MM-DD se convierte al datetime ISO del contrato: el "desde" abarca el

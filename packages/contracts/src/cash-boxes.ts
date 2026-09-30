@@ -22,6 +22,7 @@ export const cashTxKind = z.enum([
   "ADJUSTMENT",
   "UNIDENTIFIED",
   "DEBT_CLOSURE",
+  "COMMISSION",
 ]);
 
 // --- Cuentas bancarias ------------------------------------------------------

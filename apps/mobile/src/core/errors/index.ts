@@ -33,6 +33,10 @@ export type ErrorMessageKey =
   | "errors.remittance.inProgress"
   | "errors.remittance.debtExceeded"
   | "errors.expenses.boxNotAllowed"
+  | "errors.commission.aboveCap"
+  | "errors.commission.boxNotAllowed"
+  | "errors.commission.alreadyPaid"
+  | "errors.commission.nothingToPay"
   | "errors.deposit.exceedsCash"
   | "errors.deposit.invalidTransition"
   | "errors.deposit.invalidDestination"
@@ -68,6 +72,11 @@ const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
   REMITTANCE_IN_PROGRESS: "errors.remittance.inProgress",
   DEBT_EXCEEDED: "errors.remittance.debtExceeded",
   EXPENSE_BOX_NOT_ALLOWED: "errors.expenses.boxNotAllowed",
+  // Comisiones del cobrador
+  COMMISSION_ABOVE_CAP: "errors.commission.aboveCap",
+  COMMISSION_BOX_NOT_ALLOWED: "errors.commission.boxNotAllowed",
+  COMMISSION_ALREADY_PAID: "errors.commission.alreadyPaid",
+  NOTHING_TO_PAY: "errors.commission.nothingToPay",
   // Órdenes de consignación (Fase 4)
   DEPOSIT_EXCEEDS_CASH: "errors.deposit.exceedsCash",
   INVALID_ORDER_TRANSITION: "errors.deposit.invalidTransition",

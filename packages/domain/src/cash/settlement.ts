@@ -9,11 +9,20 @@
 // Invariantes (probadas):
 // - I1: por caja y en total, opening + in − out = closing.
 // - I3: Σ zonas = Σ cajas = total (los asientos sin zona van a la línea "sin zona").
-// - utilidad = interés ganado − gastos − condonado (lo recuperado por nómina no es pérdida).
+// - utilidad = interés ganado − gastos − condonado − comisiones causadas (lo recuperado por nómina
+//   no es pérdida). La comisión se CAUSA en el período que la genera (resultado) y su PAGO es un
+//   egreso de tesorería (COMMISSIONS) del período en que se paga: nunca se resta dos veces.
 
 import { isWithinScope } from "../iam/zone-path";
 import { type CashBoxType, type CashTxDirection, type CashTxKind } from "./cash-box";
 import { type DebtClosureType } from "./remittance";
+import {
+  computeCommission,
+  remittedAmount,
+  resolveCommissionPolicy,
+  type CollectorCommission,
+  type CommissionConfig,
+} from "./commission";
 
 /** Concepto de tesorería de un movimiento (fila de la tabla de liquidación). */
 export type SettlementConcept =
@@ -28,6 +37,7 @@ export type SettlementConcept =
   | "ADJUSTMENTS_OUT"
   | "DEBT_PAYROLL"
   | "DEBT_WRITE_OFF"
+  | "COMMISSIONS"
   | "OTHER_IN"
   | "OTHER_OUT";
 
@@ -43,6 +53,7 @@ export const SETTLEMENT_CONCEPTS: readonly SettlementConcept[] = [
   "ADJUSTMENTS_OUT",
   "DEBT_PAYROLL",
   "DEBT_WRITE_OFF",
+  "COMMISSIONS",
   "OTHER_IN",
   "OTHER_OUT",
 ];
@@ -80,8 +91,23 @@ export interface SettlementZoneRef {
 export interface SettlementCollectorRef {
   readonly collectorId: string;
   readonly email: string | null;
+  /** Zona de su caja de ruta: define su comisión y a qué zona se le causa. */
+  readonly zoneId: string | null;
   readonly zonePath: string | null;
 }
+
+/** Capital recuperado en los cobros en efectivo del cobrador en el período (desglose sellado). */
+export interface CollectorPrincipal {
+  readonly collectorId: string;
+  readonly principalRecoveredMinor: number;
+}
+
+/** Sin configuración de comisiones nadie cobra comisión (tope 0). */
+const NO_COMMISSION: CommissionConfig = {
+  tenantDefault: { ratePerMille: 0, base: "COLLECTED" },
+  capPerMille: 0,
+  zoneSettings: [],
+};
 
 /** Actividad de campo del cobrador en el período (la cuenta la infraestructura). */
 export interface CollectorActivity {
@@ -135,6 +161,8 @@ export interface SettlementResult {
   readonly expensesMinor: number;
   readonly writeOffMinor: number;
   readonly payrollRecoveredMinor: number;
+  /** Comisiones de cobradores causadas en el período (se atribuyen a la zona del cobrador). */
+  readonly commissionsMinor: number;
   readonly utilityMinor: number;
   readonly newCreditsCount: number;
   readonly newCreditsPrincipalMinor: number;
@@ -173,6 +201,8 @@ export interface SettlementZoneLine {
 export interface SettlementCollectorLine {
   readonly collectorId: string;
   readonly email: string | null;
+  /** Zona de su caja de ruta (a la que se le causa y atribuye su comisión). */
+  readonly zoneId: string | null;
   readonly zonePath: string | null;
   readonly collectedMinor: number;
   readonly expensesMinor: number;
@@ -181,6 +211,12 @@ export interface SettlementCollectorLine {
   readonly writeOffMinor: number;
   /** Efectivo en su caja de ruta al corte (lo no entregado = deuda). */
   readonly closingCashMinor: number;
+  /** Lo rendido: salidas de su caja de ruta netas de lo que se le entregó (≥ 0). */
+  readonly remittedMinor: number;
+  /** Capital recuperado en sus cobros en efectivo. */
+  readonly principalRecoveredMinor: number;
+  /** Comisión causada con la política vigente al calcular (sellada al cerrar). */
+  readonly commission: CollectorCommission;
   readonly performance: CollectorPerformance;
 }
 
@@ -221,6 +257,8 @@ export function conceptOf(kind: CashTxKind, direction: CashTxDirection, debtType
     case "DEBT_CLOSURE":
       if (inbound) return "OTHER_IN";
       return debtType === "WRITE_OFF" ? "DEBT_WRITE_OFF" : "DEBT_PAYROLL";
+    case "COMMISSION":
+      return inbound ? "OTHER_IN" : "COMMISSIONS";
   }
 }
 
@@ -232,12 +270,19 @@ export function buildSettlement(input: {
   collectors: readonly SettlementCollectorRef[];
   portfolio: readonly PortfolioByZone[];
   activity?: readonly CollectorActivity[];
+  collectorPrincipal?: readonly CollectorPrincipal[];
+  commission?: CommissionConfig;
 }): SettlementSnapshot {
   const boxes = input.boxes.map((box) => boxLine(box, input.flows.filter((f) => f.cashBoxId === box.cashBoxId)));
-  const zones = zoneLines(input);
   const collectors = input.collectors.map((c) =>
-    collectorLine(c, input.flows, input.boxes, input.activity?.find((a) => a.collectorId === c.collectorId)),
+    collectorLine(c, input.flows, input.boxes, {
+      activity: input.activity?.find((a) => a.collectorId === c.collectorId),
+      principalRecoveredMinor:
+        input.collectorPrincipal?.find((p) => p.collectorId === c.collectorId)?.principalRecoveredMinor ?? 0,
+      commission: input.commission ?? NO_COMMISSION,
+    }),
   );
+  const zones = zoneLines({ ...input, commissions: commissionsByZone(input.collectors, collectors) });
   return {
     totals: sumTreasury(boxes),
     result: mergeResults(zones.map((z) => z.result)),
@@ -298,15 +343,30 @@ function boxLine(box: SettlementBoxInput, flows: readonly SettlementFlow[]): Set
   };
 }
 
+/** Comisión causada por zona del cobrador (null = cobradores sin zona). */
+function commissionsByZone(
+  refs: readonly SettlementCollectorRef[],
+  lines: readonly SettlementCollectorLine[],
+): Map<string | null, number> {
+  const byZone = new Map<string | null, number>();
+  refs.forEach((ref, i) => {
+    const amount = lines[i]!.commission.amountMinor;
+    if (amount > 0) byZone.set(ref.zoneId, (byZone.get(ref.zoneId) ?? 0) + amount);
+  });
+  return byZone;
+}
+
 function zoneLines(input: {
   flows: readonly SettlementFlow[];
   zones: readonly SettlementZoneRef[];
   portfolio: readonly PortfolioByZone[];
+  commissions: ReadonlyMap<string | null, number>;
 }): SettlementZoneLine[] {
   const refs = new Map(input.zones.map((z) => [z.zoneId, z]));
   const zoneIds = new Set<string | null>([
     ...input.flows.map((f) => f.zoneId),
     ...input.portfolio.map((p) => p.zoneId),
+    ...input.commissions.keys(),
   ]);
   return [...zoneIds].map((zoneId) => {
     const { concepts, inMinor, outMinor } = conceptsOf(input.flows.filter((f) => f.zoneId === zoneId));
@@ -319,12 +379,12 @@ function zoneLines(input: {
       inMinor,
       outMinor,
       concepts,
-      result: resultOf(concepts, portfolio),
+      result: resultOf(concepts, portfolio, input.commissions.get(zoneId) ?? 0),
     };
   });
 }
 
-function resultOf(concepts: ConceptAmounts, p: PortfolioByZone | undefined): SettlementResult {
+function resultOf(concepts: ConceptAmounts, p: PortfolioByZone | undefined, commissionsMinor: number): SettlementResult {
   const interest = p?.interestEarnedMinor ?? 0;
   const due = p?.dueInPeriodMinor ?? 0;
   const collected = p?.collectedOnPortfolioMinor ?? 0;
@@ -334,7 +394,8 @@ function resultOf(concepts: ConceptAmounts, p: PortfolioByZone | undefined): Set
     expensesMinor: concepts.EXPENSES,
     writeOffMinor: concepts.DEBT_WRITE_OFF,
     payrollRecoveredMinor: concepts.DEBT_PAYROLL,
-    utilityMinor: interest - concepts.EXPENSES - concepts.DEBT_WRITE_OFF,
+    commissionsMinor,
+    utilityMinor: interest - concepts.EXPENSES - concepts.DEBT_WRITE_OFF - commissionsMinor,
     newCreditsCount: p?.newCreditsCount ?? 0,
     newCreditsPrincipalMinor: p?.newCreditsPrincipalMinor ?? 0,
     dueInPeriodMinor: due,
@@ -351,13 +412,16 @@ function mergeResults(results: readonly SettlementResult[]): SettlementResult {
   const interest = sum((r) => r.interestEarnedMinor);
   const expenses = sum((r) => r.expensesMinor);
   const writeOff = sum((r) => r.writeOffMinor);
+  // Fotos anteriores a las comisiones no traen el campo: cuentan como 0.
+  const commissions = sum((r) => r.commissionsMinor ?? 0);
   return {
     interestEarnedMinor: interest,
     principalRecoveredMinor: sum((r) => r.principalRecoveredMinor),
     expensesMinor: expenses,
     writeOffMinor: writeOff,
     payrollRecoveredMinor: sum((r) => r.payrollRecoveredMinor),
-    utilityMinor: interest - expenses - writeOff,
+    commissionsMinor: commissions,
+    utilityMinor: interest - expenses - writeOff - commissions,
     newCreditsCount: sum((r) => r.newCreditsCount),
     newCreditsPrincipalMinor: sum((r) => r.newCreditsPrincipalMinor),
     dueInPeriodMinor: due,
@@ -401,7 +465,11 @@ function collectorLine(
   ref: SettlementCollectorRef,
   flows: readonly SettlementFlow[],
   boxes: readonly SettlementBoxInput[],
-  activity: CollectorActivity | undefined,
+  extra: {
+    activity: CollectorActivity | undefined;
+    principalRecoveredMinor: number;
+    commission: CommissionConfig;
+  },
 ): SettlementCollectorLine {
   const own = flows.filter((f) => f.collectorId === ref.collectorId);
   const { concepts } = conceptsOf(own);
@@ -411,9 +479,15 @@ function collectorLine(
     const { inMinor, outMinor } = conceptsOf(flows.filter((f) => f.cashBoxId === b.cashBoxId));
     return acc + b.openingMinor + inMinor - outMinor;
   }, 0);
+  const figures = {
+    collectedMinor: concepts.COLLECTED,
+    remittedMinor: remittedAmount(concepts.TRANSFERS_OUT, concepts.TRANSFERS_IN),
+    principalRecoveredMinor: extra.principalRecoveredMinor,
+  };
   return {
     collectorId: ref.collectorId,
     email: ref.email,
+    zoneId: ref.zoneId,
     zonePath: ref.zonePath,
     collectedMinor: concepts.COLLECTED,
     expensesMinor: concepts.EXPENSES,
@@ -421,6 +495,9 @@ function collectorLine(
     payrollMinor: concepts.DEBT_PAYROLL,
     writeOffMinor: concepts.DEBT_WRITE_OFF,
     closingCashMinor,
-    performance: collectorPerformance(activity),
+    remittedMinor: figures.remittedMinor,
+    principalRecoveredMinor: figures.principalRecoveredMinor,
+    commission: computeCommission(resolveCommissionPolicy(ref.zonePath, extra.commission), figures),
+    performance: collectorPerformance(extra.activity),
   };
 }

@@ -15,6 +15,7 @@ import { cashCount } from "./cash-count";
 import { payment } from "./payment";
 import { expense } from "./expense";
 import { credit } from "./credit";
+import { settlementPeriod } from "./settlement-period";
 
 // Sentido del asiento sobre la caja (el saldo es Σ: IN suma, OUT resta).
 export const cashTxDirection = pgEnum("cash_tx_direction", ["IN", "OUT"]);
@@ -28,6 +29,7 @@ export const cashTxDirection = pgEnum("cash_tx_direction", ["IN", "OUT"]);
 //  ADJUSTMENT   → ajuste por arqueo/conciliación (el historial no se edita: se ajusta).
 //  UNIDENTIFIED → ingreso que no se pudo conciliar → caja TRANSIT.
 //  DEBT_CLOSURE → cierre (solo ADMIN) de la deuda del cobrador en su caja de ruta.
+//  COMMISSION   → pago de la comisión causada a un cobrador en una liquidación (liga al período).
 export const cashTxKind = pgEnum("cash_tx_kind", [
   "PAYMENT_IN",
   "DISBURSEMENT",
@@ -37,6 +39,7 @@ export const cashTxKind = pgEnum("cash_tx_kind", [
   "ADJUSTMENT",
   "UNIDENTIFIED",
   "DEBT_CLOSURE",
+  "COMMISSION",
 ]);
 
 // Cómo se cerró la deuda del cobrador: PAYROLL = recuperada por nómina (no afecta la utilidad);
@@ -69,6 +72,9 @@ export const cashTransaction = pgTable(
     // Arqueo que justifica un asiento ADJUSTMENT: el ajuste siempre nace de un descuadre
     // verificado (evidencia), nunca de un monto libre.
     cashCountId: uuid("cash_count_id").references(() => cashCount.id),
+    // Liquidación cuya comisión paga un asiento COMMISSION; el beneficiario es `collector_id`
+    // (como un gasto pagado desde la oficina se atribuye a quien lo pidió).
+    settlementPeriodId: uuid("settlement_period_id").references(() => settlementPeriod.id),
     // Las dos patas de una transferencia comparten transfer_group_id (Σ = 0).
     transferGroupId: uuid("transfer_group_id"),
     // Atribución SELLADA al postear (no se recalcula): zona del hecho de negocio (crédito,
@@ -111,7 +117,17 @@ export const cashTransaction = pgTable(
     byCountIdx: uniqueIndex("cash_tx_count_idx")
       .on(t.cashCountId)
       .where(sql`cash_count_id is not null`),
+    // La comisión de un cobrador en una liquidación se paga UNA sola vez: idempotencia del egreso.
+    byCommissionIdx: uniqueIndex("cash_tx_commission_idx")
+      .on(t.settlementPeriodId, t.collectorId)
+      .where(sql`settlement_period_id is not null`),
     positive: check("cash_tx_amount_positive_chk", sql`amount_minor > 0`),
+    // Un pago de comisión siempre lleva su liquidación y su beneficiario, y solo él los lleva
+    // (comparado como TEXTO por el valor de enum recién agregado, igual que el cierre de deuda).
+    commissionTyped: check(
+      "cash_tx_commission_chk",
+      sql`(kind::text = 'COMMISSION') = (settlement_period_id is not null and collector_id is not null)`,
+    ),
     // Se compara como TEXTO: un valor de enum recién agregado (ALTER TYPE … ADD VALUE) no puede
     // usarse en la misma transacción de migración; así esta migración aplica en un solo paso.
     debtClosureTyped: check(

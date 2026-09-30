@@ -19,11 +19,13 @@ function isUniqueViolation(error: unknown): boolean {
 export async function mapUniqueViolation<T>(
   operation: () => Promise<T>,
   message: string,
+  /** Código estable opcional para que el cliente muestre un mensaje accionable. */
+  code?: string,
 ): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    if (isUniqueViolation(error)) throw new ConflictError(message);
+    if (isUniqueViolation(error)) throw new ConflictError(message, code);
     throw error;
   }
 }

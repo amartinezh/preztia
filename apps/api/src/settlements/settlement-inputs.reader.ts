@@ -1,7 +1,12 @@
 import { sql, type SQL } from 'drizzle-orm';
 import {
   DEFAULT_OPERATIONAL_SETTINGS,
+  commissionConfigOf,
   settlementSettingsOf,
+  type CollectorPrincipal,
+  type CommissionBase,
+  type CommissionConfig,
+  type ZoneCommissionSetting,
   type CashBoxType,
   type CashTxDirection,
   type CollectorActivity,
@@ -32,6 +37,8 @@ export interface SettlementInputs {
   readonly collectors: SettlementCollectorRef[];
   readonly portfolio: PortfolioByZone[];
   readonly activity: CollectorActivity[];
+  readonly collectorPrincipal: CollectorPrincipal[];
+  readonly commission: CommissionConfig;
 }
 
 type Row = Record<string, unknown>;
@@ -39,18 +46,50 @@ const num = (v: unknown): number => Number(v ?? 0);
 // Las columnas de texto/uuid llegan como string (o null) desde postgres-js.
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
+/** Ajustes operativos del tenant mezclados con sus valores por defecto (filas anteriores). */
+async function readOperationalSettings(
+  tx: Tx,
+  tenantId: string,
+): Promise<OperationalSettings> {
+  const rows = (await tx.execute(sql`
+    SELECT operational_settings AS settings FROM tenant_config WHERE tenant_id = ${tenantId} LIMIT 1
+  `)) as unknown as Array<{ settings: Partial<OperationalSettings> | null }>;
+  return { ...DEFAULT_OPERATIONAL_SETTINGS, ...(rows[0]?.settings ?? {}) };
+}
+
 /** Configuración de liquidación del tenant (ajustes operativos con sus valores por defecto). */
 export async function readSettlementSettings(
   tx: Tx,
   tenantId: string,
 ): Promise<SettlementSettings> {
+  return settlementSettingsOf(await readOperationalSettings(tx, tenantId));
+}
+
+/**
+ * Configuración de comisiones VIGENTE: defecto y tope del tenant más la política propia de cada
+ * zona. Al cerrar, la foto sella el resultado de aplicarla (no se recalcula si cambia después).
+ */
+export async function readCommissionConfig(
+  tx: Tx,
+  tenantId: string,
+): Promise<CommissionConfig> {
   const rows = (await tx.execute(sql`
-    SELECT operational_settings AS settings FROM tenant_config WHERE tenant_id = ${tenantId} LIMIT 1
-  `)) as unknown as Array<{ settings: Partial<OperationalSettings> | null }>;
-  return settlementSettingsOf({
-    ...DEFAULT_OPERATIONAL_SETTINGS,
-    ...(rows[0]?.settings ?? {}),
-  });
+    SELECT id, path::text AS path, commission_rate_per_mille, commission_base
+    FROM zone
+    WHERE commission_rate_per_mille IS NOT NULL
+  `)) as unknown as Row[];
+  const zoneSettings: ZoneCommissionSetting[] = rows.map((r) => ({
+    zoneId: String(r.id),
+    path: String(r.path),
+    policy: {
+      ratePerMille: num(r.commission_rate_per_mille),
+      base: r.commission_base as CommissionBase,
+    },
+  }));
+  return commissionConfigOf(
+    await readOperationalSettings(tx, tenantId),
+    zoneSettings,
+  );
 }
 
 /** Instante del primer asiento del libro (para reconstruir la historia desde el principio). */
@@ -70,6 +109,7 @@ export async function readFirstActivity(tx: Tx): Promise<Date | null> {
 export async function readSettlementInputs(
   tx: Tx,
   range: SettlementRange,
+  tenantId: string,
 ): Promise<SettlementInputs> {
   const [boxes, flows, zones, collectors, portfolio, activity] = [
     await readBoxes(tx, range.startsAt),
@@ -79,7 +119,18 @@ export async function readSettlementInputs(
     await readPortfolio(tx, range),
     await readCollectorActivity(tx, range),
   ];
-  return { boxes, flows, zones, collectors, portfolio, activity };
+  const collectorPrincipal = await readCollectorPrincipal(tx, range);
+  const commission = await readCommissionConfig(tx, tenantId);
+  return {
+    boxes,
+    flows,
+    zones,
+    collectors,
+    portfolio,
+    activity,
+    collectorPrincipal,
+    commission,
+  };
 }
 
 async function readBoxes(
@@ -145,7 +196,7 @@ async function readZones(tx: Tx): Promise<SettlementZoneRef[]> {
 /** Cobradores con caja de ruta (la zona de la caja es la del cobrador para el recorte). */
 async function readCollectors(tx: Tx): Promise<SettlementCollectorRef[]> {
   const rows = (await tx.execute(sql`
-    SELECT DISTINCT ON (b.assigned_to) b.assigned_to AS collector_id, u.email, z.path::text AS zone_path
+    SELECT DISTINCT ON (b.assigned_to) b.assigned_to AS collector_id, u.email, b.zone_id, z.path::text AS zone_path
     FROM cash_box b
     LEFT JOIN app_user u ON u.id = b.assigned_to
     LEFT JOIN zone z ON z.id = b.zone_id
@@ -155,7 +206,32 @@ async function readCollectors(tx: Tx): Promise<SettlementCollectorRef[]> {
   return rows.map((r) => ({
     collectorId: String(r.collector_id),
     email: str(r.email),
+    zoneId: str(r.zone_id),
     zonePath: str(r.zone_path),
+  }));
+}
+
+/**
+ * Capital recuperado por cobrador en el rango: Σ del desglose capital de los abonos cuyos pagos
+ * entraron como EFECTIVO a su caja de ruta (PAYMENT_IN sellado con su `collector_id`). El desglose
+ * ya está persistido en `payment_allocation` (la foto no recalcula).
+ */
+async function readCollectorPrincipal(
+  tx: Tx,
+  range: SettlementRange,
+): Promise<CollectorPrincipal[]> {
+  const rows = (await tx.execute(sql`
+    SELECT t.collector_id, SUM(COALESCE(pa.principal_minor, 0)) AS principal
+    FROM cash_transaction t
+    JOIN payment_allocation pa ON pa.payment_id = t.payment_id
+    WHERE t.kind = 'PAYMENT_IN' AND t.direction = 'IN' AND t.collector_id IS NOT NULL
+      AND t.created_at >= ${range.startsAt.toISOString()}::timestamptz
+      AND t.created_at < ${range.endsAt.toISOString()}::timestamptz
+    GROUP BY t.collector_id
+  `)) as unknown as Row[];
+  return rows.map((r) => ({
+    collectorId: String(r.collector_id),
+    principalRecoveredMinor: num(r.principal),
   }));
 }
 

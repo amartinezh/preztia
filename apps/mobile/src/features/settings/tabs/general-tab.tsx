@@ -42,6 +42,14 @@ function localToday(): string {
 }
 
 const SETTLEMENT_FREQUENCIES: OperationalSettings["settlementFrequency"][] = ["WEEKLY", "BIWEEKLY", "MONTHLY"];
+const COMMISSION_BASES: OperationalSettings["commissionBase"][] = ["COLLECTED", "REMITTED", "PRINCIPAL_RECOVERED"];
+
+// Los porcentajes de comisión viajan en base mil (50 = 5 %), como el interés.
+const PER_MILLE_PER_PERCENT = 10;
+const MAX_PER_MILLE = 1000;
+function percentToPerMille(text: string): number {
+  return Math.min(MAX_PER_MILLE, Math.max(0, Math.round((Number(text.replace(",", ".")) || 0) * PER_MILLE_PER_PERCENT)));
+}
 
 export function GeneralTab({ canEdit }: { canEdit: boolean }) {
   return (
@@ -190,14 +198,30 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
           disabled={!canEdit}
         />
         <Text variant="caption" tone="muted">{t("config.settlement.autoCloseHint")}</Text>
+        <Field label={t("config.commissionCap")}>
+          <Input
+            keyboardType="numeric"
+            editable={canEdit}
+            value={String(form.commissionMaxPctBaseThousand / PER_MILLE_PER_PERCENT)}
+            onChangeText={(text) => set("commissionMaxPctBaseThousand", percentToPerMille(text))}
+          />
+        </Field>
         <Field label={t("config.commission")}>
           <Input
             keyboardType="numeric"
             editable={canEdit}
-            value={String(form.commissionPctBaseThousand / 10)}
-            onChangeText={(text) => set("commissionPctBaseThousand", Math.round((Number(text) || 0) * 10))}
+            value={String(form.commissionPctBaseThousand / PER_MILLE_PER_PERCENT)}
+            onChangeText={(text) => set("commissionPctBaseThousand", percentToPerMille(text))}
           />
         </Field>
+        <Field label={t("config.commissionBase")}>
+          <Select
+            value={form.commissionBase}
+            options={COMMISSION_BASES.map((b) => ({ value: b, label: t(`commission.base.${b}`) }))}
+            onChange={(v) => set("commissionBase", v)}
+          />
+        </Field>
+        <Text variant="caption" tone="muted">{t("config.commissionHint")}</Text>
         <Field label={t("config.defaultLimit")}>
           <Input
             keyboardType="numeric"

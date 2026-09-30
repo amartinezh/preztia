@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Pressable } from "react-native";
-import type { SettlementConcept, SettlementSnapshot, SettlementView as View } from "@preztiaos/contracts";
+import type {
+  CollectorCommission,
+  SettlementConcept,
+  SettlementSnapshot,
+  SettlementView as View,
+} from "@preztiaos/contracts";
 import { Badge, Banner, Button, Card, formatMoney, Row, Select, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { DataTable, type DataRow } from "@/components/data-table";
@@ -9,6 +14,7 @@ import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useCashTransactions, type TransactionFilters } from "@/features/cash/api/boxes-queries";
 import { fetchLedgerCsv } from "../api/queries";
+import { CommissionPayModal, type CommissionPayee } from "./commission-pay-modal";
 
 const PER_MILLE_TO_PERCENT = 10;
 
@@ -26,6 +32,7 @@ const CONCEPT_ORDER: SettlementConcept[] = [
   "ADJUSTMENTS_OUT",
   "DEBT_PAYROLL",
   "DEBT_WRITE_OFF",
+  "COMMISSIONS",
   "OTHER_OUT",
 ];
 
@@ -69,6 +76,13 @@ export function SettlementView({ view }: { view: View }) {
       <Text variant="heading">{t("settlement.collectors")}</Text>
       <CollectorsTable snapshot={s} money={money} />
 
+      {s.collectors.length > 0 ? (
+        <>
+          <Text variant="heading">{t("settlement.commissions.title")}</Text>
+          <CommissionsSection view={view} money={money} />
+        </>
+      ) : null}
+
       <Text variant="heading">{t("settlement.movements")}</Text>
       <PeriodMovements view={view} money={money} />
     </Stack>
@@ -84,6 +98,7 @@ function ResultCards({ snapshot, money }: { snapshot: SettlementSnapshot; money:
     { key: "principal", label: t("settlement.result.principal"), value: money(r.principalRecoveredMinor) },
     { key: "expenses", label: t("settlement.result.expenses"), value: money(r.expensesMinor) },
     { key: "writeOff", label: t("settlement.result.writeOff"), value: money(r.writeOffMinor) },
+    { key: "commissions", label: t("settlement.result.commissions"), value: money(r.commissionsMinor ?? 0) },
     { key: "rate", label: t("settlement.result.collectionRate"), value: perMille(r.collectionRatePerMille) },
     { key: "newCredits", label: t("settlement.result.newCredits"), value: `${r.newCreditsCount} · ${money(r.newCreditsPrincipalMinor)}` },
     { key: "overdue", label: t("settlement.result.overdue"), value: money(r.overdueAtCutMinor) },
@@ -175,6 +190,10 @@ function CollectorsTable({ snapshot, money }: { snapshot: SettlementSnapshot; mo
     row("payroll", t("settlement.collector.payroll"), (c) => money(c.payrollMinor)),
     row("writeOff", t("settlement.collector.writeOff"), (c) => money(c.writeOffMinor)),
     row("closingCash", t("settlement.collector.closingCash"), (c) => money(c.closingCashMinor), true),
+    row("commissionBase", t("settlement.collector.commissionBase"), (c) =>
+      c.commission ? `${money(c.commission.baseAmountMinor)} · ${t(`commission.base.short.${c.commission.base}`)}` : "—",
+    ),
+    row("commission", t("settlement.collector.commission"), (c) => (c.commission ? money(c.commission.amountMinor) : "—"), true),
     row("stops", t("settlement.collector.stops"), (c) =>
       c.performance ? `${c.performance.stopsResolved} / ${c.performance.stopsDispatched}` : "—",
     ),
@@ -196,6 +215,67 @@ function CollectorsTable({ snapshot, money }: { snapshot: SettlementSnapshot; mo
   return <DataTable columns={columns} rows={collectors.length ? rows : []} empty={t("settlement.noCollectors")} />;
 }
 
+/** Porcentaje y base aplicados ("5,0 % de lo cobrado"), marcando si el tope los recortó. */
+function commissionRule(c: CollectorCommission, t: ReturnType<typeof useT>["t"]): string {
+  const rule = `${perMille(c.ratePerMille)} · ${t(`commission.base.short.${c.base}`)}`;
+  return c.cappedByLimit ? `${rule} (${t("settlement.commissions.capped")})` : rule;
+}
+
+/**
+ * Comisión causada por cobrador y su pago. En el período abierto es un estimado en vivo; al cerrar
+ * queda sellada y se paga una vez desde la caja elegida (el pago es un egreso del libro de cajas).
+ */
+function CommissionsSection({ view, money }: { view: View; money: (v: number) => string }) {
+  const { t } = useT();
+  const [payee, setPayee] = useState<CommissionPayee | null>(null);
+  const paidBy = new Map(view.commissionPayments.map((p) => [p.collectorId, p]));
+  return (
+    <Stack gap="sm">
+      <Text variant="caption" tone="muted">
+        {view.isOpen ? t("settlement.commissions.openHint") : t("settlement.commissions.hint")}
+      </Text>
+      {view.snapshot.collectors.map((c) => {
+        const commission = c.commission;
+        const payment = paidBy.get(c.collectorId);
+        const label = c.email ?? c.collectorId;
+        const payable = !view.isOpen && view.id !== null && !payment && (commission?.amountMinor ?? 0) > 0;
+        return (
+          <Card key={c.collectorId}>
+            <Row className="flex-wrap items-center justify-between gap-2">
+              <Stack gap="xs" className="flex-1">
+                <Text variant="label">{label}</Text>
+                <Text variant="caption" tone="muted">
+                  {commission ? commissionRule(commission, t) : t("settlement.commissions.none")}
+                </Text>
+                {payment ? (
+                  <Text variant="caption" tone="muted">
+                    {t("settlement.commissions.paidFrom")} {payment.cashBoxName} · {new Date(payment.paidAt).toLocaleString()}
+                  </Text>
+                ) : null}
+              </Stack>
+              <Text variant="label">{money(commission?.amountMinor ?? 0)}</Text>
+              {payment ? (
+                <Badge label={t("settlement.commissions.paid")} tone="success" />
+              ) : payable ? (
+                <Button
+                  label={t("settlement.commissions.pay")}
+                  size="sm"
+                  onPress={() =>
+                    setPayee({ collectorId: c.collectorId, label, zoneId: c.zoneId ?? null, amountMinor: commission!.amountMinor })
+                  }
+                />
+              ) : null}
+            </Row>
+          </Card>
+        );
+      })}
+      {payee && view.id ? (
+        <CommissionPayModal settlementId={view.id} payee={payee} currency={view.currency} onClose={() => setPayee(null)} />
+      ) : null}
+    </Stack>
+  );
+}
+
 /** Movimientos exactos del período [inicio, fin), con filtros y exportación CSV. */
 function PeriodMovements({ view, money }: { view: View; money: (v: number) => string }) {
   const { t } = useT();
@@ -215,7 +295,7 @@ function PeriodMovements({ view, money }: { view: View; money: (v: number) => st
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const ALL = "";
   const kinds: NonNullable<TransactionFilters["kind"]>[] = [
-    "PAYMENT_IN", "DISBURSEMENT", "EXPENSE", "WITHDRAWAL", "TRANSFER", "ADJUSTMENT", "UNIDENTIFIED", "DEBT_CLOSURE",
+    "PAYMENT_IN", "DISBURSEMENT", "EXPENSE", "WITHDRAWAL", "TRANSFER", "ADJUSTMENT", "UNIDENTIFIED", "DEBT_CLOSURE", "COMMISSION",
   ];
 
   const exportCsv = async () => {

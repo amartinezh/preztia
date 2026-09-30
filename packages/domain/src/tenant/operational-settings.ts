@@ -4,6 +4,13 @@ import {
   type SettlementFrequency,
   type SettlementSettings,
 } from "../cash/settlement-period";
+import {
+  assertValidCommissionCap,
+  assertValidCommissionPolicy,
+  type CommissionBase,
+  type CommissionConfig,
+  type ZoneCommissionSetting,
+} from "../cash/commission";
 
 // Ajustes operativos del tenant (configuración de cobro del legado). Tipo canónico + valores por
 // defecto + mezcla pura de un parche parcial. El esquema de BD refleja esta forma (mirror).
@@ -13,8 +20,18 @@ export interface OperationalSettings {
   readonly manualRoute: boolean;
   readonly blockOverdueDatesForSales: boolean;
   readonly blockInterestChange: boolean;
-  /** Comisión en base-mil (200 = 20%), igual que el interés. */
+  /**
+   * Comisión POR DEFECTO del cobrador en base-mil (200 = 20%), igual que el interés: aplica a las
+   * zonas sin configuración propia (ni heredada). Ver `cash/commission.ts`.
+   */
   readonly commissionPctBaseThousand: number;
+  /** Base por defecto de la comisión (lo cobrado, lo rendido o el capital recuperado). */
+  readonly commissionBase: CommissionBase;
+  /**
+   * Tope de comisión que fija el ADMIN (base-mil): ningún coordinador configura una zona por encima
+   * y la tasa efectiva nunca lo supera. Con 0 (por defecto) nadie cobra comisión hasta fijarlo.
+   */
+  readonly commissionMaxPctBaseThousand: number;
   /** Cupo por defecto al crear un cliente (unidades menores). */
   readonly defaultCreditLimitMinor: number;
   readonly applyColorByOverdue: boolean;
@@ -76,6 +93,8 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   blockOverdueDatesForSales: true,
   blockInterestChange: true,
   commissionPctBaseThousand: 0,
+  commissionBase: "COLLECTED",
+  commissionMaxPctBaseThousand: 0,
   defaultCreditLimitMinor: 0,
   applyColorByOverdue: false,
   clientChoosesPlan: false,
@@ -111,5 +130,23 @@ export function mergeOperationalSettings(
 ): OperationalSettings {
   const merged = { ...current, ...patch };
   assertValidSettlementSettings(settlementSettingsOf(merged));
+  // El valor por defecto también respeta el tope (bajar el tope exige bajar primero el defecto).
+  assertValidCommissionCap(merged.commissionMaxPctBaseThousand);
+  assertValidCommissionPolicy(
+    { ratePerMille: merged.commissionPctBaseThousand, base: merged.commissionBase },
+    merged.commissionMaxPctBaseThousand,
+  );
   return merged;
+}
+
+/** Configuración de comisiones: la del tenant (ajustes) más lo configurado por zona. */
+export function commissionConfigOf(
+  s: OperationalSettings,
+  zoneSettings: readonly ZoneCommissionSetting[],
+): CommissionConfig {
+  return {
+    tenantDefault: { ratePerMille: s.commissionPctBaseThousand, base: s.commissionBase },
+    capPerMille: s.commissionMaxPctBaseThousand,
+    zoneSettings,
+  };
 }

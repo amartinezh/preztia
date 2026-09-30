@@ -63,7 +63,7 @@ const snapshot = buildSettlement({
   boxes,
   flows,
   zones: [NORTE, SUR],
-  collectors: [{ collectorId: "ana", email: "ana@t.test", zonePath: "norte" }],
+  collectors: [{ collectorId: "ana", email: "ana@t.test", zoneId: "z-norte", zonePath: "norte" }],
   portfolio,
 });
 
@@ -173,5 +173,74 @@ describe("collectorPerformance", () => {
       avgResolveMinutes: null,
       avgDepositReportMinutes: null,
     });
+  });
+});
+
+// ── Comisión del cobrador: causada en la foto, restada de la utilidad de su zona ────────────────
+describe("buildSettlement — comisión del cobrador", () => {
+  const ANA = { collectorId: "ana", email: "ana@t.test", zoneId: "z-norte", zonePath: "norte" };
+  // Ana: cobró 300.000, entregó 250.000 (sin base recibida), capital recuperado 240.000.
+  const build = (policy: { ratePerMille: number; base: "COLLECTED" | "REMITTED" | "PRINCIPAL_RECOVERED" }, cap = 1000) =>
+    buildSettlement({
+      boxes,
+      flows,
+      zones: [NORTE, SUR],
+      collectors: [ANA],
+      portfolio,
+      collectorPrincipal: [{ collectorId: "ana", principalRecoveredMinor: 240_000 }],
+      commission: { tenantDefault: { ratePerMille: 0, base: "COLLECTED" }, capPerMille: cap, zoneSettings: [{ zoneId: "z-norte", path: "norte", policy }] },
+    });
+
+  it.each([
+    ["COLLECTED", 300_000, 15_000],
+    ["REMITTED", 250_000, 12_500],
+    ["PRINCIPAL_RECOVERED", 240_000, 12_000],
+  ] as const)("base %s: comisión = base × 5 %%", (base, baseAmount, amount) => {
+    const ana = build({ ratePerMille: 50, base }).collectors[0]!;
+    expect(ana.commission).toMatchObject({ base, ratePerMille: 50, sourceZoneId: "z-norte", baseAmountMinor: baseAmount, amountMinor: amount });
+  });
+
+  it("la comisión causada resta de la utilidad de la zona del cobrador y del total", () => {
+    const s = build({ ratePerMille: 50, base: "COLLECTED" });
+    const norte = s.zones.find((z) => z.zoneId === "z-norte")!.result;
+    expect(norte.commissionsMinor).toBe(15_000);
+    expect(norte.utilityMinor).toBe(50_000 - 15_000 - 5_000 - 15_000);
+    expect(s.result.commissionsMinor).toBe(15_000);
+    expect(s.result.utilityMinor).toBe(norte.utilityMinor);
+  });
+
+  it("causar la comisión NO toca la tesorería (el pago es otro asiento, de otro período)", () => {
+    const s = build({ ratePerMille: 50, base: "COLLECTED" });
+    expect(s.totals).toEqual(snapshot.totals);
+    expect(s.totals.concepts.COMMISSIONS).toBe(0);
+  });
+
+  it("el tope del ADMIN recorta la tasa configurada y lo deja marcado", () => {
+    const ana = build({ ratePerMille: 80, base: "COLLECTED" }, 50).collectors[0]!;
+    expect(ana.commission).toMatchObject({ ratePerMille: 50, cappedByLimit: true, amountMinor: 15_000 });
+  });
+
+  it("sin configuración de comisiones nadie cobra comisión y la utilidad no cambia", () => {
+    expect(snapshot.collectors[0]!.commission.amountMinor).toBe(0);
+    expect(snapshot.result.commissionsMinor).toBe(0);
+    expect(snapshot.result.utilityMinor).toBe(30_000);
+  });
+
+  it("el pago de una comisión (COMMISSION OUT) es un egreso de tesorería, no de resultado", () => {
+    const paid = buildSettlement({
+      boxes,
+      flows: [...flows, flow({ cashBoxId: "oficina-norte", zoneId: "z-norte", collectorId: "ana", kind: "COMMISSION", direction: "OUT", amountMinor: 9_000 })],
+      zones: [NORTE, SUR],
+      collectors: [ANA],
+      portfolio,
+    });
+    expect(paid.totals.concepts.COMMISSIONS).toBe(9_000);
+    expect(paid.result.utilityMinor).toBe(snapshot.result.utilityMinor);
+  });
+
+  it("el coordinador de Sur no ve la comisión causada en Norte", () => {
+    const scoped = scopeSettlement(build({ ratePerMille: 50, base: "COLLECTED" }), ["sur"]);
+    expect(scoped.result.commissionsMinor).toBe(0);
+    expect(scoped.collectors).toHaveLength(0);
   });
 });

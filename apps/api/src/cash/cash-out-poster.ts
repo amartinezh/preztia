@@ -14,6 +14,12 @@ import { guardDomain } from './domain-guard';
 export interface CashOutOrigin {
   readonly creditId?: string;
   readonly expenseId?: string;
+  /** Comisión de un cobrador causada en una liquidación (asiento COMMISSION). */
+  readonly commission?: {
+    readonly settlementPeriodId: string;
+    readonly collectorId: string;
+    readonly zoneId: string | null;
+  };
 }
 
 export interface CashOutToPost {
@@ -80,9 +86,13 @@ export async function postCashOut(
     }),
   );
 
+  const commission = input.origin?.commission;
   const { zoneId, collectorId } = await attributionFor(tx, box.id, {
     creditId,
     expenseId: input.origin?.expenseId,
+    beneficiary: commission
+      ? { collectorId: commission.collectorId, zoneId: commission.zoneId }
+      : null,
   });
   const [posted] = await tx
     .insert(schema.cashTransaction)
@@ -96,6 +106,7 @@ export async function postCashOut(
       reason: input.reason,
       creditId: input.origin?.creditId ?? null,
       expenseId: input.origin?.expenseId ?? null,
+      settlementPeriodId: commission?.settlementPeriodId ?? null,
       zoneId,
       collectorId,
       createdBy: input.createdBy,

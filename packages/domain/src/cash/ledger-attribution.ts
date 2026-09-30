@@ -26,6 +26,37 @@ export function assertZoneCanUseBox(zonePath: string, boxZonePath: string | null
   }
 }
 
+/** Caja desde la que se quiere pagar algo a nombre de un cobrador (gasto, comisión). */
+export interface PayingBox {
+  /** Cobrador dueño si es caja de ruta. */
+  readonly assignedTo: string | null;
+  readonly zonePath: string | null;
+}
+
+/**
+ * ¿De qué caja puede salir un pago a nombre de un cobrador? De su PROPIA caja de ruta (se descuenta
+ * de su efectivo y entra en su rendición) o de una caja de oficina o banco que su zona puede usar
+ * (propia, superior o del tenant). Nunca de la caja de ruta de otro cobrador: le descuadraría la
+ * rendición (409 con `foreignRouteBoxCode`). Sin zona, solo cajas generales del tenant.
+ */
+export function assertCanPayOnBehalfOf(
+  input: { beneficiaryId: string; zonePath: string | null; box: PayingBox },
+  errors: { foreignRouteBoxMessage: string; foreignRouteBoxCode: string; noZoneMessage: string },
+): void {
+  const { box } = input;
+  if (box.assignedTo !== null) {
+    if (box.assignedTo !== input.beneficiaryId) {
+      throw new ConflictError(errors.foreignRouteBoxMessage, errors.foreignRouteBoxCode);
+    }
+    return;
+  }
+  if (input.zonePath === null) {
+    if (box.zonePath !== null) throw new ConflictError(errors.noZoneMessage, "BOX_NOT_USABLE_BY_ZONE");
+    return;
+  }
+  assertZoneCanUseBox(input.zonePath, box.zonePath);
+}
+
 /** Atributos de la caja que intervienen en la atribución. */
 export interface AttributableBox {
   readonly zoneId: string | null;

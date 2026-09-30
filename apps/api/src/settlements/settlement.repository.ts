@@ -29,6 +29,7 @@ import {
   readSettlementSettings,
   type SettlementRange,
 } from './settlement-inputs.reader';
+import { readCommissionPayments } from './commission-payments.reader';
 
 type PeriodRow = typeof schema.settlementPeriod.$inferSelect;
 
@@ -57,7 +58,9 @@ export class SettlementRepository {
         today: ctx.today,
       });
       const range = toRange(period, ctx.timeZone);
-      const snapshot = buildSettlement(await readSettlementInputs(tx, range));
+      const snapshot = buildSettlement(
+        await readSettlementInputs(tx, range, input.tenantId),
+      );
       return {
         id: null,
         ...rangeFields(range, ctx.settings, input.currency),
@@ -66,6 +69,8 @@ export class SettlementRepository {
         closedAt: null,
         closedBy: null,
         snapshot: toView(scopeSettlement(snapshot, input.scopes)),
+        // El período abierto todavía no causa comisiones: se pagan tras cerrarlo.
+        commissionPayments: [],
         pendingClosures: pendingClosures(ctx),
         startDateConfigured: ctx.settings.startDate !== null,
       };
@@ -104,7 +109,7 @@ export class SettlementRepository {
       }
       const range = toRange(period, ctx.timeZone);
       const snapshot: SettlementSnapshot = buildSettlement(
-        await readSettlementInputs(tx, range),
+        await readSettlementInputs(tx, range, input.tenantId),
       );
       const [row] = await tx
         .insert(schema.settlementPeriod)
@@ -132,6 +137,7 @@ export class SettlementRepository {
           periodEnd: period.end,
           closingMinor: snapshot.totals.closingMinor,
           utilityMinor: snapshot.result.utilityMinor,
+          commissionsMinor: snapshot.result.commissionsMinor,
         },
       });
       return row.id;
@@ -184,11 +190,18 @@ export class SettlementRepository {
         .where(eq(schema.settlementPeriod.id, input.id))
         .limit(1);
       if (!row) throw new NotFoundException('Liquidación no encontrada');
+      const snapshot = scopeSettlement(
+        row.snapshot as SettlementSnapshot,
+        input.scopes,
+      );
       return {
         ...closedFields(row),
         isOpen: false,
-        snapshot: toView(
-          scopeSettlement(row.snapshot as SettlementSnapshot, input.scopes),
+        snapshot: toView(snapshot),
+        commissionPayments: await readCommissionPayments(
+          tx,
+          row.id,
+          snapshot.collectors.map((c) => c.collectorId),
         ),
       };
     });

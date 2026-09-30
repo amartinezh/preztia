@@ -55,7 +55,8 @@ export interface TransactionFilters {
     | "TRANSFER"
     | "ADJUSTMENT"
     | "UNIDENTIFIED"
-    | "DEBT_CLOSURE";
+    | "DEBT_CLOSURE"
+    | "COMMISSION";
   direction?: "IN" | "OUT";
   /** Cobrador dueño de la caja (su efectivo de ruta). */
   collectorId?: string;

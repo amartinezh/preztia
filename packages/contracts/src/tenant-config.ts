@@ -11,7 +11,12 @@ export const operationalSettings = z.object({
   manualRoute: z.boolean(),
   blockOverdueDatesForSales: z.boolean(),
   blockInterestChange: z.boolean(),
+  // Comisión del cobrador (base-mil): valor por defecto para zonas sin configuración propia, su base
+  // y el tope que fija el ADMIN (ninguna zona lo supera; 0 = nadie cobra comisión). El dominio valida
+  // que el valor por defecto no supere el tope.
   commissionPctBaseThousand: z.number().int().min(0).max(1000),
+  commissionBase: z.enum(["COLLECTED", "REMITTED", "PRINCIPAL_RECOVERED"]),
+  commissionMaxPctBaseThousand: z.number().int().min(0).max(1000),
   defaultCreditLimitMinor: z.number().int().min(0),
   applyColorByOverdue: z.boolean(),
   // Negociación de planes por WhatsApp (Fase 10): autonomía del cliente, vencimiento de la oferta
