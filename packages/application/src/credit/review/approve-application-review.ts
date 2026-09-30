@@ -9,7 +9,11 @@ import {
   type ScheduleFrequency,
 } from "@preztiaos/domain";
 
-import type { ScheduledInstallment } from "../grant-credit";
+import {
+  assertBorrowerCanReceiveCredit,
+  type BorrowerCreditPolicyPort,
+  type ScheduledInstallment,
+} from "../grant-credit";
 import type { PaymentPlanStore } from "../plan/ports";
 import type { TenantSettingsStore } from "../../tenant/settings";
 import type {
@@ -60,6 +64,8 @@ interface EffectiveTerms {
  *    administrador (`allowAdminOverride`); el override queda auditado;
  *  - toma los términos del PLAN negociado (no del comando) cuando hubo un plan ofertado y aceptado,
  *    garantizando que el crédito == lo que el cliente aceptó, y graba el `payment_plan_id`.
+ * Con el puerto de política, respeta el cupo y el bloqueo del cliente igual que el otorgamiento
+ * directo, evaluados sobre el monto EFECTIVO (el del plan negociado, no el del comando).
  * Sin esos puertos conserva el comportamiento previo (términos del comando; sin guarda). La
  * transición la decide el dominio (`nextDecisionStatus`); la persistencia (estado + auditoría +
  * crédito) es atómica vía el puerto. No valida HTTP ni arma SQL: solo orquesta.
@@ -71,6 +77,8 @@ export class ApproveApplicationReviewHandler {
     private readonly settings?: TenantSettingsStore,
     /** Avisa al cliente por WhatsApp que el crédito quedó registrado (best-effort). */
     private readonly registeredNotifier?: CreditRegisteredNotifier,
+    /** Cupo + bloqueo del cliente: la aprobación no puede saltarse la regla de `POST /credits`. */
+    private readonly borrowerPolicy?: BorrowerCreditPolicyPort,
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
@@ -91,6 +99,13 @@ export class ApproveApplicationReviewHandler {
     const override = await this.assertAcceptanceOrOverride(cmd.tenantId, accepted);
 
     const terms = await this.resolveTerms(cmd, snapshot);
+    if (this.borrowerPolicy) {
+      await assertBorrowerCanReceiveCredit(this.borrowerPolicy, {
+        tenantId: cmd.tenantId,
+        borrowerId: cmd.borrowerId,
+        requestedMinor: terms.principalMinor,
+      });
+    }
     const principal = Money.of(terms.principalMinor, cmd.currency);
     const schedule = buildSchedule(principal, terms.interestPct, terms.installmentsCount);
     const startDate = this.clock().toISOString().slice(0, 10);

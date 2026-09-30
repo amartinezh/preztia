@@ -15,7 +15,7 @@ import type {
   ApplicationDecisionStore,
   CreditRegisteredNotifier,
 } from "./ports";
-import type { ScheduledInstallment } from "../grant-credit";
+import type { BorrowerCreditPolicyPort, ScheduledInstallment } from "../grant-credit";
 import type { GrantedCreditData } from "./ports";
 import type { PaymentPlanStore } from "../plan/ports";
 import type { TenantSettingsStore } from "../../tenant/settings";
@@ -216,6 +216,67 @@ describe("ApproveApplicationReviewHandler — negociación de planes (Fase 10)",
     const result = await handler.execute(approveCmd);
     expect(result.status).toBe("APPROVED");
     expect(store.approvals[0]!.override).toBe(true);
+  });
+});
+
+// ── Cupo y bloqueo del cliente: la aprobación aplica la misma regla que `POST /credits` ──────────
+type BorrowerPolicy = { creditBlocked: boolean; creditLimitMinor: number; outstandingMinor: number };
+const policyOf = (policy: BorrowerPolicy | null): BorrowerCreditPolicyPort => ({
+  find: async () => policy,
+});
+const approveWithPolicy = (
+  store: FakeStore,
+  policy: BorrowerCreditPolicyPort,
+  plans?: PaymentPlanStore,
+) => new ApproveApplicationReviewHandler(store, plans, plans ? settingsWith(false) : undefined, undefined, policy);
+
+describe("ApproveApplicationReviewHandler — cupo y bloqueo del cliente", () => {
+  it("cliente bloqueado: 409, no crea el crédito", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW"));
+    const policy = policyOf({ creditBlocked: true, creditLimitMinor: 0, outstandingMinor: 0 });
+    await expect(approveWithPolicy(store, policy).execute(approveCmd)).rejects.toBeInstanceOf(ConflictError);
+    expect(store.approvals).toHaveLength(0);
+  });
+
+  it("saldo vigente + solicitado excede el cupo: 409, no crea el crédito", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW"));
+    // 50_001 + 100_000 > 150_000
+    const policy = policyOf({ creditBlocked: false, creditLimitMinor: 150_000, outstandingMinor: 50_001 });
+    await expect(approveWithPolicy(store, policy).execute(approveCmd)).rejects.toBeInstanceOf(ConflictError);
+    expect(store.approvals).toHaveLength(0);
+  });
+
+  it("límite exacto (saldo + solicitado == cupo): aprueba", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW"));
+    const policy = policyOf({ creditBlocked: false, creditLimitMinor: 150_000, outstandingMinor: 50_000 });
+    const result = await approveWithPolicy(store, policy).execute(approveCmd);
+    expect(result.status).toBe("APPROVED");
+    expect(store.approvals).toHaveLength(1);
+  });
+
+  it("cupo 0 = sin cupo: no limita el monto", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW"));
+    const policy = policyOf({ creditBlocked: false, creditLimitMinor: 0, outstandingMinor: 9_999_999 });
+    await approveWithPolicy(store, policy).execute(approveCmd);
+    expect(store.approvals).toHaveLength(1);
+  });
+
+  it("evalúa el capital del plan negociado, no el del comando", async () => {
+    // Comando: 100_000 (cabe en el cupo); plan aceptado: 200_000 (no cabe).
+    const store = new FakeStore(offerSnapshot("ACCEPTED"));
+    const policy = policyOf({ creditBlocked: false, creditLimitMinor: 150_000, outstandingMinor: 0 });
+    await expect(approveWithPolicy(store, policy, plansStore).execute(approveCmd)).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+    expect(store.approvals).toHaveLength(0);
+  });
+
+  it("cliente inexistente: 404, no crea el crédito", async () => {
+    const store = new FakeStore(snapshot("IN_REVIEW"));
+    await expect(approveWithPolicy(store, policyOf(null)).execute(approveCmd)).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    expect(store.approvals).toHaveLength(0);
   });
 });
 

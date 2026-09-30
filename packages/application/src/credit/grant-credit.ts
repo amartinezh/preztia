@@ -120,21 +120,37 @@ export class GrantCreditHandler {
   /** Verifica cupo y bloqueo del cliente cuando hay puerto de política (regla del legado). */
   private async assertWithinCreditPolicy(cmd: GrantCreditCommand): Promise<void> {
     if (!this.borrowerPolicy) return;
-    const policy = await this.borrowerPolicy.find({
+    await assertBorrowerCanReceiveCredit(this.borrowerPolicy, {
       tenantId: cmd.tenantId,
       borrowerId: cmd.borrowerId,
+      requestedMinor: cmd.principalMinor,
     });
-    if (!policy) throw new NotFoundError("El cliente no está registrado");
-    const decision = canReceiveCredit(
-      { creditBlocked: policy.creditBlocked, creditLimitMinor: policy.creditLimitMinor },
-      { requestedMinor: cmd.principalMinor, outstandingMinor: policy.outstandingMinor },
+  }
+}
+
+/**
+ * Guarda de cupo/bloqueo compartida por TODA vía que crea un crédito (otorgamiento directo y
+ * aprobación de solicitudes): la decisión la toma el dominio (`canReceiveCredit`); aquí solo se
+ * carga la política y se traduce el rechazo a `DomainError` (404 cliente inexistente, 409 regla).
+ */
+export async function assertBorrowerCanReceiveCredit(
+  borrowerPolicy: BorrowerCreditPolicyPort,
+  input: { tenantId: string; borrowerId: string; requestedMinor: number },
+): Promise<void> {
+  const policy = await borrowerPolicy.find({
+    tenantId: input.tenantId,
+    borrowerId: input.borrowerId,
+  });
+  if (!policy) throw new NotFoundError("El cliente no está registrado");
+  const decision = canReceiveCredit(
+    { creditBlocked: policy.creditBlocked, creditLimitMinor: policy.creditLimitMinor },
+    { requestedMinor: input.requestedMinor, outstandingMinor: policy.outstandingMinor },
+  );
+  if (!decision.allowed) {
+    throw new ConflictError(
+      decision.reason === CREDIT_DENIED_BLOCKED
+        ? "El cliente está bloqueado para nuevos créditos"
+        : "El crédito solicitado excede el cupo del cliente",
     );
-    if (!decision.allowed) {
-      throw new ConflictError(
-        decision.reason === CREDIT_DENIED_BLOCKED
-          ? "El cliente está bloqueado para nuevos créditos"
-          : "El crédito solicitado excede el cupo del cliente",
-      );
-    }
   }
 }

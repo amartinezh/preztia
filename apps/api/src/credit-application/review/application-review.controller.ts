@@ -29,6 +29,7 @@ import {
 import { JwtGuard } from '../../auth/jwt.guard';
 import { requireTenant } from '../../auth/require-tenant';
 import { requireReviewer } from '../../auth/require-reviewer';
+import { BorrowerPolicyRepository } from '../../credit/borrower-policy.repository';
 import { PaymentPlanRepository } from '../../credit/plans/payment-plan.repository';
 import { TenantConfigRepository } from '../../tenant-config/tenant-config.repository';
 import { resolveTenantCurrency } from '../../tenant-config/tenant-currency';
@@ -71,12 +72,14 @@ export class ApplicationReviewController {
   ) {
     // Fase 10: el otorgamiento toma los términos del plan negociado y exige aceptación del cliente
     // (salvo override permitido por el tenant). Al aprobar, avisa al cliente por WhatsApp que el
-    // crédito quedó registrado (best-effort, con el teléfono de atención de la zona).
+    // crédito quedó registrado (best-effort, con el teléfono de atención de la zona). Respeta el
+    // cupo y el bloqueo del cliente, igual que el otorgamiento directo.
     this.approveHandler = new ApproveApplicationReviewHandler(
       this.decisions,
       this.plans,
       this.tenantConfig,
       this.registeredNotifier,
+      new BorrowerPolicyRepository(),
     );
     this.rejectHandler = new RejectApplicationReviewHandler(this.decisions);
     this.offerHandler = new OfferPlansHandler(
