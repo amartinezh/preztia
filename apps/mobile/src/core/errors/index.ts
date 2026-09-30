@@ -33,6 +33,10 @@ export type ErrorMessageKey =
   | "errors.remittance.inProgress"
   | "errors.remittance.debtExceeded"
   | "errors.expenses.boxNotAllowed"
+  | "errors.payment.backdateLocked"
+  | "errors.payment.dateInFuture"
+  | "errors.payment.dateTooOld"
+  | "errors.payment.dateSealed"
   | "errors.credit.interestLocked"
   | "errors.credit.planInactive"
   | "errors.commission.aboveCap"
@@ -74,6 +78,11 @@ const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
   REMITTANCE_IN_PROGRESS: "errors.remittance.inProgress",
   DEBT_EXCEEDED: "errors.remittance.debtExceeded",
   EXPENSE_BOX_NOT_ALLOWED: "errors.expenses.boxNotAllowed",
+  // Fechas atrasadas de pagos
+  BACKDATE_LOCKED: "errors.payment.backdateLocked",
+  PAYMENT_DATE_IN_FUTURE: "errors.payment.dateInFuture",
+  PAYMENT_DATE_TOO_OLD: "errors.payment.dateTooOld",
+  PAYMENT_DATE_SEALED: "errors.payment.dateSealed",
   // Bloqueo del interés (antifraude)
   INTEREST_LOCKED: "errors.credit.interestLocked",
   PLAN_INACTIVE: "errors.credit.planInactive",

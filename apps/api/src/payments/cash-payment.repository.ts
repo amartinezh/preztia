@@ -1,12 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import {
   allocatePayment,
+  backdatePolicyOf,
   Money,
   portfolioBalanceMinor,
+  resolvePaymentDate,
   type PortfolioInstallment,
+  type RequestedPaymentDate,
+  type ResolvedPaymentDate,
+  type Role,
 } from '@preztiaos/domain';
+import { readOperationalSettingsTx } from '../tenant-config/operational-settings.reader';
+import { resolveTenantTimeZone } from '../tenant-config/tenant-timezone';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { applyAllocationsTx } from './allocation-writer';
 import { postCashPaymentToRouteBox } from '../cash/payment-box-router';
@@ -41,6 +48,13 @@ export interface CashPaymentInput {
   idempotencyKey: string | null;
   /** app_user que recibió el efectivo (su caja de ruta lo recibe). */
   receivedBy: string;
+  /**
+   * Fecha del pago pedida (captura offline o elegida a mano); ausente = ahora. Solo cambia la fecha
+   * del PAGO: el asiento del libro se fecha al registrarse (ADR #41).
+   */
+  requestedDate?: RequestedPaymentDate | null;
+  /** Rol de quien registra: decide si puede elegir la fecha a mano. */
+  actorRole?: Role;
 }
 
 /**
@@ -82,6 +96,9 @@ export async function registerCashPaymentTx(
 
   const installments = await loadInstallments(tx, input.creditId);
 
+  // 2b. Fecha del pago (regla de dominio): antes de mover dinero, para fallar sin efectos.
+  const date = await resolveDateTx(tx, input);
+
   // 3. Regla de dominio: repartir el abono en cascada.
   const result = allocatePayment(
     credit.currency,
@@ -98,7 +115,7 @@ export async function registerCashPaymentTx(
       payerPhone: '',
       amountMinor: input.amountMinor,
       currency: credit.currency,
-      paidAt: new Date(),
+      paidAt: date.paidAt,
       status: 'VERIFIED',
       idempotencyKey: input.idempotencyKey,
     })
@@ -134,8 +151,11 @@ export async function registerCashPaymentTx(
       amountMinor: input.amountMinor,
       allocations: result.allocations.length,
       settled: result.creditSettled,
+      paidAt: date.paidAt.toISOString(),
+      ...(input.requestedDate ? { dateSource: input.requestedDate.kind } : {}),
     },
   });
+  await auditPaymentDate(tx, { input, paymentId, date });
 
   return {
     id: paymentId,
@@ -143,6 +163,67 @@ export async function registerCashPaymentTx(
     amountMinor: input.amountMinor,
     balanceMinor: portfolioBalanceMinor(result.installments),
   };
+}
+
+/** Resuelve la fecha del pago con la política, la zona horaria y el último corte sellado del tenant. */
+async function resolveDateTx(
+  tx: Tx,
+  input: CashPaymentInput,
+): Promise<ResolvedPaymentDate> {
+  const now = new Date();
+  if (!input.requestedDate) {
+    return { paidAt: now, backdated: false, adjusted: null };
+  }
+  const [lastSealed] = await tx
+    .select({ endsAt: schema.settlementPeriod.endsAt })
+    .from(schema.settlementPeriod)
+    .orderBy(desc(schema.settlementPeriod.endsAt))
+    .limit(1);
+  return resolvePaymentDate(input.requestedDate, {
+    policy: backdatePolicyOf(
+      await readOperationalSettingsTx(tx, input.tenantId),
+    ),
+    // Sin rol explícito se trata como cobrador (el más restringido).
+    actorRole: input.actorRole ?? 'COLLECTOR',
+    now,
+    timeZone: await resolveTenantTimeZone(tx, input.tenantId),
+    sealedUntil: lastSealed?.endsAt ?? null,
+  });
+}
+
+/**
+ * Auditoría de la fecha: todo pago fechado en el pasado, y toda captura offline registrada con la
+ * hora actual por caer fuera de la ventana, queda en `audit_log` (quién, cuándo se registró y qué
+ * fecha se pidió).
+ */
+async function auditPaymentDate(
+  tx: Tx,
+  args: {
+    input: CashPaymentInput;
+    paymentId: string;
+    date: ResolvedPaymentDate;
+  },
+): Promise<void> {
+  const { input, date } = args;
+  if (!input.requestedDate || (!date.backdated && !date.adjusted)) return;
+  await tx.insert(schema.auditLog).values({
+    tenantId: input.tenantId,
+    actorId: input.receivedBy,
+    action: date.adjusted ? 'ADJUST payment-date' : 'BACKDATE payment',
+    entity: 'payment',
+    entityId: args.paymentId,
+    payload: {
+      source: input.requestedDate.kind,
+      requested:
+        input.requestedDate.kind === 'OFFLINE_CAPTURE'
+          ? input.requestedDate.capturedAt.toISOString()
+          : input.requestedDate.paidOn,
+      paidAt: date.paidAt.toISOString(),
+      registeredAt: new Date().toISOString(),
+      adjusted: date.adjusted,
+      amountMinor: input.amountMinor,
+    },
+  });
 }
 
 async function loadInstallments(

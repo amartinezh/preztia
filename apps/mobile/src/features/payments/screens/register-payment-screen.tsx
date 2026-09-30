@@ -8,6 +8,7 @@ import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useMyCashBox } from "@/features/cash/api/boxes-queries";
 import { useRegisterCashPayment } from "../api/queries";
+import { PaymentDateField } from "../components/payment-date-field";
 
 export function RegisterPaymentScreen({ creditId }: { creditId: string }) {
   const { t } = useT();
@@ -20,20 +21,22 @@ export function RegisterPaymentScreen({ creditId }: { creditId: string }) {
   const noRouteBox = myCashBox.data?.box === null;
 
   const [amount, setAmount] = useState("");
+  // Día del pago elegido a mano (solo quien puede); null = hoy.
+  const [paidOn, setPaidOn] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
 
   const onSubmit = () => {
     setError(null);
     setQueued(false);
-    const candidate = { amountMinor: majorToMinor(Number(amount)) };
+    const candidate = { amountMinor: majorToMinor(Number(amount)), ...(paidOn ? { paidOn } : {}) };
     const parsed = registerCashPaymentInput.safeParse(candidate);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? t("errors.validation"));
       return;
     }
     register.mutate(
-      { creditId, amountMinor: parsed.data.amountMinor },
+      { creditId, amountMinor: parsed.data.amountMinor, ...(parsed.data.paidOn ? { paidOn: parsed.data.paidOn } : {}) },
       {
         onSuccess: (res) => {
           if (res.queued) setQueued(true);
@@ -62,6 +65,8 @@ export function RegisterPaymentScreen({ creditId }: { creditId: string }) {
             accessibilityLabel={t("common.amount")}
           />
         </Field>
+
+        <PaymentDateField value={paidOn} onChange={setPaidOn} />
 
         <Button
           label={t("payments.register")}

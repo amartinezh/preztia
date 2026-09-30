@@ -867,7 +867,16 @@ const es = {
   "config.saved": "Configuración guardada ✓",
   "config.recharges": "Activar recargos",
   "config.manualRoute": "Ruta manual",
-  "config.blockOverdue": "Bloquear fechas atrasadas para ventas",
+  "config.blockOverdue": "Bloquear fechas atrasadas",
+  "config.blockOverdueHint":
+    "Encendido: solo el administrador puede registrar un pago con una fecha pasada. Los cobros capturados sin señal siempre llevan su hora real. Todo pago atrasado queda en la auditoría.",
+  "config.backdateMaxDays": "Días hacia atrás permitidos en la fecha de un pago",
+  "config.backdateMaxDaysHint":
+    "Máximo de días que puede tener de atraso la fecha de un pago (0 = solo hoy). Nunca antes de una liquidación cerrada. El efectivo entra a la caja el día que se registra.",
+  "payments.paidOn": "Fecha del pago (si fue otro día)",
+  "payments.paidOnHint": "AAAA-MM-DD. Días hacia atrás permitidos:",
+  "payments.paidOnToday": "Hoy",
+  "payments.paidOnAudited": "El pago quedará con esa fecha y en la auditoría; el efectivo entra hoy a la caja.",
   "config.blockInterest": "Bloquear cambio de interés",
   "config.blockInterestHint":
     "Encendido: el interés de cada crédito sale de un plan de pago activo y no se puede modificar; así nadie inventa condiciones. Los planes solo los crea el administrador.",
@@ -1233,6 +1242,10 @@ const es = {
   "errors.remittance.inProgress": "Hay una rendición por recibir: recíbela antes de cerrar deuda.",
   "errors.remittance.debtExceeded": "El monto supera la deuda arrastrada del cobrador.",
   "errors.expenses.boxNotAllowed": "No se puede pagar un gasto desde la caja de ruta de otro cobrador.",
+  "errors.payment.backdateLocked": "Las fechas atrasadas están bloqueadas: solo el administrador puede elegir la fecha del pago.",
+  "errors.payment.dateInFuture": "La fecha del pago no puede ser futura.",
+  "errors.payment.dateTooOld": "La fecha del pago es más antigua de lo permitido en Ajustes.",
+  "errors.payment.dateSealed": "La fecha del pago cae en una liquidación ya cerrada.",
   "errors.credit.interestLocked": "El interés está bloqueado: debe salir de un plan de pago activo.",
   "errors.credit.planInactive": "El plan elegido ya no está activo. Elige otro.",
   "errors.commission.aboveCap": "La comisión supera el tope fijado por el administrador.",

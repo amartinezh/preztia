@@ -1,6 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
 import {
-  DEFAULT_OPERATIONAL_SETTINGS,
   commissionConfigOf,
   settlementSettingsOf,
   type CollectorPrincipal,
@@ -12,7 +11,6 @@ import {
   type CollectorActivity,
   type CashTxKind,
   type DebtClosureType,
-  type OperationalSettings,
   type PortfolioByZone,
   type SettlementBoxInput,
   type SettlementCollectorRef,
@@ -21,6 +19,7 @@ import {
   type SettlementZoneRef,
 } from '@preztiaos/domain';
 import { type Tx } from '../tenancy/unit-of-work';
+import { readOperationalSettingsTx } from '../tenant-config/operational-settings.reader';
 
 /** Rango de la liquidación: días de negocio [start, end) y sus instantes de corte [startsAt, endsAt). */
 export interface SettlementRange {
@@ -46,23 +45,12 @@ const num = (v: unknown): number => Number(v ?? 0);
 // Las columnas de texto/uuid llegan como string (o null) desde postgres-js.
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
-/** Ajustes operativos del tenant mezclados con sus valores por defecto (filas anteriores). */
-async function readOperationalSettings(
-  tx: Tx,
-  tenantId: string,
-): Promise<OperationalSettings> {
-  const rows = (await tx.execute(sql`
-    SELECT operational_settings AS settings FROM tenant_config WHERE tenant_id = ${tenantId} LIMIT 1
-  `)) as unknown as Array<{ settings: Partial<OperationalSettings> | null }>;
-  return { ...DEFAULT_OPERATIONAL_SETTINGS, ...(rows[0]?.settings ?? {}) };
-}
-
 /** Configuración de liquidación del tenant (ajustes operativos con sus valores por defecto). */
 export async function readSettlementSettings(
   tx: Tx,
   tenantId: string,
 ): Promise<SettlementSettings> {
-  return settlementSettingsOf(await readOperationalSettings(tx, tenantId));
+  return settlementSettingsOf(await readOperationalSettingsTx(tx, tenantId));
 }
 
 /**
@@ -87,7 +75,7 @@ export async function readCommissionConfig(
     },
   }));
   return commissionConfigOf(
-    await readOperationalSettings(tx, tenantId),
+    await readOperationalSettingsTx(tx, tenantId),
     zoneSettings,
   );
 }

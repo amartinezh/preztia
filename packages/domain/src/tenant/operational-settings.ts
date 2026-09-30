@@ -12,6 +12,7 @@ import {
   type ZoneCommissionSetting,
 } from "../cash/commission";
 import type { InterestPolicy } from "../credit/plan/interest-policy";
+import type { BackdatePolicy } from "../credit/payment/payment-date";
 
 // Ajustes operativos del tenant (configuración de cobro del legado). Tipo canónico + valores por
 // defecto + mezcla pura de un parche parcial. El esquema de BD refleja esta forma (mirror).
@@ -19,7 +20,10 @@ import type { InterestPolicy } from "../credit/plan/interest-policy";
 export interface OperationalSettings {
   readonly rechargesEnabled: boolean;
   readonly manualRoute: boolean;
+  /** "Bloquear fechas atrasadas": solo el ADMIN elige a mano una fecha pasada para un pago. */
   readonly blockOverdueDatesForSales: boolean;
+  /** Días de negocio hacia atrás que puede tener la fecha de un pago (0–30; offline y manual). */
+  readonly backdateMaxDays: number;
   /** "Bloquear cambio de interés": el interés de un crédito sale de un plan activo (ver `interest-policy`). */
   readonly blockInterestChange: boolean;
   /** Con el bloqueo encendido, el ADMIN conserva la vía "Personalizado" (interés libre). */
@@ -93,6 +97,9 @@ export const DEFAULT_PLAN_OFFER_TTL_HOURS = 24;
 /** Umbral por defecto de cuotas vencidas para agendar una visita del cobrador. */
 export const DEFAULT_VISIT_OVERDUE_THRESHOLD = 3;
 
+/** Días hacia atrás permitidos por defecto para la fecha de un pago. */
+export const DEFAULT_BACKDATE_MAX_DAYS = 3;
+
 /** Hora local límite por defecto para rendir cuentas (20:00). */
 export const DEFAULT_REMITTANCE_DEADLINE_HOUR = 20;
 
@@ -100,6 +107,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   rechargesEnabled: false,
   manualRoute: false,
   blockOverdueDatesForSales: true,
+  backdateMaxDays: DEFAULT_BACKDATE_MAX_DAYS,
   blockInterestChange: true,
   adminCustomInterestAllowed: true,
   commissionPctBaseThousand: 0,
@@ -148,6 +156,11 @@ export function mergeOperationalSettings(
     merged.commissionMaxPctBaseThousand,
   );
   return merged;
+}
+
+/** Política de fechas atrasadas de pagos del tenant. */
+export function backdatePolicyOf(s: OperationalSettings): BackdatePolicy {
+  return { locked: s.blockOverdueDatesForSales, maxDaysBack: s.backdateMaxDays };
 }
 
 /** Política antifraude del interés del tenant. */

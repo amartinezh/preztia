@@ -9,7 +9,8 @@ export const aiProvider = pgEnum("ai_provider", ["GEMINI", "OPENAI", "CLAUDE"]);
 export interface OperationalSettings {
   readonly rechargesEnabled: boolean; // Activar Recargos
   readonly manualRoute: boolean; // Ruta Manual
-  readonly blockOverdueDatesForSales: boolean; // Bloquear Fechas Atrasadas Para Ventas
+  readonly blockOverdueDatesForSales: boolean; // Bloquear fechas atrasadas (solo el ADMIN fecha pagos a mano)
+  readonly backdateMaxDays: number; // Días hacia atrás permitidos en la fecha de un pago (0–30)
   readonly blockInterestChange: boolean; // Bloquear Cambio De Interés (el interés sale de un plan activo)
   readonly adminCustomInterestAllowed: boolean; // Con el bloqueo, el ADMIN puede usar "Personalizado"
   readonly commissionPctBaseThousand: number; // Comisión por defecto del cobrador (base-mil)
@@ -51,6 +52,7 @@ export const DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
   rechargesEnabled: false,
   manualRoute: false,
   blockOverdueDatesForSales: true,
+  backdateMaxDays: 3,
   blockInterestChange: true,
   adminCustomInterestAllowed: true,
   commissionPctBaseThousand: 0,

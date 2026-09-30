@@ -167,9 +167,19 @@ export const reconcileOutput = z.object({
 const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 
 // Registro de un abono en efectivo (cobro de ruta). El monto va en unidades menores enteras.
-export const registerCashPaymentInput = z.object({
-  amountMinor: z.number().int().positive(),
-});
+export const registerCashPaymentInput = z
+  .object({
+    amountMinor: z.number().int().positive(),
+    // Hora real en que el dispositivo capturó el cobro SIN señal (la pone la cola offline, no una
+    // persona). Fuera de la ventana permitida, el servidor registra con la hora actual y lo audita.
+    capturedAt: z.string().datetime().optional(),
+    // Día del pago elegido a mano (YYYY-MM-DD): ADMIN; coordinador solo sin el bloqueo.
+    paidOn: z.string().date().optional(),
+  })
+  .refine((v) => !(v.capturedAt && v.paidOn), {
+    message: "Usa la hora de captura o una fecha elegida, no ambas",
+    path: ["paidOn"],
+  });
 export type RegisterCashPaymentInput = z.infer<typeof registerCashPaymentInput>;
 
 export const registerCashPaymentOutput = z.object({

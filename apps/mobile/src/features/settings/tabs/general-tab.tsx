@@ -44,6 +44,9 @@ function localToday(): string {
 const SETTLEMENT_FREQUENCIES: OperationalSettings["settlementFrequency"][] = ["WEEKLY", "BIWEEKLY", "MONTHLY"];
 const COMMISSION_BASES: OperationalSettings["commissionBase"][] = ["COLLECTED", "REMITTED", "PRINCIPAL_RECOVERED"];
 
+// Tope de días hacia atrás de la fecha de un pago (espejo del contrato: 0–30).
+const MAX_BACKDATE_DAYS = 30;
+
 // Los porcentajes de comisión viajan en base mil (50 = 5 %), como el interés.
 const PER_MILLE_PER_PERCENT = 10;
 const MAX_PER_MILLE = 1000;
@@ -120,6 +123,17 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
         <Switch value={form.rechargesEnabled} onValueChange={(v) => set("rechargesEnabled", v)} label={t("config.recharges")} disabled={!canEdit} />
         <Switch value={form.manualRoute} onValueChange={(v) => set("manualRoute", v)} label={t("config.manualRoute")} disabled={!canEdit} />
         <Switch value={form.blockOverdueDatesForSales} onValueChange={(v) => set("blockOverdueDatesForSales", v)} label={t("config.blockOverdue")} disabled={!canEdit} />
+        <Text variant="caption" tone="muted">{t("config.blockOverdueHint")}</Text>
+        <Field label={t("config.backdateMaxDays")} hint={t("config.backdateMaxDaysHint")}>
+          <Input
+            keyboardType="number-pad"
+            editable={canEdit}
+            value={String(form.backdateMaxDays)}
+            onChangeText={(text) =>
+              set("backdateMaxDays", Math.min(MAX_BACKDATE_DAYS, Math.max(0, Math.round(Number(text) || 0))))
+            }
+          />
+        </Field>
         <Switch value={form.blockInterestChange} onValueChange={(v) => set("blockInterestChange", v)} label={t("config.blockInterest")} disabled={!canEdit} />
         <Text variant="caption" tone="muted">{t("config.blockInterestHint")}</Text>
         {form.blockInterestChange ? (

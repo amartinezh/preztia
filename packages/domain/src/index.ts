@@ -46,6 +46,7 @@ export * from "./credit/payment/ispb-registry";
 export * from "./credit/payment/receiver-match";
 export * from "./credit/payment/settlement-match";
 export * from "./credit/payment/payment-intent";
+export * from "./credit/payment/payment-date";
 export * from "./conversations/inbound-message";
 export * from "./conversations/conversation-outcome";
 export * from "./conversations/assistant";

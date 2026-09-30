@@ -24,7 +24,12 @@ const PAGE_SIZE = 20;
 /** `kind` de la cola offline para abonos en efectivo. */
 export const CASH_PAYMENT_KIND = "cash-payment";
 
-export type CashPaymentPayload = { creditId: string; amountMinor: number };
+export type CashPaymentPayload = {
+  creditId: string;
+  amountMinor: number;
+  /** Día del pago elegido a mano (YYYY-MM-DD); ausente = hoy. */
+  paidOn?: string;
+};
 
 export const paymentKeys = {
   all: ["payments"] as const,
@@ -133,7 +138,7 @@ export type RegisterResult =
 export function useRegisterCashPayment() {
   const qc = useQueryClient();
   return useMutation<RegisterResult, unknown, CashPaymentPayload>({
-    mutationFn: async ({ creditId, amountMinor }) => {
+    mutationFn: async ({ creditId, amountMinor, paidOn }) => {
       const idempotencyKey = newIdempotencyKey();
       try {
         const result = unwrap(
@@ -141,7 +146,7 @@ export function useRegisterCashPayment() {
             api.registerCashPayment({
               headers: tenantHeader(),
               params: { creditId },
-              body: { amountMinor },
+              body: { amountMinor, ...(paidOn ? { paidOn } : {}) },
             }),
           ),
         );
@@ -149,7 +154,7 @@ export function useRegisterCashPayment() {
       } catch (err) {
         // Sin conexión: persistir para reenvío con la misma clave (idempotente).
         if (isApiError(err) && err.status === 0) {
-          await enqueue(CASH_PAYMENT_KIND, { creditId, amountMinor }, idempotencyKey);
+          await enqueue(CASH_PAYMENT_KIND, { creditId, amountMinor, ...(paidOn ? { paidOn } : {}) }, idempotencyKey);
           return { queued: true };
         }
         throw err;

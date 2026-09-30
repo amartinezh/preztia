@@ -90,13 +90,20 @@ export class PaymentsController {
     const session = requireRole(authorization, DATA_PLANE_ROLES);
     const id = uuid.parse(creditId);
     await this.assertWithinScope(tenant, session, id);
-    const { amountMinor } = registerCashPaymentInput.parse(body);
+    const { amountMinor, capturedAt, paidOn } =
+      registerCashPaymentInput.parse(body);
     const result = await this.cashPayments.register({
       tenantId: tenant,
       creditId: id,
       amountMinor,
       idempotencyKey: idempotencyKey ?? null,
       receivedBy: session.userId,
+      actorRole: session.role,
+      requestedDate: capturedAt
+        ? { kind: 'OFFLINE_CAPTURE', capturedAt: new Date(capturedAt) }
+        : paidOn
+          ? { kind: 'MANUAL', paidOn }
+          : null,
     });
     if (!result) throw new NotFoundException('Crédito no encontrado');
     return result;

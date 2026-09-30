@@ -9,7 +9,10 @@ const c = initContract();
 export const operationalSettings = z.object({
   rechargesEnabled: z.boolean(),
   manualRoute: z.boolean(),
+  // Fechas atrasadas de pagos: con el bloqueo, solo el ADMIN elige una fecha pasada a mano (la
+  // captura offline del cobrador lleva su hora real). Nunca más de `backdateMaxDays` días atrás.
   blockOverdueDatesForSales: z.boolean(),
+  backdateMaxDays: z.number().int().min(0).max(30),
   // Antifraude del interés: con el bloqueo, el interés de un crédito sale de un plan activo; la
   // excepción deja al ADMIN usar "Personalizado".
   blockInterestChange: z.boolean(),
