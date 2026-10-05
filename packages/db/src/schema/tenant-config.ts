@@ -117,6 +117,9 @@ export const tenantConfig = pgTable(
       .$type<CollectionReminderSettings>()
       .notNull()
       .default(DEFAULT_COLLECTION_REMINDER_SETTINGS),
+    // Idioma de atención al cliente por chat (código del catálogo del dominio: "es" | "pt-BR"). Todo
+    // mensaje saliente lo lee en el momento de enviarse, así que cambiarlo aplica en caliente.
+    clientLanguage: text("client_language").notNull().default("es"),
     // Proveedores de mensajería (WhatsApp/Telegram) habilitados. Default = DEFAULT_MESSAGING_CHANNELS.
     messagingChannels: jsonb("messaging_channels")
       .$type<MessagingChannelsSettings>()

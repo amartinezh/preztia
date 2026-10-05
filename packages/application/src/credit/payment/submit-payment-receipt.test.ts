@@ -19,6 +19,14 @@ import type {
   TenantBankAccountRepository,
 } from "./ports";
 import { SubmitPaymentReceiptHandler, type SubmitPaymentReceiptCommand } from "./submit-payment-receipt";
+import type { ClientLanguage } from "@preztiaos/domain";
+import type { ClientLanguageResolver } from "../../conversations/text/ports";
+
+/** Idioma fijo del tenant para las pruebas (el resolver real lo lee de la configuración). */
+const languageOf = (language: ClientLanguage): ClientLanguageResolver => ({
+  byTenant: async () => language,
+  byChannel: async () => language,
+});
 
 const APPROVED: FraudAssessment = { status: "approved", score: 0, reasons: [] };
 
@@ -155,6 +163,7 @@ function handler(deps: {
   bank?: BankPaymentVerifier;
   storage?: FakeStorage;
   sender?: SpySender;
+  language?: ClientLanguage;
 }) {
   return new SubmitPaymentReceiptHandler(
     deps.repo,
@@ -163,6 +172,7 @@ function handler(deps: {
     deps.bank ?? new FakeBank(CONFIRMED),
     deps.storage ?? new FakeStorage(),
     deps.sender ?? new SpySender(),
+    languageOf(deps.language ?? "es"),
   );
 }
 
@@ -180,6 +190,16 @@ describe("SubmitPaymentReceiptHandler", () => {
     expect(outcome.creditSettled).toBe(false);
     expect(sender.sent[0]?.body).toContain("✅");
     expect(sender.sent[0]?.body).toContain("Saldo pendiente");
+  });
+
+  it("pt-BR: confirma el abono en portugués con el saldo devedor", async () => {
+    const sender = new SpySender();
+    await handler({ repo: new FakePortfolioRepo(PORTFOLIO), sender, language: "pt-BR" }).execute(
+      command(receiptClassification()),
+    );
+
+    expect(sender.sent[0]?.body).toContain("Recebemos seu pagamento");
+    expect(sender.sent[0]?.body).toContain("Saldo devedor");
   });
 
   it("monto bancario manda sobre el extraído y la diferencia queda auditada", async () => {

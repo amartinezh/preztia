@@ -7,6 +7,8 @@ import type {
   TelegramBotApiClient,
   TelegramOutgoingMessage,
 } from './telegram-bot-api.client';
+import type { ClientLanguage } from '@preztiaos/domain';
+import type { ClientLanguageRepository } from '../tenant-config/client-language.repository';
 import { TelegramContactPrompterAdapter } from './telegram-contact.prompter';
 
 const CHAT = { channelId: 'tg:7012345678', chatId: '555' };
@@ -15,11 +17,15 @@ const tokenOf = resolveTelegramBotToken as jest.MockedFunction<
   typeof resolveTelegramBotToken
 >;
 
-function setup() {
+function setup(language: ClientLanguage = 'es') {
   const sendMessage = jest.fn().mockResolvedValue(undefined);
-  const prompter = new TelegramContactPrompterAdapter({
-    sendMessage,
-  } as unknown as TelegramBotApiClient);
+  const languages = {
+    byChannel: jest.fn().mockResolvedValue(language),
+  } as unknown as ClientLanguageRepository;
+  const prompter = new TelegramContactPrompterAdapter(
+    { sendMessage } as unknown as TelegramBotApiClient,
+    languages,
+  );
   const lastMessage = (): TelegramOutgoingMessage =>
     (sendMessage.mock.calls.at(-1) as [string, TelegramOutgoingMessage])[1];
   return { prompter, sendMessage, lastMessage };
@@ -60,6 +66,19 @@ describe('TelegramContactPrompterAdapter', () => {
 
     expect(lastMessage().text).toContain('TU propio número');
     expect(lastMessage().replyMarkup).toHaveProperty('keyboard');
+  });
+
+  it('en pt-BR pide el número con el botón y el texto en portugués', async () => {
+    const { prompter, lastMessage } = setup('pt-BR');
+
+    await prompter.requestContact(CHAT);
+
+    expect(lastMessage().text).toContain('precisamos verificar seu número');
+    expect(lastMessage().replyMarkup).toMatchObject({
+      keyboard: [
+        [{ text: '📱 Compartilhar meu número', request_contact: true }],
+      ],
+    });
   });
 
   it('falla explícitamente si el canal no tiene bot', async () => {

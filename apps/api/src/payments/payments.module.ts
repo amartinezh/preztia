@@ -50,6 +50,7 @@ import { IngestPicPayWebhookService } from './ingest-picpay-webhook.service';
 import { PicPayWebhookController } from './picpay-webhook.controller';
 import { SubmitReceiptThenSettleHandler } from './adapters/submit-receipt-then-settle';
 import { RunSettlementReconciliationService } from './run-settlement-reconciliation.service';
+import { ClientLanguageRepository } from '../tenant-config/client-language.repository';
 import { SettlementReviewSettingsReader } from './settlement-review-settings.reader';
 import { PaymentsQueryRepository } from './payments-query.repository';
 import { CashPaymentDrizzleRepository } from './cash-payment.repository';
@@ -200,6 +201,7 @@ function confirmationNotices(
         ConversationMessageLog,
         SettlementReviewSettingsReader,
         ReachableChannelResolver,
+        ClientLanguageRepository,
       ],
       useFactory: (
         source: SettlementSource,
@@ -209,6 +211,7 @@ function confirmationNotices(
         log: ConversationMessageLog,
         settings: SettlementReviewSettingsReader,
         resolver: ReachableChannelResolver,
+        languages: ClientLanguageRepository,
       ) =>
         new RunSettlementReconciliationService(
           source,
@@ -216,6 +219,7 @@ function confirmationNotices(
           reconciliation,
           confirmationNotices(resolver, sender, log),
           settings,
+          languages,
         ),
     },
 
@@ -234,6 +238,7 @@ function confirmationNotices(
         ChannelRoutingTextSender,
         ConversationMessageLog,
         RunSettlementReconciliationService,
+        ClientLanguageRepository,
       ],
       useFactory: (
         portfolios: CreditPortfolioRepository,
@@ -244,6 +249,7 @@ function confirmationNotices(
         sender: ChannelRoutingTextSender,
         log: ConversationMessageLog,
         settle: RunSettlementReconciliationService,
+        languages: ClientLanguageRepository,
       ) =>
         new SubmitReceiptThenSettleHandler(
           [
@@ -253,6 +259,7 @@ function confirmationNotices(
             bank,
             storage,
             new LoggingTextSender(sender, log),
+            languages,
           ],
           settle,
         ),
@@ -266,6 +273,7 @@ function confirmationNotices(
         ChannelRoutingTextSender,
         ConversationMessageLog,
         ReachableChannelResolver,
+        ClientLanguageRepository,
       ],
       useFactory: (
         repo: ReconciliationRepository,
@@ -274,6 +282,7 @@ function confirmationNotices(
         sender: ChannelRoutingTextSender,
         log: ConversationMessageLog,
         resolver: ReachableChannelResolver,
+        languages: ClientLanguageRepository,
       ) =>
         new ReconcilePendingPaymentsHandler(
           repo,
@@ -281,6 +290,7 @@ function confirmationNotices(
           bank,
           confirmationNotices(resolver, sender, log),
           reconciliationMaxAttempts(),
+          languages,
         ),
     },
   ],

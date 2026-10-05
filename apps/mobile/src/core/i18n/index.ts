@@ -897,6 +897,10 @@ const es = {
   "config.timeZone": "Zona horaria de la empresa",
   "config.timeZoneHint":
     "Define qué es \"hoy\" y a qué hora se corta cada día: liquidaciones, fecha de los pagos, rendición del cobrador, cartera vencida y hora de los recordatorios. Cámbiala solo si la empresa opera en otro país.",
+  "config.clientLanguage": "Idioma de atención al cliente",
+  "config.clientLanguageHint":
+    "Todo lo que el chat (WhatsApp y Telegram) escribe a los clientes sale en este idioma: asistente, solicitud, cobros, saldos y recordatorios. Aplica desde el siguiente mensaje, también en conversaciones en curso. Los títulos de los documentos y la base de conocimiento los escribe la empresa (Ajustes → Canales / IA): tradúcelos si cambias de idioma; la IA ya responde en el idioma elegido.",
+  "config.clientLanguageSaved": "Idioma activado: los próximos mensajes al cliente salen en este idioma ✓",
   "reminder.sendHourHint": "Hora local de la zona horaria de la empresa (Ajustes → General).",
   "config.section.credits": "Créditos",
   "config.section.creditsHint": "Cómo se otorgan los créditos y de dónde salen sus condiciones.",
@@ -1353,6 +1357,10 @@ const ptBR: Partial<Record<MessageKey, string>> = {
   "errors.network": "Sem conexão com o servidor.",
   "nav.inicio": "Início",
   "home.title": "Painel de controle",
+  "config.clientLanguage": "Idioma de atendimento ao cliente",
+  "config.clientLanguageHint":
+    "Tudo o que o chat (WhatsApp e Telegram) escreve aos clientes sai neste idioma: assistente, solicitação, cobranças, saldos e lembretes. Vale a partir da próxima mensagem, inclusive em conversas em andamento. Os títulos dos documentos e a base de conhecimento são escritos pela empresa (Ajustes → Canais / IA): traduza-os ao mudar de idioma; a IA já responde no idioma escolhido.",
+  "config.clientLanguageSaved": "Idioma ativado: as próximas mensagens ao cliente saem neste idioma ✓",
 };
 
 const DICTS: Record<Locale, Partial<Record<MessageKey, string>>> = { es, "pt-BR": ptBR };

@@ -8,6 +8,14 @@ import type {
   ReminderIdempotencyStore,
 } from "./ports";
 import { SendCollectionReminderHandler } from "./send-collection-reminder";
+import type { ClientLanguage } from "@preztiaos/domain";
+import type { ClientLanguageResolver } from "../../conversations/text/ports";
+
+/** Idioma fijo del tenant para las pruebas (el resolver real lo lee de la configuración). */
+const languageOf = (language: ClientLanguage): ClientLanguageResolver => ({
+  byTenant: async () => language,
+  byChannel: async () => language,
+});
 
 const TENANT = "11111111-1111-1111-1111-111111111111";
 const TARGET: CollectionReminderTarget = {
@@ -53,7 +61,13 @@ function setup(target: CollectionReminderTarget | null = TARGET) {
   const sender = new SpySender();
   const idempotency = new MemoryIdempotency();
   const audit = new SpyAudit();
-  const handler = new SendCollectionReminderHandler(reader, sender, idempotency, audit);
+  const handler = new SendCollectionReminderHandler(
+    reader,
+    sender,
+    idempotency,
+    audit,
+    languageOf("es"),
+  );
   return { handler, sender, idempotency, audit };
 }
 

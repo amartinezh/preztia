@@ -1,24 +1,16 @@
 import {
+  clientMessagesFor,
   createCreditApplication,
   findDocumentSpec,
   nextPendingDocument,
 } from "@preztiaos/domain";
 import type {
+  ClientLanguageResolver,
   CreditApplicationRestarter,
   CreditApplicationStarter,
   OutboundTextSender,
 } from "../../conversations/text/ports";
 import type { ApplicantRef, CreditApplicationRepository, RequiredDocumentCatalog } from "./ports";
-
-const INTRO = "¡Perfecto! Iniciemos tu solicitud de crédito.";
-// El monto se captura primero (lo registra `RecordAmountReplyHandler`); luego se piden documentos.
-const AMOUNT_QUESTION = "¿Cuánto dinero deseas solicitar?";
-const RESUME = "Ya tienes una solicitud en curso. Continuemos donde quedamos.";
-const ALREADY_SUBMITTED =
-  "Ya recibimos todos tus documentos y tu solicitud está *en revisión*; te avisaremos el resultado. " +
-  "Si necesitas enviarlos de nuevo, escribe: *quiero ingresar nuevamente los documentos*.";
-const RESTART =
-  "¡Listo! Reiniciamos tu solicitud. Te pediré nuevamente todos los documentos, uno a la vez.";
 
 /**
  * Caso de uso: arranca (o retoma) el protocolo de recolección de documentos.
@@ -27,7 +19,8 @@ const RESTART =
  * solo recuerda el documento pendiente.
  *
  * El conjunto de documentos, su orden y los textos del chat provienen del catálogo
- * del tenant; este caso de uso no conoce cuáles son ni cómo se piden.
+ * del tenant; este caso de uso no conoce cuáles son ni cómo se piden. Los textos fijos
+ * salen del diccionario del idioma del tenant.
  */
 export class StartCreditApplicationHandler
   implements CreditApplicationStarter, CreditApplicationRestarter
@@ -36,6 +29,7 @@ export class StartCreditApplicationHandler
     private readonly applications: CreditApplicationRepository,
     private readonly sender: OutboundTextSender,
     private readonly catalog: RequiredDocumentCatalog,
+    private readonly languages: ClientLanguageResolver,
   ) {}
 
   async start(input: ApplicantRef): Promise<void> {
@@ -44,13 +38,17 @@ export class StartCreditApplicationHandler
     const specs = await this.catalog.listRequested(input.tenantId);
     if (specs.length === 0) return; // tenant sin documentos configurados: nada que pedir
 
+    const messages = clientMessagesFor(await this.languages.byTenant(input.tenantId)).application;
     const existing = await this.applications.findActiveByApplicant(input);
     if (existing) {
       const pending = nextPendingDocument(existing.application);
       const spec = pending ? findDocumentSpec(specs, pending) : undefined;
       // Con documento pendiente, retomamos; ya completa (en revisión), lo informamos
       // y orientamos al reinicio para que el usuario nunca se quede sin respuesta.
-      await this.sender.sendText(recipient, spec ? `${RESUME} ${spec.title}` : ALREADY_SUBMITTED);
+      await this.sender.sendText(
+        recipient,
+        spec ? `${messages.resume} ${spec.title}` : messages.alreadySubmitted,
+      );
       return;
     }
 
@@ -63,7 +61,7 @@ export class StartCreditApplicationHandler
 
     // Primer paso del flujo: preguntar el monto. Al responderlo, `RecordAmountReplyHandler`
     // registra el valor y pide el primer documento.
-    await this.sender.sendText(recipient, `${INTRO}\n\n${AMOUNT_QUESTION}`);
+    await this.sender.sendText(recipient, `${messages.intro}\n\n${messages.amountQuestion}`);
   }
 
   async restart(input: ApplicantRef): Promise<void> {
@@ -84,7 +82,8 @@ export class StartCreditApplicationHandler
     // Tras reiniciar, el primer documento del catálogo es el primero pendiente.
     const [firstSpec] = specs;
     if (firstSpec) {
-      await this.sender.sendText(recipient, `${RESTART}\n\n${firstSpec.title}`);
+      const messages = clientMessagesFor(await this.languages.byTenant(input.tenantId)).application;
+      await this.sender.sendText(recipient, `${messages.restart}\n\n${firstSpec.title}`);
     }
   }
 }

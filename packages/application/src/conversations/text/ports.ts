@@ -1,4 +1,4 @@
-import type { AiProvider, AssistantAnswer } from "@preztiaos/domain";
+import type { AiProvider, AssistantAnswer, ClientLanguage } from "@preztiaos/domain";
 
 // Configuración del asistente de un tenant, tal como la necesita el caso de uso.
 // La carga (resolución de tenant + lectura bajo RLS) es responsabilidad de la infraestructura.
@@ -9,6 +9,8 @@ export interface TenantAssistantConfig {
   readonly aiProvider: AiProvider;
   /** Credencial del proveedor de IA; null si el tenant aún no la configuró. */
   readonly aiApiKey: string | null;
+  /** Idioma en que se atiende al cliente (también el de la respuesta de la IA). */
+  readonly language: ClientLanguage;
 }
 
 /** Puerto: resuelve la configuración del asistente a partir del canal (phone_number_id). */
@@ -22,6 +24,8 @@ export interface AssistantRequest {
   readonly question: string;
   readonly provider: AiProvider;
   readonly apiKey: string;
+  /** Idioma en que el modelo debe redactar `reply`, aunque la base de conocimiento esté en otro. */
+  readonly language: ClientLanguage;
 }
 
 /** Puerto: evalúa el texto con IA y devuelve la respuesta restringida a la base de conocimiento. */
@@ -35,6 +39,17 @@ export interface OutboundRecipient {
   readonly channelId: string;
   /** teléfono del destinatario. */
   readonly recipient: string;
+}
+
+/**
+ * Puerto: idioma de atención al cliente del tenant. Se consulta en CADA mensaje (sin caché), de modo
+ * que un cambio de idioma en la configuración aplica de inmediato a la conversación en curso.
+ * `byChannel` sirve cuando aún no se conoce el tenant (resuelve el tenant por el canal; sin tenant,
+ * idioma por defecto).
+ */
+export interface ClientLanguageResolver {
+  byTenant(tenantId: string): Promise<ClientLanguage>;
+  byChannel(channelId: string): Promise<ClientLanguage>;
 }
 
 /** Puerto: envía una respuesta de texto de vuelta al usuario por WhatsApp. */

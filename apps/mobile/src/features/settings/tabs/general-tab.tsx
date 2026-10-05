@@ -1,5 +1,9 @@
 import { useState, type ReactNode } from "react";
-import type { OperationalSettings } from "@preztiaos/contracts";
+import {
+  clientLanguage,
+  type ClientLanguageContract,
+  type OperationalSettings,
+} from "@preztiaos/contracts";
 import {
   Banner,
   Button,
@@ -21,7 +25,9 @@ import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { timeZoneOptions } from "../time-zones";
 import {
+  useClientLanguage,
   useOperationalSettings,
+  useUpdateClientLanguage,
   useUpdateOperationalSettings,
 } from "../api/queries";
 
@@ -144,6 +150,7 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
             disabled={!canEdit}
           />
         </Field>
+        <ClientLanguageField canEdit={canEdit} />
       </SettingsSection>
 
       <SettingsSection title={t("config.section.credits")} description={t("config.section.creditsHint")}>
@@ -310,6 +317,58 @@ type BooleanSettingKey = {
 }[keyof OperationalSettings];
 
 /** Grupo de ajustes de un mismo tema: título, para qué sirve y sus opciones. */
+// Cada idioma se nombra en su propia lengua (convención de los selectores de idioma). El `Record`
+// sobre el enum del contrato obliga a nombrar todo idioma nuevo que se habilite.
+const CLIENT_LANGUAGE_LABEL: Record<ClientLanguageContract, string> = {
+  es: "Español",
+  "pt-BR": "Português (Brasil)",
+};
+
+const CLIENT_LANGUAGE_OPTIONS = clientLanguage.options.map((value) => ({
+  value,
+  label: CLIENT_LANGUAGE_LABEL[value],
+}));
+
+/**
+ * Idioma en que el chat atiende a los clientes. Se guarda AL ELEGIRLO (sin pasar por "Guardar"):
+ * el servidor lo lee en cada mensaje, así que el cambio aplica desde la siguiente respuesta.
+ */
+function ClientLanguageField({ canEdit }: { canEdit: boolean }) {
+  const { t } = useT();
+  const query = useClientLanguage();
+  const update = useUpdateClientLanguage();
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const change = (language: ClientLanguageContract) => {
+    if (!canEdit || language === query.data?.language) return;
+    setError(null);
+    setSaved(false);
+    update.mutate(language, {
+      onSuccess: () => setSaved(true),
+      onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+    });
+  };
+
+  return (
+    <Field label={t("config.clientLanguage")} hint={t("config.clientLanguageHint")}>
+      {query.data ? (
+        <Select
+          value={query.data.language}
+          options={CLIENT_LANGUAGE_OPTIONS}
+          onChange={change}
+          title={t("config.clientLanguage")}
+          disabled={!canEdit || update.isPending}
+        />
+      ) : (
+        <Spinner label={t("common.loading")} />
+      )}
+      {error ? <Banner tone="danger" title={error} /> : null}
+      {saved ? <Banner tone="success" title={t("config.clientLanguageSaved")} /> : null}
+    </Field>
+  );
+}
+
 function SettingsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <Card>

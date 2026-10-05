@@ -1,17 +1,19 @@
 import type {
+  ApplicationMessages,
   DocumentReviewDecision,
   MediaRef,
   RequiredDocumentSpec,
   RequiredDocumentType,
 } from "@preztiaos/domain";
 import {
+  clientMessagesFor,
   documentOf,
   findDocumentSpec,
   nextPendingDocument,
   pendingFilesOf,
   recordDocumentResult,
 } from "@preztiaos/domain";
-import type { OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguageResolver, OutboundTextSender } from "../../conversations/text/ports";
 import type {
   AntifraudService,
   ApplicationCompletionNotifier,
@@ -43,14 +45,6 @@ export interface SubmitDocumentCommand {
   };
 }
 
-const COMPLETED =
-  "¡Gracias! Recibimos todos tus documentos. Por último, comparte tu *ubicación* actual con el " +
-  "clip 📎 → Ubicación (idealmente desde tu negocio o domicilio) para completar tu solicitud.";
-
-const ALREADY_COMPLETE =
-  "Ya tenemos todos tus documentos y tu solicitud está *en revisión*; no necesitas enviar nada más. " +
-  "Te avisaremos el resultado.";
-
 /**
  * Caso de uso: recibe un ARCHIVO del solicitante y, según la revisión (antifraude estructural +
  * identificación por IA + intentos previos), decide aceptarlo, pedirlo de nuevo, ofrecer revisión
@@ -75,6 +69,7 @@ export class SubmitApplicationDocumentHandler {
     private readonly sender: OutboundTextSender,
     private readonly completion: ApplicationCompletionNotifier,
     private readonly reviewer: DocumentReviewer,
+    private readonly languages: ClientLanguageResolver,
     // Opcional: análisis antifraude por visión de la foto del local (BUSINESS_PHOTO).
     private readonly businessPhotoVision?: BusinessPhotoVisionAnalyzer,
   ) {}
@@ -93,11 +88,12 @@ export class SubmitApplicationDocumentHandler {
     const media =
       cmd.prepared?.downloaded ?? (await this.downloader.download(cmd.media, cmd.channelId));
     const specs = await this.catalog.listRequested(tenantId);
+    const messages = clientMessagesFor(await this.languages.byTenant(tenantId)).application;
 
     const applicant = { tenantId, channelId: cmd.channelId, applicant: cmd.applicant };
     const completedApplicationId = await this.applications.withActiveApplicationLocked(
       applicant,
-      (locked) => this.processLocked({ cmd, tenantId, media, specs, locked }),
+      (locked) => this.processLocked({ cmd, tenantId, media, specs, messages, locked }),
     );
 
     // Fuera del cerrojo: el pipeline antifraude consulta fuentes externas y es lento; retenerlo
@@ -120,9 +116,10 @@ export class SubmitApplicationDocumentHandler {
     tenantId: string;
     media: DownloadedMedia;
     specs: readonly RequiredDocumentSpec[];
+    messages: ApplicationMessages;
     locked: LockedCreditApplication | null;
   }): Promise<string | null> {
-    const { cmd, tenantId, media, specs, locked } = input;
+    const { cmd, tenantId, media, specs, messages, locked } = input;
     if (!locked) return null; // sin protocolo activo: el archivo no forma parte de una solicitud
 
     const recipient = { channelId: cmd.channelId, recipient: cmd.applicant };
@@ -130,7 +127,7 @@ export class SubmitApplicationDocumentHandler {
     if (!documentType) {
       // Llegó cuando ya estaba todo completo (el reverso que sobró, un reenvío tardío). No se
       // registra nada ni se cuenta intento: no es un error del solicitante.
-      await this.sender.sendText(recipient, ALREADY_COMPLETE);
+      await this.sender.sendText(recipient, messages.alreadyComplete);
       return null;
     }
 
@@ -209,50 +206,43 @@ export class SubmitApplicationDocumentHandler {
     if (!accepted) {
       await this.sender.sendText(
         recipient,
-        rejectionMessage(decision, identifiedType, documentPrompt(specs, documentType)),
+        rejectionMessage(messages, decision, identifiedType, documentPrompt(messages, specs, documentType)),
       );
       return null;
     }
 
-    const ack = manualReview
-      ? "📝 Archivo recibido y marcado para *revisión manual* de un analista."
-      : "✅ Archivo recibido.";
+    const ack = manualReview ? messages.fileReceivedForManualReview : messages.fileReceived;
 
     // Al documento todavía le faltan archivos: se pide el resto en vez de pasar al siguiente.
     const missing = pendingFilesOf(application, documentType);
     if (missing > 0) {
-      await this.sender.sendText(recipient, `${ack} ${remainingFilesPrompt(missing)}`);
+      await this.sender.sendText(recipient, `${ack} ${messages.remainingFiles(missing)}`);
       return null;
     }
 
     const next = nextPendingDocument(application);
     if (next) {
-      await this.sender.sendText(recipient, `${ack} ${documentPrompt(specs, next)}`);
+      await this.sender.sendText(recipient, `${ack} ${documentPrompt(messages, specs, next)}`);
       return null;
     }
 
-    await this.sender.sendText(recipient, COMPLETED);
+    await this.sender.sendText(recipient, messages.completed);
     return locked.id;
   }
 }
 
 /** Título configurado para pedir un documento; cae al nombre técnico si no hay spec. */
 function documentPrompt(
+  messages: ApplicationMessages,
   specs: readonly RequiredDocumentSpec[],
   type: RequiredDocumentType,
 ): string {
-  return findDocumentSpec(specs, type)?.title ?? `Envíame el documento: ${type}.`;
-}
-
-/** Pide los archivos que aún faltan del documento en curso (p. ej. el reverso de la cédula). */
-function remainingFilesPrompt(missing: number): string {
-  return missing === 1
-    ? "Falta *1 foto más* de este mismo documento (el otro lado). Envíala, por favor."
-    : `Faltan *${missing} fotos más* de este mismo documento. Envíalas, por favor.`;
+  return findDocumentSpec(specs, type)?.title ?? messages.documentFallback(type);
 }
 
 /** Mensaje al solicitante cuando el documento NO se aceptó. */
 function rejectionMessage(
+  messages: ApplicationMessages,
   decision: Exclude<
     DocumentReviewDecision,
     { kind: "accepted" } | { kind: "accepted_for_manual_review" }
@@ -261,23 +251,15 @@ function rejectionMessage(
   prompt: string,
 ): string {
   switch (decision.kind) {
-    case "structural_reject": {
-      const why = decision.reasons.length ? ` (${decision.reasons.join("; ")})` : "";
-      return `No pudimos validar el documento${why}. Por favor, reenvíalo. ${prompt}`;
-    }
-    case "mismatch_retry": {
-      const detected = identifiedType ? ` (parece ser: ${identifiedType})` : "";
-      return (
-        `El documento que enviaste al parecer no es el correcto${detected}. ${prompt} ` +
-        `Por favor, envíalo de nuevo. Te ${decision.attemptsLeft === 1 ? "queda" : "quedan"} ` +
-        `${decision.attemptsLeft} intento${decision.attemptsLeft === 1 ? "" : "s"} antes de pasarlo a revisión manual.`
-      );
-    }
+    case "structural_reject":
+      return messages.structuralReject(decision.reasons, prompt);
+    case "mismatch_retry":
+      return messages.mismatchRetry({
+        detected: identifiedType,
+        prompt,
+        attemptsLeft: decision.attemptsLeft,
+      });
     case "offer_manual_review":
-      return (
-        "Hemos intentado validar tus fotos varias veces y al parecer no son las correctas. " +
-        "Si estás seguro de que son las fotos solicitadas, *envíalas una vez más* y las " +
-        "remitiremos a un analista de cartera para revisión manual."
-      );
+      return messages.offerManualReview;
   }
 }

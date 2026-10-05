@@ -4,6 +4,14 @@ import type { OutboundRecipient, OutboundTextSender } from "../../conversations/
 import type { InboundMessageDeduplicator } from "../application/ports";
 import { AnswerAccountInquiryHandler } from "./answer-account-inquiry";
 import type { BorrowerAccount, BorrowerAccountReader } from "./ports";
+import type { ClientLanguage } from "@preztiaos/domain";
+import type { ClientLanguageResolver } from "../../conversations/text/ports";
+
+/** Idioma fijo del tenant para las pruebas (el resolver real lo lee de la configuración). */
+const languageOf = (language: ClientLanguage): ClientLanguageResolver => ({
+  byTenant: async () => language,
+  byChannel: async () => language,
+});
 
 function text(body: string): TextMessage {
   return {
@@ -63,7 +71,7 @@ describe("AnswerAccountInquiryHandler", () => {
   it("no interviene si el mensaje no pide saldo ni movimiento", async () => {
     const accounts = new FakeAccounts(ACCOUNT);
     const sender = new SpySender();
-    const handler = new AnswerAccountInquiryHandler(accounts, sender, new FakeDedup());
+    const handler = new AnswerAccountInquiryHandler(accounts, sender, new FakeDedup(), languageOf("es"));
 
     const handled = await handler.handle(text("quiero pagar"));
 
@@ -74,7 +82,7 @@ describe("AnswerAccountInquiryHandler", () => {
 
   it("saldo: responde total, abonado, lo que falta y la mora", async () => {
     const sender = new SpySender();
-    const handler = new AnswerAccountInquiryHandler(new FakeAccounts(ACCOUNT), sender, new FakeDedup());
+    const handler = new AnswerAccountInquiryHandler(new FakeAccounts(ACCOUNT), sender, new FakeDedup(), languageOf("es"));
 
     const handled = await handler.handle(text("¿cuál es mi saldo?"));
 
@@ -89,7 +97,7 @@ describe("AnswerAccountInquiryHandler", () => {
 
   it("movimiento: lista los pagos con el saldo y la mora", async () => {
     const sender = new SpySender();
-    const handler = new AnswerAccountInquiryHandler(new FakeAccounts(ACCOUNT), sender, new FakeDedup());
+    const handler = new AnswerAccountInquiryHandler(new FakeAccounts(ACCOUNT), sender, new FakeDedup(), languageOf("es"));
 
     const handled = await handler.handle(text("quiero ver el movimiento"));
 
@@ -104,7 +112,7 @@ describe("AnswerAccountInquiryHandler", () => {
   it("sin crédito activo: avisa y corta el flujo", async () => {
     const sender = new SpySender();
     const dedup = new FakeDedup();
-    const handler = new AnswerAccountInquiryHandler(new FakeAccounts(null), sender, dedup);
+    const handler = new AnswerAccountInquiryHandler(new FakeAccounts(null), sender, dedup, languageOf("es"));
 
     const handled = await handler.handle(text("cuánto debo"));
 
@@ -119,6 +127,7 @@ describe("AnswerAccountInquiryHandler", () => {
       new FakeAccounts(ACCOUNT),
       sender,
       new FakeDedup(false),
+      languageOf("es"),
     );
 
     const handled = await handler.handle(text("saldo"));

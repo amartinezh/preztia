@@ -1,12 +1,12 @@
 import {
   buildAccountBalanceMessage,
   buildAccountMovementsMessage,
+  clientMessagesFor,
   detectAccountInquiry,
-  NO_ACTIVE_CREDIT_ACCOUNT,
   type TextMessage,
 } from "@preztiaos/domain";
 import type { InboundMessageDeduplicator } from "../application/ports";
-import type { OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguageResolver, OutboundTextSender } from "../../conversations/text/ports";
 import type { BorrowerAccountReader } from "./ports";
 
 /**
@@ -23,6 +23,7 @@ export class AnswerAccountInquiryHandler {
     private readonly accounts: BorrowerAccountReader,
     private readonly sender: OutboundTextSender,
     private readonly dedup: InboundMessageDeduplicator,
+    private readonly languages: ClientLanguageResolver,
   ) {}
 
   /** @returns `true` si el mensaje se atendió como una consulta de cuenta. */
@@ -37,7 +38,9 @@ export class AnswerAccountInquiryHandler {
       phone: message.from,
     });
     if (!account) {
-      await this.sender.sendText(recipient, NO_ACTIVE_CREDIT_ACCOUNT);
+      // Sin cuenta aún no hay tenant conocido: el idioma se resuelve por el canal.
+      const language = await this.languages.byChannel(message.channelId);
+      await this.sender.sendText(recipient, clientMessagesFor(language).account.noActiveCredit);
       return true;
     }
 
@@ -51,10 +54,11 @@ export class AnswerAccountInquiryHandler {
       currency: account.currency,
       credits: account.credits,
     };
+    const language = await this.languages.byTenant(account.tenantId);
     const body =
       kind === "movements"
-        ? buildAccountMovementsMessage(statement)
-        : buildAccountBalanceMessage(statement);
+        ? buildAccountMovementsMessage(statement, language)
+        : buildAccountBalanceMessage(statement, language);
     await this.sender.sendText(recipient, body);
     return true;
   }

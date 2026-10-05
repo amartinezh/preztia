@@ -4,6 +4,8 @@
 // "cómo" (PicPay, WhatsApp, BD) vive en infraestructura; aquí solo texto y montos.
 
 import { formatMoneyMinor } from "../collection/collection-reminder";
+import { DEFAULT_CLIENT_LANGUAGE, type ClientLanguage } from "../../conversations/i18n/client-language";
+import { clientMessagesFor } from "../../conversations/i18n/client-messages";
 
 // Verbos/frases que, en esencia, significan "quiero pagar" (ES + PT-BR). Se normaliza el texto
 // (minúsculas, sin acentos) y se busca cualquiera como subcadena de palabra. La detección es
@@ -117,24 +119,18 @@ export interface PaymentOptionsMessageData {
  * escribir un monto libre (se recibe cualquier abono). Cuando lo vencido iguala a la cuota (no hay
  * atrasos), se omite la opción 2 para no confundir.
  */
-export function buildPaymentOptionsMessage(data: PaymentOptionsMessageData): string {
-  const cuota = formatMoneyMinor(data.installmentMinor, data.currency);
-  const lines = [
-    `¡Hola ${data.firstName}! 👋 Con gusto tomamos tu pago.`,
-    "",
-    "¿Cuánto deseas pagar hoy? Responde con el número o escribe otro valor:",
-    `*1️⃣* Tu cuota de hoy — ${cuota}`,
-  ];
-  if (data.overdueMinor > data.installmentMinor) {
-    lines.push(
-      `*2️⃣* Todo lo pendiente — ${formatMoneyMinor(data.overdueMinor, data.currency)}`,
-    );
-  }
-  lines.push(
-    "",
-    "También puedes responder con *otro monto* (por ejemplo: 150) y generamos tu cobro por ese valor. 💚",
-  );
-  return lines.join("\n");
+export function buildPaymentOptionsMessage(
+  data: PaymentOptionsMessageData,
+  language: ClientLanguage = DEFAULT_CLIENT_LANGUAGE,
+): string {
+  return clientMessagesFor(language).charge.paymentOptions({
+    firstName: data.firstName,
+    installment: formatMoneyMinor(data.installmentMinor, data.currency),
+    overdue:
+      data.overdueMinor > data.installmentMinor
+        ? formatMoneyMinor(data.overdueMinor, data.currency)
+        : null,
+  });
 }
 
 /** Datos para redactar las instrucciones de pago con el código PIX generado. */
@@ -150,27 +146,23 @@ export interface ChargeInstructionsMessageData {
 /** Redacta el mensaje con el PIX copia-e-cola para que el cliente pague el monto elegido. */
 export function buildChargeInstructionsMessage(
   data: ChargeInstructionsMessageData,
+  language: ClientLanguage = DEFAULT_CLIENT_LANGUAGE,
 ): string {
-  const amount = formatMoneyMinor(data.amountMinor, data.currency);
-  return [
-    `Perfecto ✅ Generamos tu cobro por *${amount}*.`,
-    "",
-    "Copia el siguiente código *PIX* y págalo desde tu banco (Pix → Pix Copia e Cola):",
-    "",
-    data.copyPasteCode,
-    "",
-    `El código vence en ${data.expiresInMinutes} minutos. Apenas confirmemos el pago, te avisamos por aquí. 🙏`,
-  ].join("\n");
+  return clientMessagesFor(language).charge.chargeInstructions({
+    amount: formatMoneyMinor(data.amountMinor, data.currency),
+    copyPasteCode: data.copyPasteCode,
+    expiresInMinutes: data.expiresInMinutes,
+  });
 }
 
+// Avisos fijos del cobro en español (idioma por defecto), conservados para los importadores
+// existentes; los casos de uso los toman del catálogo en el idioma del tenant.
+
 /** Aviso cuando no se pudo interpretar la elección: se vuelve a pedir. */
-export const PAYMENT_CHOICE_REASK =
-  "No entendí el monto 🤔. Responde *1* para tu cuota de hoy, *2* para todo lo pendiente, o escribe un valor (por ejemplo: 150).";
+export const PAYMENT_CHOICE_REASK = clientMessagesFor("es").charge.choiceReask;
 
 /** Aviso cuando el cliente quiere pagar pero no tiene un crédito activo. */
-export const NO_ACTIVE_CREDIT_TO_PAY =
-  "No encontramos un crédito activo asociado a este número. Si crees que es un error, un asesor te ayudará. 🙏";
+export const NO_ACTIVE_CREDIT_TO_PAY = clientMessagesFor("es").charge.noActiveCredit;
 
 /** Aviso cuando falla la generación del cobro en el proveedor (degradación elegante). */
-export const CHARGE_CREATION_FAILED =
-  "Tuvimos un problema al generar tu cobro en este momento 😞. Por favor inténtalo de nuevo en unos minutos.";
+export const CHARGE_CREATION_FAILED = clientMessagesFor("es").charge.creationFailed;

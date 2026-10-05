@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_config" ADD COLUMN "client_language" text DEFAULT 'es' NOT NULL;

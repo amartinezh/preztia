@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  clientMessagesFor,
   ASSISTANT_UNAVAILABLE_REPLY,
   OFF_TOPIC_REPLY,
   buildCommittedApplicantReply,
@@ -68,6 +69,7 @@ const config: TenantAssistantConfig = {
   knowledgeBase: "La cuota diaria es de $10.000. Requisitos: cédula y referencia.",
   aiProvider: "GEMINI",
   aiApiKey: "key-123",
+  language: "es",
 };
 const message: TextMessage = {
   id: "wamid.1",
@@ -186,6 +188,25 @@ describe("AnswerTextMessageHandler", () => {
 
     expect(sender.sent[0]?.body).toBe(ASSISTANT_UNAVAILABLE_REPLY);
     expect(credit.started).toHaveLength(0);
+  });
+
+  it("pt-BR: la IA recibe el idioma del tenant y los avisos fijos salen en portugués", async () => {
+    const assistant = new StubAssistant(answer({ classification: "off_topic" }));
+    const handler = new AnswerTextMessageHandler(
+      new FakeConfigRepo({ ...config, language: "pt-BR" }),
+      new FakeDedup(),
+      assistant,
+      sender,
+      credit,
+      restart,
+      new StubReminder(),
+      new StubJourney(),
+    );
+
+    await handler.execute(message);
+
+    expect(assistant.requests[0]?.language).toBe("pt-BR");
+    expect(sender.sent[0]?.body).toBe(clientMessagesFor("pt-BR").assistant.offTopic);
   });
 
   it("no hace nada si el canal no está configurado o falta la credencial de IA", async () => {

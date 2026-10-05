@@ -498,6 +498,13 @@
       "when": 1791229988067,
       "tag": "0070_pink_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1791236390878,
+      "tag": "0071_fixed_mercury",
+      "breakpoints": true
     }
   ]
 }

@@ -51,6 +51,10 @@ function buildService(
     reconciliation,
     noopSender,
     settingsReader(autoConfirm),
+    {
+      byTenant: () => Promise.resolve('es'),
+      byChannel: () => Promise.resolve('es'),
+    },
   );
 }
 

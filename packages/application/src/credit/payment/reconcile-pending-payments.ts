@@ -1,12 +1,13 @@
 import {
   allocatePayment,
+  clientMessagesFor,
   decideReconciliation,
   Money,
   portfolioBalanceMinor,
   type AllocationResult,
   type PixReceiptData,
 } from "@preztiaos/domain";
-import type { OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguageResolver, OutboundTextSender } from "../../conversations/text/ports";
 import { formatAmount } from "./format-amount";
 import type {
   ActiveCreditPortfolio,
@@ -79,6 +80,7 @@ export class ReconcilePendingPaymentsHandler {
     private readonly bank: BankPaymentVerifier,
     private readonly sender: OutboundTextSender,
     private readonly maxAttempts: number,
+    private readonly languages: ClientLanguageResolver,
   ) {}
 
   async execute(cmd: { tenantId: string }): Promise<ReconciliationSummary> {
@@ -172,10 +174,11 @@ export class ReconcilePendingPaymentsHandler {
     });
 
     if (payment.channelId) {
+      const messages = clientMessagesFor(await this.languages.byTenant(tenantId)).receipt;
       const remaining = portfolioBalanceMinor(allocation.installments);
       const body = allocation.creditSettled
-        ? "✅ Tu pago fue confirmado por el banco. 🎉 ¡Tu crédito quedó *saldado*!"
-        : `✅ Tu pago fue confirmado por el banco. Saldo pendiente: ${formatAmount(remaining, portfolio.currency)}.`;
+        ? messages.bankConfirmedSettled
+        : messages.bankConfirmed(formatAmount(remaining, portfolio.currency));
       await this.sender.sendText({ channelId: payment.channelId, recipient: payment.payerPhone }, body);
     }
     return "verified";

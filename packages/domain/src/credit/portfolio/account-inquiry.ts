@@ -4,6 +4,11 @@
 // `payment-intent`, pero informativo: no genera cobros, solo comunica cuánto debe y qué ha pagado.
 
 import { formatMoneyMinor } from "../collection/collection-reminder";
+import { DEFAULT_CLIENT_LANGUAGE, type ClientLanguage } from "../../conversations/i18n/client-language";
+import {
+  clientMessagesFor,
+  type AccountMessages,
+} from "../../conversations/i18n/client-messages";
 
 /** Intención informativa detectada: ver el saldo o ver el listado de pagos (movimiento). */
 export type AccountInquiryKind = "balance" | "movements";
@@ -103,23 +108,28 @@ export interface AccountStatementMessageData {
 /**
  * Redacta la respuesta al SALDO. Con un solo crédito muestra el detalle completo (total, abonado, lo
  * que falta, lo que debe a la fecha y la mora). Con varios, resume cada crédito y agrega el total
- * consolidado. En todos los casos incluye el saldo en mora.
+ * consolidado. En todos los casos incluye el saldo en mora. Redacta en el idioma del tenant.
  */
-export function buildAccountBalanceMessage(data: AccountStatementMessageData): string {
+export function buildAccountBalanceMessage(
+  data: AccountStatementMessageData,
+  language: ClientLanguage = DEFAULT_CLIENT_LANGUAGE,
+): string {
+  const m = clientMessagesFor(language).account;
+  const money = (amountMinor: number) => formatMoneyMinor(amountMinor, data.currency);
   if (data.credits.length === 1) {
     const credit = data.credits[0]!;
     return [
-      `¡Hola ${data.firstName}! 👋 Este es el estado de tu crédito:`,
+      m.balanceIntroSingle(data.firstName),
       "",
-      `💳 Valor total del crédito: ${money(credit.totalDueMinor, data.currency)}`,
-      `✅ Has abonado: ${money(credit.totalPaidMinor, data.currency)}`,
-      `📌 Te falta por pagar: ${money(credit.outstandingMinor, data.currency)}`,
-      `📅 Debes a la fecha: ${money(credit.dueTodayMinor, data.currency)}`,
-      overdueLine(credit.overdueMinor, data.currency),
+      m.totalDue(money(credit.totalDueMinor)),
+      m.paid(money(credit.totalPaidMinor)),
+      m.outstanding(money(credit.outstandingMinor)),
+      m.dueToday(money(credit.dueTodayMinor)),
+      overdueLine(m, credit.overdueMinor, data.currency),
     ].join("\n");
   }
 
-  const lines = [`¡Hola ${data.firstName}! 👋 Tienes ${data.credits.length} créditos activos:`];
+  const lines = [m.balanceIntroMulti(data.firstName, data.credits.length)];
   let totalOutstanding = 0;
   let totalOverdue = 0;
   for (const credit of data.credits) {
@@ -127,19 +137,17 @@ export function buildAccountBalanceMessage(data: AccountStatementMessageData): s
     totalOverdue += credit.overdueMinor;
     lines.push(
       "",
-      `📄 ${creditLabel(credit, data.currency)}`,
-      `   📌 Te falta por pagar: ${money(credit.outstandingMinor, data.currency)}`,
-      `   📅 Debes a la fecha: ${money(credit.dueTodayMinor, data.currency)}`,
-      `   ${compactOverdueLine(credit.overdueMinor, data.currency)}`,
+      `📄 ${creditLabel(m, credit, data.currency)}`,
+      `   ${m.outstanding(money(credit.outstandingMinor))}`,
+      `   ${m.dueToday(money(credit.dueTodayMinor))}`,
+      `   ${compactOverdueLine(m, credit.overdueMinor, data.currency)}`,
     );
   }
   lines.push(
     "",
     "━━━━━━━━━━━━",
-    `📊 En total te falta por pagar: ${money(totalOutstanding, data.currency)}`,
-    totalOverdue > 0
-      ? `⚠️ En mora (total): ${money(totalOverdue, data.currency)}`
-      : "🟢 ¡Estás al día en todos tus créditos! 🎉",
+    m.totalOutstanding(money(totalOutstanding)),
+    totalOverdue > 0 ? m.totalOverdue(money(totalOverdue)) : m.allUpToDate,
   );
   return lines.join("\n");
 }
@@ -149,25 +157,31 @@ export function buildAccountBalanceMessage(data: AccountStatementMessageData): s
  * saldo pendiente y el saldo en mora. Con un solo crédito usa un formato simple; con varios, una
  * sección por crédito. Si un crédito aún no registra pagos, lo indica en vez de una lista vacía.
  */
-export function buildAccountMovementsMessage(data: AccountStatementMessageData): string {
+export function buildAccountMovementsMessage(
+  data: AccountStatementMessageData,
+  language: ClientLanguage = DEFAULT_CLIENT_LANGUAGE,
+): string {
+  const m = clientMessagesFor(language).account;
+  const money = (amountMinor: number) => formatMoneyMinor(amountMinor, data.currency);
   if (data.credits.length === 1) {
     const credit = data.credits[0]!;
-    const lines = [`¡Hola ${data.firstName}! 👋 Estos son los pagos de tu crédito:`, ""];
-    appendMovements(lines, credit, data.currency, "");
+    const lines = [m.movementsIntroSingle(data.firstName), ""];
+    appendMovements(m, lines, credit, data.currency, "");
     lines.push(
       "",
-      `📌 Te falta por pagar: ${money(credit.outstandingMinor, data.currency)}`,
-      overdueLine(credit.overdueMinor, data.currency),
+      m.outstanding(money(credit.outstandingMinor)),
+      overdueLine(m, credit.overdueMinor, data.currency),
     );
     return lines.join("\n");
   }
 
-  const lines = [`¡Hola ${data.firstName}! 👋 Estos son los pagos de tus créditos activos:`];
+  const lines = [m.movementsIntroMulti(data.firstName)];
   for (const credit of data.credits) {
-    lines.push("", `📄 ${creditLabel(credit, data.currency)}`);
-    appendMovements(lines, credit, data.currency, "   ");
+    lines.push("", `📄 ${creditLabel(m, credit, data.currency)}`);
+    appendMovements(m, lines, credit, data.currency, "   ");
     lines.push(
-      `   📌 Te falta: ${money(credit.outstandingMinor, data.currency)} · ${compactOverdueLine(
+      `   ${m.outstandingShort(money(credit.outstandingMinor))} · ${compactOverdueLine(
+        m,
         credit.overdueMinor,
         data.currency,
       )}`,
@@ -178,23 +192,27 @@ export function buildAccountMovementsMessage(data: AccountStatementMessageData):
 
 /** Agrega al mensaje las líneas de abonos de un crédito (o el aviso de que aún no hay pagos). */
 function appendMovements(
+  m: AccountMessages,
   lines: string[],
   credit: AccountCreditLine,
   currency: string,
   indent: string,
 ): void {
   if (credit.movements.length === 0) {
-    lines.push(`${indent}Aún no registramos pagos.`);
+    lines.push(`${indent}${m.noPayments}`);
     return;
   }
   for (const movement of credit.movements) {
-    lines.push(`${indent}• ${movement.date} — ${money(movement.amountMinor, currency)}`);
+    lines.push(`${indent}• ${movement.date} — ${formatMoneyMinor(movement.amountMinor, currency)}`);
   }
 }
 
 /** Etiqueta de un crédito para distinguirlo entre varios: valor total + fecha de inicio. */
-function creditLabel(credit: AccountCreditLine, currency: string): string {
-  return `Crédito de ${money(credit.totalDueMinor, currency)} · desde ${formatBusinessDate(credit.startDate)}`;
+function creditLabel(m: AccountMessages, credit: AccountCreditLine, currency: string): string {
+  return m.creditLabel(
+    formatMoneyMinor(credit.totalDueMinor, currency),
+    formatBusinessDate(credit.startDate),
+  );
 }
 
 /** Formatea `YYYY-MM-DD` a `DD/MM/YYYY` (uso local); devuelve el original si no tiene ese formato. */
@@ -205,23 +223,20 @@ function formatBusinessDate(isoDate: string): string {
   return `${day}/${month}/${year}`;
 }
 
-/** Atajo para formatear dinero en la moneda del estado de cuenta. */
-function money(amountMinor: number, currency: string): string {
-  return formatMoneyMinor(amountMinor, currency);
-}
-
 /** Línea del saldo en mora (detalle): alerta si hay atraso; felicitación si está al día. */
-function overdueLine(overdueMinor: number, currency: string): string {
+function overdueLine(m: AccountMessages, overdueMinor: number, currency: string): string {
   return overdueMinor > 0
-    ? `⚠️ En mora (atrasado): ${money(overdueMinor, currency)}`
-    : "🟢 En mora: ¡estás al día! 🎉";
+    ? m.overdueDetail(formatMoneyMinor(overdueMinor, currency))
+    : m.upToDateDetail;
 }
 
 /** Línea del saldo en mora (compacta, para el resumen por crédito). */
-function compactOverdueLine(overdueMinor: number, currency: string): string {
-  return overdueMinor > 0 ? `⚠️ En mora: ${money(overdueMinor, currency)}` : "🟢 Al día";
+function compactOverdueLine(m: AccountMessages, overdueMinor: number, currency: string): string {
+  return overdueMinor > 0 ? m.overdueCompact(formatMoneyMinor(overdueMinor, currency)) : m.upToDateCompact;
 }
 
-/** Aviso cuando el cliente pide su cuenta pero no tiene un crédito activo asociado al número. */
-export const NO_ACTIVE_CREDIT_ACCOUNT =
-  "No encontramos un crédito activo asociado a este número. Si crees que es un error, un asesor te ayudará. 🙏";
+/**
+ * Aviso cuando el cliente pide su cuenta pero no tiene un crédito activo asociado al número (en
+ * español, idioma por defecto; los casos de uso lo toman del catálogo en el idioma del tenant).
+ */
+export const NO_ACTIVE_CREDIT_ACCOUNT = clientMessagesFor("es").account.noActiveCredit;

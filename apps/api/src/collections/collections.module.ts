@@ -42,6 +42,7 @@ import { ConversationMessageLog } from '../conversations/conversation-message.lo
 import { CollectionRouteController } from './collection-route.controller';
 import { CollectionRouteDrizzleRepository } from './collection-route.repository';
 import { CollectionRouteQueryRepository } from './collection-route-query.repository';
+import { ClientLanguageRepository } from '../tenant-config/client-language.repository';
 
 @Module({
   imports: [MessagingModule],
@@ -105,18 +106,21 @@ import { CollectionRouteQueryRepository } from './collection-route-query.reposit
         LoggingTextSender,
         ReminderIdempotencyRepository,
         CollectionAuditLogAdapter,
+        ClientLanguageRepository,
       ],
       useFactory: (
         dueCredits: DueCreditsReader,
         sender: OutboundTextSender,
         idempotency: ReminderIdempotencyStore,
         audit: CollectionAuditLog,
+        languages: ClientLanguageRepository,
       ) =>
         new SendCollectionReminderHandler(
           dueCredits,
           sender,
           idempotency,
           audit,
+          languages,
         ),
     },
 

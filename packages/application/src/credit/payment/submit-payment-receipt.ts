@@ -1,5 +1,6 @@
 import {
   allocatePayment,
+  clientMessagesFor,
   Money,
   portfolioBalanceMinor,
   type AllocationResult,
@@ -7,9 +8,10 @@ import {
   type MediaClassification,
   type PaymentReviewDecision,
   type PixReceiptData,
+  type ReceiptMessages,
 } from "@preztiaos/domain";
 import { decidePaymentReview } from "@preztiaos/domain";
-import type { OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguageResolver, OutboundTextSender } from "../../conversations/text/ports";
 import type { DownloadedMedia } from "../application/ports";
 import { formatAmount } from "./format-amount";
 import type {
@@ -55,10 +57,12 @@ export class SubmitPaymentReceiptHandler {
     private readonly bank: BankPaymentVerifier,
     private readonly storage: PaymentReceiptStorage,
     private readonly sender: OutboundTextSender,
+    private readonly languages: ClientLanguageResolver,
   ) {}
 
   async execute(cmd: SubmitPaymentReceiptCommand): Promise<void> {
     const recipient = { channelId: cmd.channelId, recipient: cmd.payerPhone };
+    const messages = clientMessagesFor(await this.languages.byTenant(cmd.tenantId)).receipt;
     const pix = cmd.classification.kind === "payment_receipt" ? cmd.classification.pix : null;
 
     // 1) Sin crédito activo no hay cartera que abonar: se registra el comprobante
@@ -69,19 +73,13 @@ export class SubmitPaymentReceiptHandler {
     });
     if (!portfolio) {
       await this.saveOrphan(cmd, pix);
-      await this.sender.sendText(
-        recipient,
-        "No encontramos un crédito activo asociado a este número. Guardamos tu comprobante y un asesor lo revisará.",
-      );
+      await this.sender.sendText(recipient, messages.noActiveCredit);
       return;
     }
 
     // 2) El archivo no es un comprobante: se orienta sin registrar pago.
     if (cmd.classification.kind !== "payment_receipt" || !pix) {
-      await this.sender.sendText(
-        recipient,
-        "El archivo que enviaste no parece un comprobante de pago. Si realizaste un pago, envíame la foto o el PDF del comprobante PIX.",
-      );
+      await this.sender.sendText(recipient, messages.notAReceipt);
       return;
     }
 
@@ -125,7 +123,7 @@ export class SubmitPaymentReceiptHandler {
     // 6) Respuesta al cliente según la decisión.
     await this.sender.sendText(
       recipient,
-      responseMessage(decision, portfolio, allocation),
+      responseMessage(messages, decision, portfolio, allocation),
     );
   }
 
@@ -314,6 +312,7 @@ function bankStatusOf(verification: BankVerification): PaymentRecord["bankStatus
 
 /** Mensaje al cliente según la decisión; nunca expone detalles que eduquen al defraudador. */
 function responseMessage(
+  messages: ReceiptMessages,
   decision: PaymentReviewDecision,
   portfolio: ActiveCreditPortfolio,
   allocation: AllocationResult | null,
@@ -321,27 +320,24 @@ function responseMessage(
   switch (decision.kind) {
     case "accepted_verified":
     case "accepted_unverified": {
-      if (!allocation) {
-        return "Recibimos tu comprobante y está *en verificación* con el banco. Te confirmaremos el abono apenas se valide.";
-      }
+      if (!allocation) return messages.inVerification;
       const paid = formatAmount(decision.amountMinor, portfolio.currency);
       if (allocation.creditSettled) {
-        const credit =
+        const overpayment =
           allocation.overpaymentMinor > 0
-            ? ` Quedó un saldo a tu favor de ${formatAmount(allocation.overpaymentMinor, portfolio.currency)}.`
-            : "";
-        return `✅ Recibimos tu pago de ${paid}. 🎉 ¡Tu crédito quedó *saldado*!${credit}`;
+            ? formatAmount(allocation.overpaymentMinor, portfolio.currency)
+            : null;
+        return messages.settled({ paid, overpayment });
       }
-      const remaining = portfolioBalanceMinor(allocation.installments);
-      const count = allocation.allocations.length;
-      return (
-        `✅ Recibimos tu pago de ${paid} y abonamos ${count} cuota${count === 1 ? "" : "s"}. ` +
-        `Saldo pendiente: ${formatAmount(remaining, portfolio.currency)}.`
-      );
+      return messages.allocated({
+        paid,
+        installments: allocation.allocations.length,
+        remaining: formatAmount(portfolioBalanceMinor(allocation.installments), portfolio.currency),
+      });
     }
     case "rejected_invalid":
-      return "No pudimos leer el monto del comprobante. Por favor envía una foto o PDF más legible del comprobante PIX.";
+      return messages.unreadable;
     case "rejected_fraud":
-      return "No pudimos validar este comprobante. Un analista lo revisará y te contactaremos.";
+      return messages.underReview;
   }
 }

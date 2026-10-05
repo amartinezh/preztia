@@ -117,6 +117,16 @@ export type MessagingChannelsSettings = z.infer<typeof messagingChannelsSettings
 export const updateMessagingChannelsInput = messagingChannelsSettings.partial();
 export type UpdateMessagingChannelsInput = z.infer<typeof updateMessagingChannelsInput>;
 
+// ── Idioma de atención al cliente por chat (diccionarios de mensajes) ─────────────────────────
+// Espejo de `CLIENT_LANGUAGES` del dominio: agregar un idioma = sumarlo en ambos lados (el dominio
+// exige su diccionario completo). Todo lo que el sistema escribe al cliente sale en este idioma y el
+// cambio aplica desde el siguiente mensaje.
+export const clientLanguage = z.enum(["es", "pt-BR"]);
+export type ClientLanguageContract = z.infer<typeof clientLanguage>;
+
+export const clientLanguageSettings = z.object({ language: clientLanguage });
+export type ClientLanguageSettings = z.infer<typeof clientLanguageSettings>;
+
 const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 
 export const tenantConfigContract = c.router({
@@ -179,5 +189,20 @@ export const tenantConfigContract = c.router({
     body: updateMessagingChannelsInput,
     responses: { 200: messagingChannelsSettings, 400: z.object({ message: z.string() }) },
     summary: "Habilita/deshabilita WhatsApp y Telegram y fija el canal preferido de cobranza (ADMIN)",
+  },
+  getClientLanguage: {
+    method: "GET",
+    path: "/tenant-config/client-language",
+    headers: tenantHeaders,
+    responses: { 200: clientLanguageSettings },
+    summary: "Idioma en que la empresa atiende a sus clientes por chat",
+  },
+  updateClientLanguage: {
+    method: "PATCH",
+    path: "/tenant-config/client-language",
+    headers: tenantHeaders,
+    body: clientLanguageSettings,
+    responses: { 200: clientLanguageSettings },
+    summary: "Cambia el idioma de atención al cliente; aplica desde el siguiente mensaje (ADMIN)",
   },
 });

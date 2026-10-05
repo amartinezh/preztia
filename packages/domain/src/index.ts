@@ -51,6 +51,8 @@ export * from "./credit/migration/migrated-credit";
 export * from "./conversations/inbound-message";
 export * from "./conversations/conversation-outcome";
 export * from "./conversations/assistant";
+export * from "./conversations/i18n/client-language";
+export * from "./conversations/i18n/client-messages";
 export * from "./conversations/messaging-channel";
 export * from "./conversations/telegram-contact";
 export * from "./conversations/proactive-channel";

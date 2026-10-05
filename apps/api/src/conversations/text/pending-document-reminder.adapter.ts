@@ -4,7 +4,12 @@ import {
   type PendingDocumentReminder,
   type RequiredDocumentCatalog,
 } from '@preztiaos/application';
-import { findDocumentSpec, nextPendingDocument } from '@preztiaos/domain';
+import {
+  clientMessagesFor,
+  findDocumentSpec,
+  nextPendingDocument,
+} from '@preztiaos/domain';
+import { ClientLanguageRepository } from '../../tenant-config/client-language.repository';
 import {
   CREDIT_APPLICATION_REPOSITORY,
   REQUIRED_DOCUMENT_CATALOG,
@@ -23,6 +28,7 @@ export class CreditApplicationPendingDocumentReminder implements PendingDocument
     private readonly applications: CreditApplicationRepository,
     @Inject(REQUIRED_DOCUMENT_CATALOG)
     private readonly catalog: RequiredDocumentCatalog,
+    private readonly languages: ClientLanguageRepository,
   ) {}
 
   async forApplicant(input: {
@@ -40,6 +46,7 @@ export class CreditApplicationPendingDocumentReminder implements PendingDocument
     const spec = findDocumentSpec(specs, pending);
     if (!spec) return null;
 
-    return `📋 Recuerda que aún tienes una solicitud en curso. Para continuar: ${spec.title}`;
+    const language = await this.languages.byTenant(input.tenantId);
+    return clientMessagesFor(language).application.pendingReminder(spec.title);
   }
 }

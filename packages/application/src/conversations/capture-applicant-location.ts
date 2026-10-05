@@ -1,10 +1,10 @@
-import type { LocationMessage } from "@preztiaos/domain";
+import { clientMessagesFor, type LocationMessage } from "@preztiaos/domain";
 import type {
   ApplicantLocationStore,
   InboundMessageDeduplicator,
   TenantResolver,
 } from "../credit/application/ports";
-import type { OutboundTextSender } from "./text/ports";
+import type { ClientLanguageResolver, OutboundTextSender } from "./text/ports";
 
 /**
  * Caso de uso: captura la UBICACIÓN que el cliente comparte por WhatsApp y la persiste en su
@@ -19,6 +19,7 @@ export class CaptureApplicantLocationHandler {
     private readonly dedup: InboundMessageDeduplicator,
     private readonly store: ApplicantLocationStore,
     private readonly sender: OutboundTextSender,
+    private readonly languages: ClientLanguageResolver,
   ) {}
 
   async execute(message: LocationMessage): Promise<void> {
@@ -36,9 +37,10 @@ export class CaptureApplicantLocationHandler {
     });
     if (!saved) return; // sin solicitud activa: nada que ubicar
 
+    const messages = clientMessagesFor(await this.languages.byTenant(tenantId)).application;
     await this.sender.sendText(
       { channelId: message.channelId, recipient: message.from },
-      "📍 ¡Gracias! Recibimos tu ubicación. Con esto completamos tu solicitud; un asesor la revisará y nos comunicaremos contigo en el menor tiempo posible.",
+      messages.locationReceived,
     );
   }
 }

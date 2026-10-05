@@ -4,6 +4,8 @@
 
 import { DomainError } from "../../shared/money";
 import { remainingMinor, type PortfolioInstallment } from "../portfolio/installment";
+import { DEFAULT_CLIENT_LANGUAGE, type ClientLanguage } from "../../conversations/i18n/client-language";
+import { clientMessagesFor } from "../../conversations/i18n/client-messages";
 
 /**
  * Monto exacto a pagar a una fecha (`asOf`, ISO `YYYY-MM-DD`): la suma del SALDO pendiente de
@@ -56,24 +58,20 @@ export function formatMoneyMinor(amountMinor: number, currency: string): string 
 
 /**
  * Redacta el recordatorio de cobro: saludo amable, cuota del día, invitación a pagar por PIX a la
- * llave del tenant y a responder con la FOTO del comprobante en este mismo hilo de WhatsApp.
+ * llave del tenant y a responder con la FOTO del comprobante en este mismo hilo de WhatsApp, en el
+ * idioma del tenant.
  * Falla rápido si no hay nada que cobrar (la decisión de no enviar es del caso de uso).
  */
-export function buildCollectionReminderMessage(data: CollectionReminderData): string {
+export function buildCollectionReminderMessage(
+  data: CollectionReminderData,
+  language: ClientLanguage = DEFAULT_CLIENT_LANGUAGE,
+): string {
   if (data.dueMinor <= 0) {
     throw new DomainError("No hay cuota por cobrar: no se debe construir un recordatorio");
   }
-  const amount = formatMoneyMinor(data.dueMinor, data.currency);
-  return [
-    `¡Hola ${data.firstName}! 👋`,
-    "",
-    `Te recordamos que tu cuota de hoy es de ${amount}.`,
-    `Por favor realiza tu pago hoy mediante una transferencia *PIX* a la llave:`,
-    data.pixKey,
-    "",
-    "Cuando completes el pago, envíanos la *foto del comprobante* respondiendo " +
-      "directamente a este mismo chat. 🙏",
-    "",
-    "¡Gracias por tu puntualidad! 😊",
-  ].join("\n");
+  return clientMessagesFor(language).reminder.collectionReminder({
+    firstName: data.firstName,
+    amount: formatMoneyMinor(data.dueMinor, data.currency),
+    pixKey: data.pixKey,
+  });
 }

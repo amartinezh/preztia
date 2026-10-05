@@ -1,9 +1,5 @@
 import type { AssistantAnswer, TextMessage } from "@preztiaos/domain";
-import {
-  ASSISTANT_UNAVAILABLE_REPLY,
-  OFF_TOPIC_REPLY,
-  buildCommittedApplicantReply,
-} from "@preztiaos/domain";
+import { clientMessagesFor } from "@preztiaos/domain";
 // El deduplicador es un puerto genérico de idempotencia de webhooks (compartido con el
 // slice de documentos); se reutiliza para no reprocesar el mismo wamid de texto.
 import type { InboundMessageDeduplicator } from "../../credit/application/ports";
@@ -63,6 +59,8 @@ export class AnswerTextMessageHandler {
       applicant: message.from,
     };
     const recipient = { channelId: message.channelId, recipient: message.from };
+    // Idioma vigente del tenant (leído con la configuración en este mismo mensaje).
+    const messages = clientMessagesFor(config.language);
 
     // Guarda de estado: a quien ya aceptó la oferta o tiene el crédito otorgado NO se le vuelve a
     // ofrecer "iniciar una solicitud". Se le confirma que su proceso está en curso y se le da el
@@ -73,7 +71,7 @@ export class AnswerTextMessageHandler {
       applicantPhone: message.from,
     });
     if (committed) {
-      await this.sender.sendText(recipient, buildCommittedApplicantReply(committed.supportPhone));
+      await this.sender.sendText(recipient, messages.assistant.committedApplicant(committed.supportPhone));
       return;
     }
 
@@ -84,11 +82,12 @@ export class AnswerTextMessageHandler {
         question: message.body,
         provider: config.aiProvider,
         apiKey: config.aiApiKey,
+        language: config.language,
       });
     } catch {
       // Degradación elegante: el proveedor de IA falló (p. ej. cuota agotada). Informamos
       // al usuario en vez de escalar el error y provocar reintentos del webhook.
-      await this.sender.sendText(recipient, ASSISTANT_UNAVAILABLE_REPLY);
+      await this.sender.sendText(recipient, messages.assistant.unavailable);
       return;
     }
 
@@ -106,7 +105,7 @@ export class AnswerTextMessageHandler {
     }
 
     // A: pregunta de conocimiento → respuesta del modelo. C: fuera de alcance → aviso fijo.
-    const base = answer.classification === "off_topic" ? OFF_TOPIC_REPLY : answer.reply;
+    const base = answer.classification === "off_topic" ? messages.assistant.offTopic : answer.reply;
 
     // Insistir: si hay una solicitud activa con documentos pendientes, recuérdalo.
     const reminder = await this.reminders.forApplicant(applicant);

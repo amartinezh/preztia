@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type { CreditRegisteredNotifier } from '@preztiaos/application';
+import { clientMessagesFor } from '@preztiaos/domain';
+import { ClientLanguageRepository } from '../../tenant-config/client-language.repository';
 import { withTenantTxFor } from '../../tenancy/unit-of-work';
 import { ProactiveTextSender } from '../../messaging/proactive-text-sender';
 
@@ -19,7 +21,10 @@ export class CreditRegisteredMessagingNotifier implements CreditRegisteredNotifi
   private readonly logger = new Logger('Messaging:CreditRegistered');
   // Envío proactivo: el aviso sale por el canal ALCANZABLE hoy (WhatsApp o Telegram), partiendo del
   // guardado en la solicitud (ADR #40, D8).
-  constructor(private readonly sender: ProactiveTextSender) {}
+  constructor(
+    private readonly sender: ProactiveTextSender,
+    private readonly languages: ClientLanguageRepository,
+  ) {}
 
   async notifyRegistered(input: {
     tenantId: string;
@@ -32,9 +37,10 @@ export class CreditRegisteredMessagingNotifier implements CreditRegisteredNotifi
         input.tenantId,
         input.zoneId,
       );
+      const language = await this.languages.byTenant(input.tenantId);
       await this.sender.sendText(
         { channelId: input.channelId, recipient: input.recipient },
-        buildMessage(supportPhone),
+        clientMessagesFor(language).credit.registered(supportPhone),
       );
     } catch (error) {
       // Cortesía posterior al desembolso: no debe tumbar la aprobación si el envío falla.
@@ -58,15 +64,4 @@ export class CreditRegisteredMessagingNotifier implements CreditRegisteredNotifi
       return row?.supportPhone ?? null;
     });
   }
-}
-
-/** Mensaje de crédito registrado; incluye el teléfono de atención de la zona si está configurado. */
-function buildMessage(supportPhone: string | null): string {
-  const support = supportPhone
-    ? `Si tienes algún inconveniente, no dudes en escribirnos o comunicarte con servicio al cliente al ${supportPhone}.`
-    : 'Si tienes algún inconveniente, no dudes en escribirnos o comunicarte con servicio al cliente.';
-  return [
-    '¡Tu crédito fue registrado! ✅ Lo desembolsaremos a la brevedad.',
-    support,
-  ].join('\n');
 }

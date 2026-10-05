@@ -1,15 +1,13 @@
 import {
   buildChargeInstructionsMessage,
   buildPaymentOptionsMessage,
-  CHARGE_CREATION_FAILED,
+  clientMessagesFor,
   detectPaymentIntent,
-  NO_ACTIVE_CREDIT_TO_PAY,
   parsePaymentChoice,
-  PAYMENT_CHOICE_REASK,
   type TextMessage,
 } from "@preztiaos/domain";
 import type { InboundMessageDeduplicator } from "../application/ports";
-import type { OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguageResolver, OutboundTextSender } from "../../conversations/text/ports";
 import type {
   ChargeableCreditReader,
   ChargeGateway,
@@ -34,6 +32,7 @@ export class OfferOrCreateChargeHandler {
     private readonly gateway: ChargeGateway,
     private readonly sender: OutboundTextSender,
     private readonly dedup: InboundMessageDeduplicator,
+    private readonly languages: ClientLanguageResolver,
     private readonly chargeTtlMinutes: number = DEFAULT_CHARGE_TTL_MINUTES,
   ) {}
 
@@ -62,7 +61,9 @@ export class OfferOrCreateChargeHandler {
       phone: message.from,
     });
     if (!chargeable) {
-      await this.sender.sendText(recipient, NO_ACTIVE_CREDIT_TO_PAY);
+      // Sin crédito aún no hay tenant conocido: el idioma se resuelve por el canal.
+      const language = await this.languages.byChannel(message.channelId);
+      await this.sender.sendText(recipient, clientMessagesFor(language).charge.noActiveCredit);
       return true;
     }
     // Consumir el token solo tras confirmar que hay algo que ofrecer (no gastar dedup en falsos).
@@ -82,12 +83,15 @@ export class OfferOrCreateChargeHandler {
     });
     await this.sender.sendText(
       recipient,
-      buildPaymentOptionsMessage({
-        firstName: chargeable.firstName,
-        installmentMinor: chargeable.installmentMinor,
-        overdueMinor: chargeable.overdueMinor,
-        currency: chargeable.currency,
-      }),
+      buildPaymentOptionsMessage(
+        {
+          firstName: chargeable.firstName,
+          installmentMinor: chargeable.installmentMinor,
+          overdueMinor: chargeable.overdueMinor,
+          currency: chargeable.currency,
+        },
+        await this.languages.byTenant(chargeable.tenantId),
+      ),
     );
     return true;
   }
@@ -97,12 +101,14 @@ export class OfferOrCreateChargeHandler {
     message: TextMessage,
     recipient: { channelId: string; recipient: string },
   ): Promise<void> {
+    const language = await this.languages.byTenant(session.tenantId);
+    const messages = clientMessagesFor(language).charge;
     const choice = parsePaymentChoice(message.body, {
       installmentMinor: session.installmentMinor,
       overdueMinor: session.overdueMinor,
     });
     if (choice.kind === "reask") {
-      await this.sender.sendText(recipient, PAYMENT_CHOICE_REASK);
+      await this.sender.sendText(recipient, messages.choiceReask);
       return;
     }
 
@@ -119,7 +125,7 @@ export class OfferOrCreateChargeHandler {
     } catch {
       // Degradación elegante: el proveedor falló → se avisa y se cierra la sesión.
       await this.sessions.markFailed({ sessionId: session.sessionId, tenantId: session.tenantId });
-      await this.sender.sendText(recipient, CHARGE_CREATION_FAILED);
+      await this.sender.sendText(recipient, messages.creationFailed);
       return;
     }
 
@@ -133,12 +139,15 @@ export class OfferOrCreateChargeHandler {
     });
     await this.sender.sendText(
       recipient,
-      buildChargeInstructionsMessage({
-        amountMinor: choice.amountMinor,
-        currency: session.currency,
-        copyPasteCode: charge.copyPaste,
-        expiresInMinutes: this.chargeTtlMinutes,
-      }),
+      buildChargeInstructionsMessage(
+        {
+          amountMinor: choice.amountMinor,
+          currency: session.currency,
+          copyPasteCode: charge.copyPaste,
+          expiresInMinutes: this.chargeTtlMinutes,
+        },
+        language,
+      ),
     );
   }
 }

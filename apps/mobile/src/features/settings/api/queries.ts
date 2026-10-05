@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  ClientLanguageContract,
   CommissionPolicy,
   CreateChannelInput,
   CreateTelegramChannelInput,
@@ -20,6 +21,7 @@ export const settingsKeys = {
   documents: () => [...settingsKeys.all, "documents"] as const,
   collectionReminder: () => [...settingsKeys.all, "collection-reminder"] as const,
   messaging: () => [...settingsKeys.all, "messaging-channels"] as const,
+  clientLanguage: () => [...settingsKeys.all, "client-language"] as const,
 };
 
 export function useOperationalSettings() {
@@ -36,6 +38,23 @@ export function useUpdateOperationalSettings() {
     mutationFn: async (patch: UpdateOperationalSettingsInput) =>
       unwrap(await api.updateOperationalSettings({ headers: tenantHeader(), body: patch })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: settingsKeys.all }),
+  });
+}
+
+// ── Idioma de atención al cliente por chat (lectura revisores, escritura ADMIN) ──
+export function useClientLanguage() {
+  return useQuery({
+    queryKey: settingsKeys.clientLanguage(),
+    queryFn: async () => unwrap(await api.getClientLanguage({ headers: tenantHeader() })),
+  });
+}
+
+export function useUpdateClientLanguage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (language: ClientLanguageContract) =>
+      unwrap(await api.updateClientLanguage({ headers: tenantHeader(), body: { language } })),
+    onSuccess: (data) => qc.setQueryData(settingsKeys.clientLanguage(), data),
   });
 }
 

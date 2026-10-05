@@ -1,42 +1,42 @@
 import { Injectable } from '@nestjs/common';
-import type { PaymentPlan } from '@preztiaos/domain';
+import {
+  clientMessagesFor,
+  type PaymentPlan,
+  type PlanMessages,
+} from '@preztiaos/domain';
 import type {
   PlanOfferNotifier,
   ScheduledInstallment,
 } from '@preztiaos/application';
 import { ProactiveTextSender } from '../../messaging/proactive-text-sender';
-
-const FREQUENCY_LABEL: Record<PaymentPlan['frequency'], string> = {
-  DAILY: 'diario',
-  WEEKLY: 'semanal',
-  BIWEEKLY: 'quincenal',
-  MONTHLY: 'mensual',
-};
+import { ClientLanguageRepository } from '../../tenant-config/client-language.repository';
 
 /**
  * Adaptador del puerto `PlanOfferNotifier`: formatea la oferta (menú de planes / cronograma) y la
  * envía por el canal del cliente (WhatsApp o Telegram) con el router de mensajería (sin nuevo
- * cliente HTTP). La presentación (texto del mensaje) es responsabilidad de infraestructura.
+ * cliente HTTP). La presentación (texto del mensaje) es responsabilidad de infraestructura; la
+ * redacción sale del diccionario del idioma del tenant (resuelto por el canal en cada envío).
  */
 @Injectable()
 export class PlanOfferMessagingNotifier implements PlanOfferNotifier {
   // Envío proactivo: el aviso sale por el canal ALCANZABLE hoy (WhatsApp o Telegram), partiendo del
   // guardado en la solicitud (ADR #40, D8).
-  constructor(private readonly sender: ProactiveTextSender) {}
+  constructor(
+    private readonly sender: ProactiveTextSender,
+    private readonly languages: ClientLanguageRepository,
+  ) {}
 
   async sendPlanMenu(input: {
     channelId: string;
     recipient: string;
     plans: readonly PaymentPlan[];
   }): Promise<void> {
-    const lines = input.plans.map(
-      (plan, idx) => `${idx + 1}) ${describePlan(plan)}`,
+    const m = await this.messagesFor(input.channelId);
+    await this.send(
+      input.channelId,
+      input.recipient,
+      m.menu(planLines(m, input.plans)),
     );
-    const body = [
-      'Tenés estos planes disponibles. Respondé con el número del que prefieras:',
-      ...lines,
-    ].join('\n');
-    await this.send(input.channelId, input.recipient, body);
   }
 
   async sendScheduleForAcceptance(input: {
@@ -47,17 +47,19 @@ export class PlanOfferMessagingNotifier implements PlanOfferNotifier {
     currency: string;
     schedule: readonly ScheduledInstallment[];
   }): Promise<void> {
+    const m = await this.messagesFor(input.channelId);
     const rows = input.schedule.map(
       (i) => `${i.dueDate} — ${formatMoney(i.amountDueMinor, input.currency)}`,
     );
     const total = input.schedule.reduce((acc, i) => acc + i.amountDueMinor, 0);
-    const body = [
-      `¡Buenas noticias! 🎉 Luego de estudiar tu solicitud, tenemos un crédito de ${formatMoney(input.principalMinor, input.currency)} para ofrecerte.`,
-      `Tu plan de pago (${input.plan.name}) quedaría así:`,
-      ...rows,
-      `Total a pagar: ${formatMoney(total, input.currency)} en ${input.plan.installmentsCount} cuotas (${FREQUENCY_LABEL[input.plan.frequency]}).`,
-      '¿Aceptás tomar el crédito? Respondé SÍ o NO.',
-    ].join('\n');
+    const body = m.offer({
+      principal: formatMoney(input.principalMinor, input.currency),
+      planName: input.plan.name,
+      scheduleRows: rows,
+      total: formatMoney(total, input.currency),
+      installments: input.plan.installmentsCount,
+      frequency: m.frequency[input.plan.frequency],
+    });
     await this.send(input.channelId, input.recipient, body);
   }
 
@@ -66,25 +68,20 @@ export class PlanOfferMessagingNotifier implements PlanOfferNotifier {
     recipient: string;
     plans: readonly PaymentPlan[];
   }): Promise<void> {
-    const lines = input.plans.map(
-      (plan, idx) => `${idx + 1}) ${describePlan(plan)}`,
+    const m = await this.messagesFor(input.channelId);
+    await this.send(
+      input.channelId,
+      input.recipient,
+      m.selectionReask(planLines(m, input.plans)),
     );
-    const body = [
-      'No entendí tu elección. Respondé con el número del plan:',
-      ...lines,
-    ].join('\n');
-    await this.send(input.channelId, input.recipient, body);
   }
 
   async sendAcceptanceReask(input: {
     channelId: string;
     recipient: string;
   }): Promise<void> {
-    await this.send(
-      input.channelId,
-      input.recipient,
-      '¿Aceptás tomar el crédito con ese plan? Respondé SÍ o NO.',
-    );
+    const m = await this.messagesFor(input.channelId);
+    await this.send(input.channelId, input.recipient, m.acceptanceReask);
   }
 
   async sendAcknowledgement(input: {
@@ -92,10 +89,8 @@ export class PlanOfferMessagingNotifier implements PlanOfferNotifier {
     recipient: string;
     decision: 'ACCEPT' | 'DECLINE';
   }): Promise<void> {
-    const body =
-      input.decision === 'ACCEPT'
-        ? '¡Listo! Registramos tu aceptación. Un asesor confirmará el desembolso.'
-        : 'Entendido, no avanzamos con el crédito. Quedamos atentos si cambiás de opinión.';
+    const m = await this.messagesFor(input.channelId);
+    const body = input.decision === 'ACCEPT' ? m.accepted : m.declined;
     await this.send(input.channelId, input.recipient, body);
   }
 
@@ -103,11 +98,13 @@ export class PlanOfferMessagingNotifier implements PlanOfferNotifier {
     channelId: string;
     recipient: string;
   }): Promise<void> {
-    await this.send(
-      input.channelId,
-      input.recipient,
-      'Tu oferta venció. Un asesor te contactará para retomar el proceso.',
-    );
+    const m = await this.messagesFor(input.channelId);
+    await this.send(input.channelId, input.recipient, m.expired);
+  }
+
+  /** Textos de la negociación en el idioma vigente del tenant del canal. */
+  private async messagesFor(channelId: string): Promise<PlanMessages> {
+    return clientMessagesFor(await this.languages.byChannel(channelId)).plan;
   }
 
   private async send(
@@ -119,9 +116,18 @@ export class PlanOfferMessagingNotifier implements PlanOfferNotifier {
   }
 }
 
-/** Describe un plan para el menú: "Plan 20 días — 20 cuotas diario · 20%". */
-function describePlan(plan: PaymentPlan): string {
-  return `${plan.name} — ${plan.installmentsCount} cuotas ${FREQUENCY_LABEL[plan.frequency]} · ${plan.interestPct / 10}%`;
+/** Opciones numeradas del menú: "1) Plan 20 días — 20 cuotas diario · 20%". */
+function planLines(m: PlanMessages, plans: readonly PaymentPlan[]): string[] {
+  return plans.map(
+    (plan, idx) =>
+      `${idx + 1}) ${m.planLine({
+        name: plan.name,
+        installments: plan.installmentsCount,
+        frequency: m.frequency[plan.frequency],
+        // El interés viaja en base-mil (200 = 20 %).
+        interestPct: plan.interestPct / 10,
+      })}`,
+  );
 }
 
 /** Formatea unidades menores como moneda legible: 500000 → "COP 5.000". */

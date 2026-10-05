@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { TelegramContactPrompter } from '@preztiaos/application';
-import type { TelegramContactRejection } from '@preztiaos/domain';
+import {
+  clientMessagesFor,
+  type TelegramContactRejection,
+  type TelegramMessages,
+} from '@preztiaos/domain';
+import { ClientLanguageRepository } from '../tenant-config/client-language.repository';
 import { resolveTelegramBotToken } from '../tenancy/unit-of-work';
 import {
   TelegramBotApiClient,
@@ -8,61 +13,59 @@ import {
 } from './telegram-bot-api.client';
 import { whatsappMarkupToTelegramHtml } from './telegram-markup';
 
-const SHARE_CONTACT_BUTTON = '📱 Compartir mi número';
-
 // Teclado de un solo botón nativo: Telegram envía el número VERIFICADO de la propia cuenta.
-const SHARE_CONTACT_KEYBOARD: TelegramReplyMarkup = {
-  keyboard: [[{ text: SHARE_CONTACT_BUTTON, request_contact: true }]],
-  one_time_keyboard: true,
-  resize_keyboard: true,
-  input_field_placeholder: 'Toca el botón para compartir tu número',
-};
+function shareContactKeyboard(m: TelegramMessages): TelegramReplyMarkup {
+  return {
+    keyboard: [[{ text: m.shareContactButton, request_contact: true }]],
+    one_time_keyboard: true,
+    resize_keyboard: true,
+    input_field_placeholder: m.shareContactPlaceholder,
+  };
+}
 
-const REQUEST_CONTACT_TEXT =
-  '¡Hola! 👋 Para atenderte y proteger tu información necesitamos verificar tu número. ' +
-  `Toca el botón «${SHARE_CONTACT_BUTTON}» que aparece abajo.`;
-
-// Telegram recomprime las FOTOS; enviadas como ARCHIVO llegan con la calidad original, lo que
-// mejora la lectura de los documentos de identidad y comprobantes (antifraude/KYC).
-const IDENTIFIED_TEXT =
-  '¡Listo! ✅ Ya verificamos tu número. Escríbenos en qué te podemos ayudar.\n\n' +
-  '📎 Consejo: cuando te pidamos documentos o comprobantes, envíalos como *archivo* ' +
-  '(clip → Archivo) para que lleguen nítidos.';
-
-const REJECTION_TEXT: Record<TelegramContactRejection, string> = {
-  NOT_OWN_CONTACT:
-    'Solo podemos verificar TU propio número. Por favor usa el botón ' +
-    `«${SHARE_CONTACT_BUTTON}» en lugar de enviar un contacto guardado.`,
-  INVALID_PHONE:
-    'No pudimos leer tu número. Por favor inténtalo de nuevo con el botón ' +
-    `«${SHARE_CONTACT_BUTTON}».`,
-};
+// Telegram recomprime las FOTOS; por eso el mensaje de identificado sugiere enviarlas como ARCHIVO
+// (llegan con la calidad original y mejora la lectura de documentos y comprobantes).
 
 /**
  * Adaptador del puerto `TelegramContactPrompter`: redacta los mensajes de la verificación de
  * identidad y los envía con el teclado nativo de Telegram (presentación = infraestructura).
- * Estos mensajes NO van al transcript: antes de verificar no hay teléfono al que atribuirlos.
+ * Estos mensajes NO van al transcript: antes de verificar no hay teléfono al que atribuirlos. Salen
+ * en el idioma vigente del tenant dueño del bot.
  */
 @Injectable()
 export class TelegramContactPrompterAdapter implements TelegramContactPrompter {
-  constructor(private readonly api: TelegramBotApiClient) {}
+  constructor(
+    private readonly api: TelegramBotApiClient,
+    private readonly languages: ClientLanguageRepository,
+  ) {}
 
-  requestContact(chat: { channelId: string; chatId: string }): Promise<void> {
-    return this.send(chat, REQUEST_CONTACT_TEXT, SHARE_CONTACT_KEYBOARD);
-  }
-
-  confirmIdentified(chat: {
+  async requestContact(chat: {
     channelId: string;
     chatId: string;
   }): Promise<void> {
-    return this.send(chat, IDENTIFIED_TEXT, { remove_keyboard: true });
+    const m = await this.messagesFor(chat.channelId);
+    await this.send(chat, m.requestContact, shareContactKeyboard(m));
   }
 
-  rejectContact(
+  async confirmIdentified(chat: {
+    channelId: string;
+    chatId: string;
+  }): Promise<void> {
+    const m = await this.messagesFor(chat.channelId);
+    await this.send(chat, m.identified, { remove_keyboard: true });
+  }
+
+  async rejectContact(
     chat: { channelId: string; chatId: string },
     reason: TelegramContactRejection,
   ): Promise<void> {
-    return this.send(chat, REJECTION_TEXT[reason], SHARE_CONTACT_KEYBOARD);
+    const m = await this.messagesFor(chat.channelId);
+    await this.send(chat, m.rejection[reason], shareContactKeyboard(m));
+  }
+
+  private async messagesFor(channelId: string): Promise<TelegramMessages> {
+    return clientMessagesFor(await this.languages.byChannel(channelId))
+      .telegram;
   }
 
   private async send(

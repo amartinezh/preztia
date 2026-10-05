@@ -31,6 +31,14 @@ import type {
   TenantResolver,
 } from "./ports";
 import type { OutboundRecipient, OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguage } from "@preztiaos/domain";
+import type { ClientLanguageResolver } from "../../conversations/text/ports";
+
+/** Idioma fijo del tenant para las pruebas (el resolver real lo lee de la configuración). */
+const languageOf = (language: ClientLanguage): ClientLanguageResolver => ({
+  byTenant: async () => language,
+  byChannel: async () => language,
+});
 
 const tenantId = "11111111-1111-1111-1111-111111111111";
 
@@ -133,6 +141,7 @@ function build(opts: {
   decision?: DocumentReviewResult;
   tenant?: string | null;
   first?: boolean;
+  language?: ClientLanguage;
 }) {
   const repo = new FakeRepo(opts.active);
   const sender = new SpySender();
@@ -150,6 +159,7 @@ function build(opts: {
     sender,
     completion,
     reviewer,
+    languageOf(opts.language ?? "es"),
   );
   return { handler, repo, sender, completion, storage, reviewer };
 }
@@ -164,6 +174,17 @@ describe("SubmitApplicationDocumentHandler", () => {
     expect(setup.repo.saved[0]?.manualReview).toBe(false);
     expect(setup.reviewer.jobs[0]?.documentType).toBe(DOC1);
     expect(setup.sender.sent[0]?.body).toContain(titleOf(DOC2));
+  });
+
+  it("pt-BR: confirma la recepción del archivo en portugués", async () => {
+    const setup = build({
+      active: activeFresh(),
+      decision: review({ kind: "accepted" }),
+      language: "pt-BR",
+    });
+    await setup.handler.execute(command);
+
+    expect(setup.sender.sent[0]?.body).toContain("✅ Arquivo recebido.");
   });
 
   it("acepta el último documento: avisa revisión y completitud", async () => {
@@ -276,6 +297,7 @@ describe("SubmitApplicationDocumentHandler · documentos de varios archivos", ()
       sender,
       new SpyCompletion(),
       reviewer,
+      languageOf("es"),
     );
     return { handler, repo, sender, storage, reviewer };
   }

@@ -43,7 +43,14 @@ export async function askGemini(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       systemInstruction: {
-        parts: [{ text: buildSystemInstruction(request.knowledgeBase) }],
+        parts: [
+          {
+            text: buildSystemInstruction(
+              request.knowledgeBase,
+              request.language,
+            ),
+          },
+        ],
       },
       contents: [{ role: 'user', parts: [{ text: request.question }] }],
       generationConfig: {

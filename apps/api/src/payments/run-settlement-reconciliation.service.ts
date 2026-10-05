@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import {
   allocatePayment,
+  clientMessagesFor,
   matchCreditsToClaims,
   Money,
   type ReceiptClaimRef,
@@ -10,7 +11,10 @@ import {
   type SettlementSource,
   type SettlementWindow,
 } from '@preztiaos/application';
-import type { OutboundTextSender } from '@preztiaos/application';
+import type {
+  ClientLanguageResolver,
+  OutboundTextSender,
+} from '@preztiaos/application';
 import {
   IncomingCreditDrizzleRepository,
   type SettlementAccount,
@@ -60,6 +64,7 @@ export class RunSettlementReconciliationService {
     private readonly reconciliation: PaymentReconciliationDrizzleRepository,
     private readonly sender: OutboundTextSender,
     private readonly settings: SettlementReviewSettingsReader,
+    private readonly languages: ClientLanguageResolver,
   ) {}
 
   async execute(cmd: {
@@ -248,9 +253,12 @@ export class RunSettlementReconciliationService {
     if (!confirmed) return false;
 
     if (claim.channelId) {
+      const messages = clientMessagesFor(
+        await this.languages.byTenant(tenantId),
+      ).receipt;
       const body = allocation.creditSettled
-        ? '✅ Tu pago fue confirmado. 🎉 ¡Tu crédito quedó *saldado*!'
-        : '✅ Tu pago fue confirmado.';
+        ? messages.confirmedSettled
+        : messages.confirmed;
       await this.sender.sendText(
         { channelId: claim.channelId, recipient: claim.payerPhone },
         body,

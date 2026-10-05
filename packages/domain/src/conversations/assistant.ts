@@ -2,6 +2,9 @@
 // El "cómo" (qué proveedor de IA, qué HTTP) vive en infraestructura; aquí solo
 // los valores estables que el negocio entiende.
 
+import { DEFAULT_CLIENT_LANGUAGE, type ClientLanguage } from "./i18n/client-language";
+import { clientMessagesFor } from "./i18n/client-messages";
+
 /** Proveedores de IA soportados. Debe coincidir con el enum `ai_provider` de la BD. */
 export type AiProvider = "GEMINI" | "OPENAI" | "CLAUDE";
 
@@ -25,38 +28,30 @@ export interface AssistantAnswer {
   readonly classification: MessageClassification;
   /**
    * Respuesta a enviar al usuario cuando la clasificación es `knowledge_question`
-   * (en español, apta para WhatsApp). Para las otras clasificaciones el caso de
+   * (en el idioma del tenant, apta para el chat). Para las otras clasificaciones el caso de
    * uso decide el texto (oferta de solicitud o aviso de fuera de alcance).
    */
   readonly reply: string;
 }
 
 /**
- * Respuesta cordial fija cuando el mensaje queda fuera del alcance del servicio.
- * Vive en el dominio (no la genera el modelo) para que el aviso sea determinista
- * y consistente, sin depender de la redacción del proveedor de IA.
+ * Respuestas fijas del asistente (fuera de alcance, degradación y solicitante comprometido). Viven
+ * en el dominio (no las genera el modelo) para que sean deterministas; su redacción por idioma está
+ * en el catálogo de mensajes al cliente. Estas constantes son la versión en español (idioma por
+ * defecto), conservadas para los importadores existentes.
  */
-export const OFF_TOPIC_REPLY =
-  "Con gusto te atiendo, pero este chat es exclusivamente para temas relacionados con nuestro servicio de apoyo crediticio (información del crédito y solicitudes). ¿Tienes alguna duda sobre el crédito o deseas iniciar una solicitud?";
+export const OFF_TOPIC_REPLY = clientMessagesFor("es").assistant.offTopic;
+
+export const ASSISTANT_UNAVAILABLE_REPLY = clientMessagesFor("es").assistant.unavailable;
 
 /**
- * Respuesta de degradación elegante cuando el asistente de IA no está disponible
- * (p. ej. el proveedor agotó la cuota o no responde). Permite informar al usuario en
- * vez de fallar en silencio o dejar que el error escale a un reintento del webhook.
+ * Respuesta para un solicitante que YA aceptó su oferta o ya tiene el crédito otorgado: no se le
+ * re-ofrece iniciar una solicitud; se confirma que su proceso está en curso y se le da el canal de
+ * atención de la zona.
  */
-export const ASSISTANT_UNAVAILABLE_REPLY =
-  "En este momento tenemos alta demanda y no puedo procesar tu mensaje. Por favor, inténtalo de nuevo en unos minutos. 🙏";
-
-/**
- * Respuesta fija para un solicitante que YA aceptó su oferta o ya tiene el crédito otorgado.
- * El asistente de conocimiento NO debe re-ofrecerle iniciar una solicitud (no tiene lógica pedirle
- * "¿Deseas iniciar una solicitud?" a quien acaba de tomar un crédito): en su lugar confirma que su
- * proceso ya está en curso y le ofrece el canal de atención de la zona ante inconvenientes. Vive en
- * el dominio (no la genera el modelo) para que sea determinista.
- */
-export function buildCommittedApplicantReply(supportPhone: string | null): string {
-  const support = supportPhone
-    ? `Si tienes alguna duda o inconveniente, escríbenos por este medio o comunícate con servicio al cliente al ${supportPhone}.`
-    : "Si tienes alguna duda o inconveniente, escríbenos por este medio o comunícate con servicio al cliente.";
-  return `Tu crédito ya está registrado y en proceso. 🙌 ${support}`;
+export function buildCommittedApplicantReply(
+  supportPhone: string | null,
+  language: ClientLanguage = DEFAULT_CLIENT_LANGUAGE,
+): string {
+  return clientMessagesFor(language).assistant.committedApplicant(supportPhone);
 }

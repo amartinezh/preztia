@@ -18,6 +18,14 @@ import type {
   RequiredDocumentCatalog,
 } from "./ports";
 import type { OutboundRecipient, OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguage } from "@preztiaos/domain";
+import type { ClientLanguageResolver } from "../../conversations/text/ports";
+
+/** Idioma fijo del tenant para las pruebas (el resolver real lo lee de la configuración). */
+const languageOf = (language: ClientLanguage): ClientLanguageResolver => ({
+  byTenant: async () => language,
+  byChannel: async () => language,
+});
 
 class FakeRepo implements CreditApplicationRepository {
   created: { applicant: ApplicantRef }[] = [];
@@ -70,7 +78,7 @@ describe("StartCreditApplicationHandler", () => {
 
   it("crea la solicitud y pregunta el monto cuando no hay una activa", async () => {
     const repo = new FakeRepo(null);
-    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog()).start(applicant);
+    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog(), languageOf("es")).start(applicant);
 
     expect(repo.created).toHaveLength(1);
     expect(sender.sent).toHaveLength(1);
@@ -79,12 +87,25 @@ describe("StartCreditApplicationHandler", () => {
     expect(sender.sent[0]?.body).toContain("Cuánto dinero");
   });
 
+  it("pt-BR: inicia la solicitud y pregunta el monto en portugués", async () => {
+    await new StartCreditApplicationHandler(
+      new FakeRepo(null),
+      sender,
+      new FakeCatalog(),
+      languageOf("pt-BR"),
+    ).start(applicant);
+
+    expect(sender.sent[0]?.body).toBe(
+      "Perfeito! Vamos iniciar sua solicitação de crédito.\n\nQuanto dinheiro você deseja solicitar?",
+    );
+  });
+
   it("es idempotente: si ya hay solicitud activa no crea otra y recuerda el pendiente", async () => {
     let app = createCreditApplication(REQUESTED_DOCUMENTS.map((type) => ({ type, expectedFiles: 1 })));
     app = recordDocumentOutcome(app, DOC1, { status: "approved", score: 0, reasons: [] });
     const repo = new FakeRepo({ id: "app-1", application: app });
 
-    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog()).start(applicant);
+    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog(), languageOf("es")).start(applicant);
 
     expect(repo.created).toHaveLength(0);
     const pending = nextPendingDocument(app);
@@ -99,7 +120,7 @@ describe("StartCreditApplicationHandler", () => {
     }
     const repo = new FakeRepo({ id: "app-1", application: app });
 
-    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog()).start(applicant);
+    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog(), languageOf("es")).start(applicant);
 
     expect(repo.created).toHaveLength(0);
     expect(sender.sent).toHaveLength(1);
@@ -109,7 +130,7 @@ describe("StartCreditApplicationHandler", () => {
 
   it("no hace nada si el tenant no tiene documentos configurados en el catálogo", async () => {
     const repo = new FakeRepo(null);
-    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog([])).start(applicant);
+    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog([]), languageOf("es")).start(applicant);
 
     expect(repo.created).toHaveLength(0);
     expect(sender.sent).toHaveLength(0);
@@ -120,7 +141,7 @@ describe("StartCreditApplicationHandler", () => {
     app = recordDocumentOutcome(app, DOC1, { status: "approved", score: 0, reasons: [] });
     const repo = new FakeRepo({ id: "app-1", application: app });
 
-    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog()).restart(applicant);
+    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog(), languageOf("es")).restart(applicant);
 
     expect(repo.resets).toEqual([{ tenantId: applicant.tenantId, applicationId: "app-1" }]);
     expect(repo.created).toHaveLength(0);
@@ -129,7 +150,7 @@ describe("StartCreditApplicationHandler", () => {
 
   it("reinicia sin solicitud activa: inicia una nueva (pregunta el monto)", async () => {
     const repo = new FakeRepo(null);
-    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog()).restart(applicant);
+    await new StartCreditApplicationHandler(repo, sender, new FakeCatalog(), languageOf("es")).restart(applicant);
 
     expect(repo.resets).toHaveLength(0);
     expect(repo.created).toHaveLength(1);

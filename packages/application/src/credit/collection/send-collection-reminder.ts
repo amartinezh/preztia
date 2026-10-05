@@ -1,5 +1,5 @@
 import { buildCollectionReminderMessage, ConflictError } from "@preztiaos/domain";
-import type { OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguageResolver, OutboundTextSender } from "../../conversations/text/ports";
 import type {
   CollectionAuditLog,
   CollectionReminderTarget,
@@ -24,6 +24,7 @@ export class SendCollectionReminderHandler {
     private readonly sender: OutboundTextSender,
     private readonly idempotency: ReminderIdempotencyStore,
     private readonly audit: CollectionAuditLog,
+    private readonly languages: ClientLanguageResolver,
   ) {}
 
   /** Envío MANUAL desde la vista de Cartera: resuelve el crédito y despacha. */
@@ -77,12 +78,15 @@ export class SendCollectionReminderHandler {
     });
     if (!claimed) return { sent: false, reason: "ALREADY_SENT_TODAY", ...summary };
 
-    const body = buildCollectionReminderMessage({
-      firstName: target.firstName,
-      dueMinor: target.dueMinor,
-      currency: target.currency,
-      pixKey: target.pixKey,
-    });
+    const body = buildCollectionReminderMessage(
+      {
+        firstName: target.firstName,
+        dueMinor: target.dueMinor,
+        currency: target.currency,
+        pixKey: target.pixKey,
+      },
+      await this.languages.byTenant(tenantId),
+    );
     await this.sender.sendText(
       { channelId: target.channelId, recipient: target.phone },
       body,

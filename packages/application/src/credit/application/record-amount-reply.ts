@@ -1,12 +1,8 @@
-import { parseRequestedAmountMinor } from "@preztiaos/domain";
+import { clientMessagesFor, parseRequestedAmountMinor } from "@preztiaos/domain";
 import type { TextMessage } from "@preztiaos/domain";
 
-import type { OutboundTextSender } from "../../conversations/text/ports";
+import type { ClientLanguageResolver, OutboundTextSender } from "../../conversations/text/ports";
 import type { InboundMessageDeduplicator, RequiredDocumentCatalog } from "./ports";
-
-const AMOUNT_OK = "¡Gracias! Anotamos tu monto. Ahora te pediré los documentos requeridos, uno a la vez.";
-const AMOUNT_REASK =
-  "No entendí el monto. Por favor responde solo con el número que deseas solicitar (ej. 300000).";
 
 /** Solicitud que está a la espera del monto (recién iniciada, sin monto aún). */
 export interface AwaitingAmountApplication {
@@ -42,6 +38,7 @@ export class RecordAmountReplyHandler {
     private readonly catalog: RequiredDocumentCatalog,
     private readonly sender: OutboundTextSender,
     private readonly dedup: InboundMessageDeduplicator,
+    private readonly languages: ClientLanguageResolver,
   ) {}
 
   /** @returns `true` si el mensaje se atendió como captura de monto (no debe ir al asistente). */
@@ -57,9 +54,10 @@ export class RecordAmountReplyHandler {
     }
 
     const recipient = { channelId: message.channelId, recipient: message.from };
+    const messages = clientMessagesFor(await this.languages.byTenant(awaiting.tenantId)).application;
     const amountMinor = parseRequestedAmountMinor(message.body);
     if (amountMinor === null) {
-      await this.sender.sendText(recipient, AMOUNT_REASK);
+      await this.sender.sendText(recipient, messages.amountReask);
       return true;
     }
 
@@ -72,7 +70,10 @@ export class RecordAmountReplyHandler {
     // Tras el monto, arranca la recolección documental con el primer documento del catálogo.
     const specs = await this.catalog.listRequested(awaiting.tenantId);
     const first = specs[0];
-    await this.sender.sendText(recipient, first ? `${AMOUNT_OK}\n\n${first.title}` : AMOUNT_OK);
+    await this.sender.sendText(
+      recipient,
+      first ? `${messages.amountOk}\n\n${first.title}` : messages.amountOk,
+    );
     return true;
   }
 }

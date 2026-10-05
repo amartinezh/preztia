@@ -11,6 +11,14 @@ import type {
   OpenChargeSession,
   PaymentChargeSessionStore,
 } from "./ports";
+import type { ClientLanguage } from "@preztiaos/domain";
+import type { ClientLanguageResolver } from "../../conversations/text/ports";
+
+/** Idioma fijo del tenant para las pruebas (el resolver real lo lee de la configuración). */
+const languageOf = (language: ClientLanguage): ClientLanguageResolver => ({
+  byTenant: async () => language,
+  byChannel: async () => language,
+});
 
 function text(body: string): TextMessage {
   return {
@@ -109,6 +117,7 @@ function handler(deps: {
   gateway?: FakeGateway;
   sender?: SpySender;
   dedup?: FakeDedup;
+  language?: ClientLanguage;
 }) {
   return new OfferOrCreateChargeHandler(
     deps.sessions ?? new FakeSessions(),
@@ -116,6 +125,7 @@ function handler(deps: {
     deps.gateway ?? new FakeGateway(),
     deps.sender ?? new SpySender(),
     deps.dedup ?? new FakeDedup(),
+    languageOf(deps.language ?? "es"),
   );
 }
 
@@ -130,6 +140,25 @@ describe("OfferOrCreateChargeHandler", () => {
     expect(sender.sent[0]?.body).toContain("Ana");
     expect(sender.sent[0]?.body).toContain("R$ 250,00");
     expect(sender.sent[0]?.body).toContain("R$ 750,00");
+  });
+
+  it("pt-BR: el menú de montos sale en portugués (idioma del tenant)", async () => {
+    const sender = new SpySender();
+    await handler({ sessions: new FakeSessions(null), sender, language: "pt-BR" }).handle(
+      text("quero pagar"),
+    );
+
+    expect(sender.sent[0]?.body).toContain("Sua parcela de hoje — R$ 250,00");
+    expect(sender.sent[0]?.body).toContain("Tudo o que está pendente — R$ 750,00");
+  });
+
+  it("pt-BR: sin crédito activo el aviso sale en portugués (idioma resuelto por el canal)", async () => {
+    const sender = new SpySender();
+    await handler({ credits: new FakeCredits(null), sender, language: "pt-BR" }).handle(
+      text("quero pagar"),
+    );
+
+    expect(sender.sent[0]?.body).toContain("Não encontramos um crédito ativo");
   });
 
   it("mensaje sin intención ni sesión: NO interviene (devuelve false)", async () => {

@@ -22,8 +22,16 @@ export function parsePlanSelection(text: string, optionCount: number): number | 
 
 export type AcceptanceDecision = "ACCEPT" | "DECLINE";
 
-const ACCEPT_WORDS = ["si", "sii", "acepto", "ok", "okay", "dale", "confirmo", "claro", "listo"];
-const DECLINE_WORDS = ["no", "rechazo", "rechazar", "cancelar", "cancela", "negativo"];
+// ES + PT-BR (el texto llega sin acentos: "não" → "nao"). El idioma del tenant cambia en caliente,
+// así que se aceptan ambos siempre: un cliente puede responder en el idioma de la oferta anterior.
+const ACCEPT_WORDS = [
+  "si", "sii", "acepto", "ok", "okay", "dale", "confirmo", "claro", "listo",
+  "sim", "aceito", "concordo", "fechado",
+];
+const DECLINE_WORDS = [
+  "no", "rechazo", "rechazar", "cancelar", "cancela", "negativo",
+  "nao", "recuso", "recusar",
+];
 
 /**
  * Interpreta la aceptación: "sí/acepto/ok…" → ACCEPT; "no/rechazo…" → DECLINE; `null` si es

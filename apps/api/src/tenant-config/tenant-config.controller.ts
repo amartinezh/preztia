@@ -10,10 +10,12 @@ import {
 import {
   SetDocumentRequirementsHandler,
   UpdateAssistantConfigHandler,
+  UpdateClientLanguageHandler,
   UpdateMessagingChannelsHandler,
   UpdateTenantSettingsHandler,
 } from '@preztiaos/application';
 import {
+  clientLanguageSettings,
   setDocumentRequirementsInput,
   updateAssistantConfigInput,
   updateCollectionReminderSettingsInput,
@@ -28,6 +30,7 @@ import { TenantConfigRepository } from './tenant-config.repository';
 import { AssistantConfigRepository } from './assistant-config.repository';
 import { DocumentRequirementsRepository } from './document-requirements.repository';
 import { MessagingChannelsRepository } from './messaging-channels.repository';
+import { ClientLanguageRepository } from './client-language.repository';
 
 // La configuración de cobro y del asistente la administra el ADMIN del tenant.
 const ADMIN_ONLY = ['ADMIN'] as const;
@@ -43,12 +46,14 @@ export class TenantConfigController {
   private readonly updateAssistantHandler: UpdateAssistantConfigHandler;
   private readonly setDocumentsHandler: SetDocumentRequirementsHandler;
   private readonly updateMessagingHandler: UpdateMessagingChannelsHandler;
+  private readonly updateLanguageHandler: UpdateClientLanguageHandler;
 
   constructor(
     private readonly config: TenantConfigRepository,
     private readonly assistant: AssistantConfigRepository,
     private readonly documents: DocumentRequirementsRepository,
     private readonly messaging: MessagingChannelsRepository,
+    private readonly languages: ClientLanguageRepository,
   ) {
     this.updateHandler = new UpdateTenantSettingsHandler(this.config);
     this.updateAssistantHandler = new UpdateAssistantConfigHandler(
@@ -59,6 +64,9 @@ export class TenantConfigController {
     );
     this.updateMessagingHandler = new UpdateMessagingChannelsHandler(
       this.messaging,
+    );
+    this.updateLanguageHandler = new UpdateClientLanguageHandler(
+      this.languages,
     );
   }
 
@@ -131,6 +139,30 @@ export class TenantConfigController {
     requireRole(authorization, ADMIN_ONLY);
     const patch = updateMessagingChannelsInput.parse(body);
     return this.updateMessagingHandler.execute({ tenantId: tenant, patch });
+  }
+
+  // Idioma de atención al cliente: lectura para revisores (el Coordinador lo ve); escritura, ADMIN.
+  // El cambio aplica desde el siguiente mensaje (el envío lo lee sin caché).
+  @Get('tenant-config/client-language')
+  async getClientLanguage(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireReviewer(authorization);
+    return { language: await this.languages.get(tenant) };
+  }
+
+  @Patch('tenant-config/client-language')
+  async updateClientLanguage(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireRole(authorization, ADMIN_ONLY);
+    const { language } = clientLanguageSettings.parse(body);
+    return this.updateLanguageHandler.execute({ tenantId: tenant, language });
   }
 
   @Get('tenant-config/assistant')

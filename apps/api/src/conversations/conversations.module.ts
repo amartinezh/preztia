@@ -73,6 +73,7 @@ import { KnowledgeAssistantRouter } from './ai/knowledge-assistant.router';
 import { ChannelRoutingTextSender } from '../messaging/channel-routing.text-sender';
 import { ChannelRoutingMediaDownloader } from '../messaging/channel-routing.media-downloader';
 import { MessagingModule } from '../messaging/messaging.module';
+import { ClientLanguageRepository } from '../tenant-config/client-language.repository';
 import { LoggingTextSender } from './text/logging-text-sender';
 import { ConversationMessageLog } from './conversation-message.log';
 import { ConversationFailureLog } from './conversation-failure.log';
@@ -151,13 +152,16 @@ import {
         REQUIRED_DOCUMENT_CATALOG,
         OUTBOUND_TEXT_SENDER,
         INBOUND_MESSAGE_DEDUPLICATOR,
+        ClientLanguageRepository,
       ],
       useFactory: (
         store: AmountCaptureStore,
         catalog: RequiredDocumentCatalog,
         sender: OutboundTextSender,
         dedup: InboundMessageDeduplicator,
-      ) => new RecordAmountReplyHandler(store, catalog, sender, dedup),
+        languages: ClientLanguageRepository,
+      ) =>
+        new RecordAmountReplyHandler(store, catalog, sender, dedup, languages),
     },
 
     // Cobro conversacional: el cliente EXPRESA que quiere pagar (en cualquier momento) o responde
@@ -174,6 +178,7 @@ import {
         PicPayChargeClient,
         OUTBOUND_TEXT_SENDER,
         INBOUND_MESSAGE_DEDUPLICATOR,
+        ClientLanguageRepository,
       ],
       useFactory: (
         sessions: PaymentChargeSessionStore,
@@ -181,6 +186,7 @@ import {
         gateway: ChargeGateway,
         sender: OutboundTextSender,
         dedup: InboundMessageDeduplicator,
+        languages: ClientLanguageRepository,
       ) =>
         new OfferOrCreateChargeHandler(
           sessions,
@@ -188,6 +194,7 @@ import {
           gateway,
           sender,
           dedup,
+          languages,
         ),
     },
 
@@ -200,12 +207,14 @@ import {
         BorrowerAccountDrizzleReader,
         OUTBOUND_TEXT_SENDER,
         INBOUND_MESSAGE_DEDUPLICATOR,
+        ClientLanguageRepository,
       ],
       useFactory: (
         accounts: BorrowerAccountReader,
         sender: OutboundTextSender,
         dedup: InboundMessageDeduplicator,
-      ) => new AnswerAccountInquiryHandler(accounts, sender, dedup),
+        languages: ClientLanguageRepository,
+      ) => new AnswerAccountInquiryHandler(accounts, sender, dedup, languages),
     },
 
     // Negociación del plan por WhatsApp (Fase 10): respuesta del cliente a la oferta.
@@ -250,13 +259,22 @@ import {
         INBOUND_MESSAGE_DEDUPLICATOR,
         APPLICANT_LOCATION_STORE,
         OUTBOUND_TEXT_SENDER,
+        ClientLanguageRepository,
       ],
       useFactory: (
         tenants: TenantResolver,
         dedup: InboundMessageDeduplicator,
         store: ApplicantLocationStore,
         sender: OutboundTextSender,
-      ) => new CaptureApplicantLocationHandler(tenants, dedup, store, sender),
+        languages: ClientLanguageRepository,
+      ) =>
+        new CaptureApplicantLocationHandler(
+          tenants,
+          dedup,
+          store,
+          sender,
+          languages,
+        ),
     },
     {
       provide: LOCATION_DISPATCHER,
@@ -409,12 +427,14 @@ import {
         CREDIT_APPLICATION_REPOSITORY,
         OUTBOUND_TEXT_SENDER,
         REQUIRED_DOCUMENT_CATALOG,
+        ClientLanguageRepository,
       ],
       useFactory: (
         repo: CreditApplicationRepository,
         sender: OutboundTextSender,
         catalog: RequiredDocumentCatalog,
-      ) => new StartCreditApplicationHandler(repo, sender, catalog),
+        languages: ClientLanguageRepository,
+      ) => new StartCreditApplicationHandler(repo, sender, catalog, languages),
     },
     // El mismo handler implementa también el reinicio (CreditApplicationRestarter).
     {
@@ -436,6 +456,7 @@ import {
         OUTBOUND_TEXT_SENDER,
         APPLICATION_COMPLETION_NOTIFIER,
         DOCUMENT_REVIEWER,
+        ClientLanguageRepository,
         BUSINESS_PHOTO_VISION_ANALYZER,
       ],
       useFactory: (
@@ -449,6 +470,7 @@ import {
         sender: OutboundTextSender,
         completion: ApplicationCompletionNotifier,
         reviewer: DocumentReviewer,
+        languages: ClientLanguageRepository,
         businessPhotoVision: BusinessPhotoVisionAnalyzer,
       ) =>
         new SubmitApplicationDocumentHandler(
@@ -462,6 +484,7 @@ import {
           sender,
           completion,
           reviewer,
+          languages,
           businessPhotoVision,
         ),
     },

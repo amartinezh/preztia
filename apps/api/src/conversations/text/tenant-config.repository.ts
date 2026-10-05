@@ -10,6 +10,7 @@ import {
   withTenantTxFor,
 } from '../../tenancy/unit-of-work';
 import { decryptOptionalSecret } from '../../shared/secret-cipher';
+import { clientLanguageOrDefault } from '@preztiaos/domain';
 
 /**
  * Adaptador: carga la configuración del asistente desde la BD.
@@ -56,6 +57,8 @@ export class TenantConfigDrizzleRepository implements TenantAssistantConfigRepos
         // La credencial va CIFRADA en reposo (AES-256-GCM): se descifra al leerla,
         // igual que en el OCR de documentos y el clasificador de pagos.
         aiApiKey,
+        // Se lee en cada mensaje: un cambio de idioma aplica a la conversación en curso.
+        language: clientLanguageOrDefault(row.clientLanguage),
       };
     });
   }

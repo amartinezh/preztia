@@ -11,6 +11,7 @@ export * from "./tenant/settings";
 export * from "./tenant/assistant-config";
 export * from "./tenant/document-requirements";
 export * from "./tenant/messaging-channels";
+export * from "./tenant/client-language";
 export * from "./cash/ports";
 export * from "./cash/expenses";
 export * from "./cash/commissions";

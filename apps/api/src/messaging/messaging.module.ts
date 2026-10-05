@@ -47,6 +47,9 @@ import { TenantConfigModule } from '../tenant-config/tenant-config.module';
     ChannelRoutingMediaDownloader,
     TelegramBotApiClient,
     TelegramChatLinkRepository,
+    // Re-exporta el idioma de atención al cliente: todo módulo que redacta mensajes salientes ya
+    // importa la mensajería, así que lo recibe de aquí sin acoplarse a la configuración del tenant.
+    TenantConfigModule,
   ],
 })
 export class MessagingModule {}
