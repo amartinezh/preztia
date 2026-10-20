@@ -89,6 +89,15 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml exec api pnpm --filter api seed:user
 ```
 
+> **Datos de prueba completos (`seed:full`)**: reemplaza los datos por ~10 semanas de operación
+> simulada (todas las funcionalidades) y **conserva** credenciales de IA/WhatsApp/Telegram/bancos y
+> las contraseñas existentes. Falla cerrado sin confirmación. Respalda la base antes:
+> ```bash
+> docker compose -f docker-compose.prod.yml exec api sh -c \
+>   'SEED_CONFIRM=REEMPLAZAR-DATOS SEED_PASSWORD="<contraseña-fuerte>" pnpm --filter api seed:full'
+> ```
+> Detalle en [apps/api/scripts/seed-full/README.md](../apps/api/scripts/seed-full/README.md).
+
 Verifica:
 ```bash
 docker compose -f docker-compose.prod.yml ps          # todos healthy/up

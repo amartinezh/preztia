@@ -209,7 +209,10 @@ describe("SubmitPaymentReceiptHandler", () => {
     const outcome = repo.saved[0]!;
     const allocated = outcome.allocations.reduce((a, x) => a + x.amountMinor, 0);
     expect(allocated).toBe(25000); // monto del banco
+    // El pago queda por lo que confirmó el banco: es lo que entra a la caja (no lo leído).
+    expect(outcome.payment.amountMinor).toBe(25000);
     expect(outcome.payment.fraudReasons?.join(" ")).toContain("difiere");
+    expect(outcome.events[0]?.payload).toMatchObject({ extractedAmountMinor: 24000, bankAmountMinor: 25000 });
   });
 
   it("banco caído con política HOLD: UNVERIFIED sin abonos y cliente avisado", async () => {

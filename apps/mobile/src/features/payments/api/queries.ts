@@ -29,6 +29,8 @@ export type CashPaymentPayload = {
   amountMinor: number;
   /** Día del pago elegido a mano (YYYY-MM-DD); ausente = hoy. */
   paidOn?: string;
+  /** Caja de oficina o cuenta que recibe el dinero (solo quien no es cobrador). */
+  cashBoxId?: string;
 };
 
 export const paymentKeys = {
@@ -138,15 +140,16 @@ export type RegisterResult =
 export function useRegisterCashPayment() {
   const qc = useQueryClient();
   return useMutation<RegisterResult, unknown, CashPaymentPayload>({
-    mutationFn: async ({ creditId, amountMinor, paidOn }) => {
+    mutationFn: async ({ creditId, amountMinor, paidOn, cashBoxId }) => {
       const idempotencyKey = newIdempotencyKey();
+      const extra = { ...(paidOn ? { paidOn } : {}), ...(cashBoxId ? { cashBoxId } : {}) };
       try {
         const result = unwrap(
           await withRequestOptions({ idempotencyKey }, () =>
             api.registerCashPayment({
               headers: tenantHeader(),
               params: { creditId },
-              body: { amountMinor, ...(paidOn ? { paidOn } : {}) },
+              body: { amountMinor, ...extra },
             }),
           ),
         );
@@ -154,7 +157,7 @@ export function useRegisterCashPayment() {
       } catch (err) {
         // Sin conexión: persistir para reenvío con la misma clave (idempotente).
         if (isApiError(err) && err.status === 0) {
-          await enqueue(CASH_PAYMENT_KIND, { creditId, amountMinor, ...(paidOn ? { paidOn } : {}) }, idempotencyKey);
+          await enqueue(CASH_PAYMENT_KIND, { creditId, amountMinor, ...extra }, idempotencyKey);
           return { queued: true };
         }
         throw err;

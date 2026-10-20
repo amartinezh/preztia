@@ -32,6 +32,7 @@ export * from "./credit/portfolio/account-inquiry";
 export * from "./cash/expense";
 export * from "./cash/cash-box";
 export * from "./cash/ledger-attribution";
+export * from "./cash/receiving-box";
 export * from "./cash/remittance";
 export * from "./cash/deposit-order";
 export * from "./cash/settlement-period";

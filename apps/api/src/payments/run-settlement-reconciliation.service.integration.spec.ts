@@ -266,5 +266,44 @@ describeDb('RunSettlementReconciliation (ciclo completo, integración)', () => {
       await owner()`SELECT paid_minor, status FROM installment WHERE credit_id = ${creditId}`;
     expect(Number(inst.paid_minor)).toBe(amount);
     expect(inst.status).toBe('PAID');
+
+    // La validación humana que salda la cartera también cierra el crédito.
+    const [credit] =
+      await owner()`SELECT status FROM credit WHERE id = ${creditId}`;
+    expect(credit.status).toBe('SETTLED');
+  });
+
+  it('match por E2E con monto distinto: el pago queda por el crédito real y a la caja entra ESE monto', async () => {
+    const tenant = newTenant();
+    await seedAccount(tenant);
+    const { creditId } = await seedCreditWithInstallment(tenant, 30000);
+    const paymentId = await seedPendingPayment(tenant, 24000, creditId);
+    const e2e = 'E18236120202606101200abcdefghijk';
+    await owner()`UPDATE payment SET end_to_end_id = ${e2e} WHERE id = ${paymentId}`;
+    const [account] =
+      await owner()`SELECT id FROM tenant_bank_account WHERE tenant_id = ${tenant}`;
+    await owner()`
+      INSERT INTO incoming_credit (tenant_id, bank_account_id, source_id, amount_minor, net_amount_minor,
+        currency, payment_method_type, transaction_type, end_to_end_id, settlement_date)
+      VALUES (${tenant}, ${account.id}, ${e2e}, 25000, 25000, 'BRL', 'bank_transfer', 'payment', ${e2e},
+        '2026-06-10T12:00:00Z')`;
+
+    const summary = await buildService(`${HEADER}\n`).execute({
+      tenantId: tenant,
+      refresh: false,
+    });
+    expect(summary.confirmed).toBe(1);
+
+    // Comprobante decía 240,00; el crédito real fue 250,00: manda el dinero real.
+    const [pay] =
+      await owner()`SELECT status, amount_minor FROM payment WHERE id = ${paymentId}`;
+    expect(pay.status).toBe('VERIFIED');
+    expect(Number(pay.amount_minor)).toBe(25000);
+    const [ledger] =
+      await owner()`SELECT amount_minor FROM cash_transaction WHERE payment_id = ${paymentId}`;
+    expect(Number(ledger.amount_minor)).toBe(25000);
+    const [inst] =
+      await owner()`SELECT paid_minor FROM installment WHERE credit_id = ${creditId}`;
+    expect(Number(inst.paid_minor)).toBe(25000);
   });
 });

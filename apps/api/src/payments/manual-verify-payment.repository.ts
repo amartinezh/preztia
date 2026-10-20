@@ -11,7 +11,7 @@ import {
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { recordFraudAssessmentTx } from './fraud-assessment.recorder';
 import { routeVerifiedPaymentToBox } from '../cash/payment-box-router';
-import { applyAllocationsTx } from './allocation-writer';
+import { applyAllocationsTx, settleCreditTx } from './allocation-writer';
 
 export interface ManualVerifyResult {
   id: string;
@@ -128,6 +128,15 @@ export class ManualVerifyPaymentRepository {
           ...(reserved ? { settlementSourceId: reserved.sourceId } : {}),
         },
       });
+
+      // Cartera saldada ⇒ crédito SETTLED (regla del dominio), en la misma transacción.
+      if (result.creditSettled) {
+        await settleCreditTx(tx, {
+          tenantId: input.tenantId,
+          paymentId: pay.id,
+          creditId: pay.creditId,
+        });
+      }
 
       // Traza antifraude: aprobación humana. Si había crédito real reservado, es una confirmación
       // por ground truth (Fase 2); si no, es un override manual del operador.

@@ -5,16 +5,19 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { isTenantOperating, TENANT_SUSPENDED } from '@preztiaos/domain';
 import { verifyToken } from './jwt';
+import { tenantStatusOf } from '../tenancy/tenant-status';
 
 /**
- * Guard aditivo: verifica el access token (Bearer) y exige que el `x-tenant-id`
- * usado para RLS COINCIDA con el tenant del JWT. No reemplaza el flujo de header
- * existente (no toca el webhook de WhatsApp); solo blinda los endpoints de negocio.
+ * Guard aditivo: verifica el access token (Bearer), exige que el `x-tenant-id` usado para RLS
+ * COINCIDA con el tenant del JWT y que ese tenant siga operando (una empresa SUSPENDED corta las
+ * sesiones vigentes: 401, el cliente vuelve al login, que explica el motivo). No reemplaza el
+ * flujo de header existente (no toca el webhook de WhatsApp); solo blinda los endpoints de negocio.
  */
 @Injectable()
 export class JwtGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     const authorization = req.headers['authorization'];
     if (
@@ -29,6 +32,13 @@ export class JwtGuard implements CanActivate {
     }
     if (req.headers['x-tenant-id'] !== claims.tenantId) {
       throw new UnauthorizedException('El tenant no coincide con la sesión');
+    }
+    if (!isTenantOperating(await tenantStatusOf(claims.tenantId))) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: 'La empresa está suspendida',
+        code: TENANT_SUSPENDED,
+      });
     }
     return true;
   }

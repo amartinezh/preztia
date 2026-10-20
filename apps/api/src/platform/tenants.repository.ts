@@ -5,6 +5,7 @@ import type { TenantRecord, TenantStore } from '@preztiaos/application';
 import type { TenantStatus } from '@preztiaos/domain';
 import { withPlatformTx } from './platform-uow';
 import { mapUniqueViolation } from '../shared/persistence-errors';
+import { forgetTenantStatus } from '../tenancy/tenant-status';
 
 // Adaptador del puerto TenantStore (plano de control). Opera la tabla GLOBAL `tenant` con
 // la conexión BYPASSRLS, de modo que el super admin gestiona todos los tenants.
@@ -43,6 +44,8 @@ export class TenantDrizzleRepository implements TenantStore {
         })
         .where(eq(schema.tenant.id, input.id))
         .returning();
+      // Una suspensión (o reactivación) aplica de inmediato en esta instancia.
+      forgetTenantStatus(input.id);
       return row ? toRecord(row) : null;
     });
   }
@@ -53,6 +56,7 @@ export class TenantDrizzleRepository implements TenantStore {
         .delete(schema.tenant)
         .where(eq(schema.tenant.id, id))
         .returning({ id: schema.tenant.id });
+      forgetTenantStatus(id);
       return deleted.length > 0;
     });
   }

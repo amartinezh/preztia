@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { ForbiddenError, businessDateOf } from '@preztiaos/domain';
+import {
+  ConflictError,
+  DomainError,
+  ForbiddenError,
+  businessDateOf,
+} from '@preztiaos/domain';
 import { CashBoxDrizzleRepository } from '../cash/cash-box.repository';
 import { CreditDrizzleRepository } from '../credit/credit.repository';
 import { tenantStorage } from '../tenancy/tenant-context';
@@ -32,6 +37,8 @@ interface Fixture {
   tenant: string;
   collector: string;
   creditId: string;
+  officeId: string;
+  routeId: string;
 }
 
 async function seed(): Promise<Fixture> {
@@ -52,7 +59,7 @@ async function seed(): Promise<Fixture> {
     name: 'Oficina',
     zoneId: zone,
   });
-  await boxes.create(tenant, {
+  const route = await boxes.create(tenant, {
     type: 'CASH',
     name: 'Ruta',
     assignedTo: collector,
@@ -83,7 +90,13 @@ async function seed(): Promise<Fixture> {
       { cashBoxId: office.id, grantedBy: randomUUID() },
     ),
   );
-  return { tenant, collector, creditId };
+  return {
+    tenant,
+    collector,
+    creditId,
+    officeId: office.id,
+    routeId: route.id,
+  };
 }
 
 const register = (
@@ -178,9 +191,11 @@ describeDb('Pagos con fecha atrasada (integración)', () => {
       SELECT count(*)::int AS n FROM payment WHERE tenant_id = ${f.tenant}`;
     expect(n).toBe(0);
 
+    // El ADMIN no tiene caja de ruta: registra el pago recibido en la oficina, en la caja que elige.
     const result = await register(f, {
       actorRole: 'ADMIN',
       requestedDate: { kind: 'MANUAL', paidOn: yesterday },
+      receivingCashBoxId: f.officeId,
     });
     const row = await paymentRow(result!.id);
     expect(businessDateOf(row.paid_at, TIME_ZONE)).toBe(yesterday);
@@ -196,6 +211,7 @@ describeDb('Pagos con fecha atrasada (integración)', () => {
       register(f, {
         actorRole: 'ADMIN',
         requestedDate: { kind: 'MANUAL', paidOn: tooOld },
+        receivingCashBoxId: f.officeId,
       }),
     ).rejects.toMatchObject({ code: 'PAYMENT_DATE_TOO_OLD' });
     expect(await auditActions(f)).toEqual([]);
@@ -207,5 +223,89 @@ describeDb('Pagos con fecha atrasada (integración)', () => {
     const row = await paymentRow(result!.id);
     expect(Date.now() - row.paid_at.getTime()).toBeLessThan(HOUR_MS);
     expect(await auditActions(f)).toEqual([]);
+  });
+
+  // ── Caja que recibe el abono y crédito saldado ─────────────────────────────
+
+  async function ledgerOf(paymentId: string) {
+    const [row] = await owner()<
+      {
+        cash_box_id: string;
+        collector_id: string | null;
+        amount_minor: string;
+      }[]
+    >`SELECT cash_box_id, collector_id, amount_minor FROM cash_transaction WHERE payment_id = ${paymentId}`;
+    return row;
+  }
+
+  async function creditStatus(f: Fixture): Promise<string> {
+    const [row] = await owner()<{ status: string }[]>`
+      SELECT status FROM credit WHERE id = ${f.creditId}`;
+    return row.status;
+  }
+
+  async function paymentCount(f: Fixture): Promise<number> {
+    const [{ n }] = await owner()<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM payment WHERE tenant_id = ${f.tenant}`;
+    return n;
+  }
+
+  it('el ADMIN registra un pago en la oficina: entra a la caja elegida, sin atribuirlo a un cobrador', async () => {
+    const f = await setup();
+    const result = await register(f, {
+      actorRole: 'ADMIN',
+      receivingCashBoxId: f.officeId,
+    });
+    const ledger = await ledgerOf(result!.id);
+    expect(ledger.cash_box_id).toBe(f.officeId);
+    expect(ledger.collector_id).toBeNull();
+    expect(Number(ledger.amount_minor)).toBe(AMOUNT);
+  });
+
+  it('quien no es cobrador debe decir qué caja recibe el dinero (sin efectos)', async () => {
+    const f = await setup();
+    await expect(
+      register(f, { actorRole: 'COORDINATOR' }),
+    ).rejects.toMatchObject({
+      code: 'RECEIVING_BOX_REQUIRED',
+    });
+    await expect(register(f, { actorRole: 'ADMIN' })).rejects.toBeInstanceOf(
+      DomainError,
+    );
+    expect(await paymentCount(f)).toBe(0);
+  });
+
+  it('la oficina no puede meter el pago en la caja de ruta de un cobrador (409, sin efectos)', async () => {
+    const f = await setup();
+    await expect(
+      register(f, { actorRole: 'ADMIN', receivingCashBoxId: f.routeId }),
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(await paymentCount(f)).toBe(0);
+  });
+
+  it('el cobrador recibe en su caja de ruta y no puede elegir otra (403)', async () => {
+    const f = await setup();
+    await expect(
+      register(f, { actorRole: 'COLLECTOR', receivingCashBoxId: f.officeId }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    const result = await register(f, { actorRole: 'COLLECTOR' });
+    expect((await ledgerOf(result!.id)).cash_box_id).toBe(f.routeId);
+  });
+
+  it('el abono que salda la cartera deja el crédito SETTLED y lo deja en la bitácora', async () => {
+    const f = await setup();
+    await register(f, { actorRole: 'COLLECTOR', amountMinor: 60_000 });
+    expect(await creditStatus(f)).toBe('ACTIVE');
+
+    const last = await register(f, {
+      actorRole: 'COLLECTOR',
+      amountMinor: 60_000,
+    });
+
+    expect(last!.balanceMinor).toBe(0);
+    expect(await creditStatus(f)).toBe('SETTLED');
+    const events = await owner()<{ type: string }[]>`
+      SELECT type FROM payment_event WHERE payment_id = ${last!.id} ORDER BY created_at`;
+    expect(events.map((e) => e.type)).toContain('credit_settled');
   });
 });

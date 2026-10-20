@@ -13,12 +13,13 @@
 | Severidad | Total | Corregidos | Pendientes |
 |---|---|---|---|
 | 🔴 Crítico | 3 | 2 | 1 |
-| 🟠 Alto | 8 | 5 | 3 |
+| 🟠 Alto | 9 | 7 | 2 |
 | 🟡 Medio | 6 | 0 | 6 |
 | 🔵 Bajo / informativo | 6 | 0 | 6 |
 
 Corregidos en la remediación de la semana 1 (2026-07-22): **#1, #2, #5, #7, #9**.
 Corregidos durante el plan de control de campo (2026-09): **#22, #23**.
+Corregidos antes de cargar los datos de prueba completos (2026-10-20): **#6, #24**.
 
 ---
 
@@ -115,7 +116,7 @@ Con pruebas de regresión para los tres campos que se filtraban.
 > desplegar, para sanear los payloads **ya escritos**. Si el script reporta filas saneadas, **rota
 > esas credenciales**: estuvieron expuestas en la bitácora.
 
-### #6 · Los refresh tokens no se revocan ni se revalidan — ⏳ PENDIENTE
+### #6 · Los refresh tokens no se revocan ni se revalidan — ✅ CORREGIDO (2026-10-20)
 
 **Dónde:** [auth.controller.ts](../apps/api/src/auth/auth.controller.ts) · `refresh`
 
@@ -131,6 +132,12 @@ token viejo. Nunca vuelve a consultar `app_user`. Consecuencias:
 **Remediación:** releer el usuario en `refresh` (activo + rol + zonas actuales, vía la misma función
 `SECURITY DEFINER` del login) y emitir con los valores frescos. La revocación por `jti` puede ir
 después; releer al refrescar ya cierra el agujero operativo.
+
+**Corrección:** `refresh` relee al usuario ([session-subject.reader.ts](../apps/api/src/auth/session-subject.reader.ts):
+bajo RLS de su tenant; el SUPER_ADMIN por el plano de control) y rechaza al desactivado (401); el
+par nuevo sale con el rol y las zonas VIGENTES. También rechaza si la empresa está suspendida
+(#24). Queda como endurecimiento futuro la revocación por `jti` (un token robado sigue valiendo
+hasta su expiración de 15 minutos). Cubierto por `tenant-suspension.integration.spec.ts`.
 
 ### #7 · Abono en efectivo sin rol ni alcance de cartera — ✅ CORREGIDO (2026-07-22)
 
@@ -200,6 +207,25 @@ dimensiona el negocio y facilita el fraude interno.
 **Corrección:** las cinco lecturas exigen `ADMIN`/`COORDINATOR`. El cobrador ve solo lo suyo
 (`/me/cash-box`, `/me/remittance`) y su inicio pasó a un panel propio (su caja, su rendición, su
 ruta). Cubierto por `treasury-access.spec.ts` (403 al cobrador, 200 al coordinador).
+
+### #24 · Una empresa SUSPENDIDA seguía operando — ✅ CORREGIDO (2026-10-20)
+
+**Dónde:** [auth.controller.ts](../apps/api/src/auth/auth.controller.ts),
+[jwt.guard.ts](../apps/api/src/auth/jwt.guard.ts)
+
+`tenant.status = SUSPENDED` no se consultaba en ningún punto: el ADMIN de una empresa suspendida
+iniciaba sesión y leía y escribía datos (`GET /accounts` → 200), aunque el esquema y el dominio
+documentan que "SUSPENDED bloquea el acceso de sus usuarios". El SUPER_ADMIN no tenía cómo cortar
+el acceso de un tenant moroso o comprometido.
+
+**Corrección (ADR #49):** regla de dominio `assertTenantActive` / `isTenantOperating` (un tenant
+inexistente tampoco opera: falla cerrado), aplicada en tres puntos: el **login** responde 403
+`TENANT_SUSPENDED` (solo tras validar la contraseña, para no revelar el estado a quien no tiene
+credenciales), el **refresh** también, y el **`JwtGuard`** corta las sesiones vigentes con 401
+`TENANT_SUSPENDED` (la app vuelve al login, que explica el motivo). El estado se lee bajo RLS
+(el rol `app` solo ve la fila de su tenant) y se recuerda 30 s
+([tenant-status.ts](../apps/api/src/tenancy/tenant-status.ts)); un cambio del SUPER_ADMIN invalida
+la caché de la instancia al instante. Cubierto por `tenant-suspension.integration.spec.ts`.
 
 ## 🟡 Medios (todos ⏳ pendientes)
 
@@ -303,8 +329,7 @@ Vale la pena registrarlo: acota el riesgo real de lo anterior y evita "arreglar"
 
 1. **#4** RLS de la tabla huérfana (o `DROP` si está muerta) — migración pequeña, riesgo alto.
 2. **#3** rotar las contraseñas de Postgres — requiere ventana de reinicio.
-3. **#6** revalidar el usuario en `refresh` — cierra la desactivación de usuarios.
-4. **#8** rate limiting en `/auth/*`.
-5. **#13** subir dependencias.
-6. **#10–#12, #14–#15** endurecimiento de cabeceras, SVG e idempotencia.
-7. **#16–#21** cuando toque el área correspondiente.
+3. **#8** rate limiting en `/auth/*`.
+4. **#13** subir dependencias.
+5. **#10–#12, #14–#15** endurecimiento de cabeceras, SVG e idempotencia.
+6. **#16–#21** cuando toque el área correspondiente.

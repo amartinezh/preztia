@@ -2,24 +2,36 @@ import { Pressable } from "react-native";
 import type { FundingBox } from "@preztiaos/contracts";
 import { Banner, Field, MoneyText, Spinner, Stack, Text } from "@preztiaos/ui";
 
-import { useT } from "@/core/i18n";
+import { useT, type MessageKey } from "@/core/i18n";
 import { useFundingBoxes } from "../api/boxes-queries";
 
+/** Textos del selector: por defecto los de "Desembolsar desde"; el registro de pagos usa los suyos. */
+type PickerKeys = { label: MessageKey; hint: MessageKey; empty: MessageKey };
+
+const FUNDING_KEYS: PickerKeys = {
+  label: "review.approve.fundingSource",
+  hint: "review.approve.fundingHint",
+  empty: "review.approve.fundingEmpty",
+};
+
 /**
- * Selector "Desembolsar desde": lista las cajas/cuentas que la ZONA del crédito puede usar (las
- * del tenant, las de la zona y las de sus zonas superiores; la regla la aplica el servidor) con
- * su saldo, y avisa si el monto no alcanza. El servidor vuelve a validar saldo y zona al postear.
+ * Selector de caja de oficina o cuenta: lista las que la ZONA del crédito puede usar (las del
+ * tenant, las de la zona y las de sus zonas superiores; la regla la aplica el servidor) con su
+ * saldo. Sirve para "Desembolsar desde" (avisa si el monto no alcanza) y para elegir la caja que
+ * RECIBE un pago registrado en la oficina. El servidor vuelve a validar al postear.
  */
 export function FundingBoxPicker({
   zoneId,
   value,
   onChange,
   amountMinor,
+  keys = FUNDING_KEYS,
 }: {
   zoneId: string | null;
   value: string | null;
   onChange: (boxId: string) => void;
   amountMinor: number;
+  keys?: PickerKeys;
 }) {
   const { t } = useT();
   const boxes = useFundingBoxes(zoneId);
@@ -28,7 +40,7 @@ export function FundingBoxPicker({
 
   return (
     <>
-      <Field label={t("review.approve.fundingSource")} hint={t("review.approve.fundingHint")} required>
+      <Field label={t(keys.label)} hint={t(keys.hint)} required>
         {!zoneId ? (
           <Text variant="caption" tone="muted">
             {t("cash.funding.needZone")}
@@ -36,7 +48,7 @@ export function FundingBoxPicker({
         ) : boxes.isPending ? (
           <Spinner label={t("common.loading")} />
         ) : items.length === 0 ? (
-          <Banner tone="warning" title={t("review.approve.fundingEmpty")} />
+          <Banner tone="warning" title={t(keys.empty)} />
         ) : (
           <Stack gap="xs">
             {items.map((b) => (

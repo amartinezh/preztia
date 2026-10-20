@@ -37,6 +37,12 @@ export type ErrorMessageKey =
   | "errors.payment.dateInFuture"
   | "errors.payment.dateTooOld"
   | "errors.payment.dateSealed"
+  | "errors.payment.receivingBoxRequired"
+  | "errors.payment.receivingBoxInvalid"
+  | "errors.payment.receivingBoxNotAllowed"
+  | "errors.payment.receivingBoxInactive"
+  | "errors.payment.receivingBoxCurrency"
+  | "errors.auth.tenantSuspended"
   | "errors.credit.legacyReferenceTaken"
   | "errors.credit.interestLocked"
   | "errors.credit.planInactive"
@@ -84,6 +90,14 @@ const DOMAIN_CODE_KEYS: Record<string, ErrorMessageKey> = {
   PAYMENT_DATE_IN_FUTURE: "errors.payment.dateInFuture",
   PAYMENT_DATE_TOO_OLD: "errors.payment.dateTooOld",
   PAYMENT_DATE_SEALED: "errors.payment.dateSealed",
+  // Caja que recibe un abono registrado por la oficina
+  RECEIVING_BOX_REQUIRED: "errors.payment.receivingBoxRequired",
+  INVALID_RECEIVING_BOX: "errors.payment.receivingBoxInvalid",
+  RECEIVING_BOX_NOT_ALLOWED: "errors.payment.receivingBoxNotAllowed",
+  RECEIVING_BOX_INACTIVE: "errors.payment.receivingBoxInactive",
+  RECEIVING_BOX_CURRENCY: "errors.payment.receivingBoxCurrency",
+  // Empresa suspendida por el plano de control
+  TENANT_SUSPENDED: "errors.auth.tenantSuspended",
   // Bloqueo del interés (antifraude)
   INTEREST_LOCKED: "errors.credit.interestLocked",
   LEGACY_REFERENCE_TAKEN: "errors.credit.legacyReferenceTaken",

@@ -90,7 +90,7 @@ export class PaymentsController {
     const session = requireRole(authorization, DATA_PLANE_ROLES);
     const id = uuid.parse(creditId);
     await this.assertWithinScope(tenant, session, id);
-    const { amountMinor, capturedAt, paidOn } =
+    const { amountMinor, capturedAt, paidOn, cashBoxId } =
       registerCashPaymentInput.parse(body);
     const result = await this.cashPayments.register({
       tenantId: tenant,
@@ -99,6 +99,7 @@ export class PaymentsController {
       idempotencyKey: idempotencyKey ?? null,
       receivedBy: session.userId,
       actorRole: session.role,
+      receivingCashBoxId: cashBoxId ?? null,
       requestedDate: capturedAt
         ? { kind: 'OFFLINE_CAPTURE', capturedAt: new Date(capturedAt) }
         : paidOn

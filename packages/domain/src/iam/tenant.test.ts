@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  assertTenantActive,
+  isTenantOperating,
   assertValidTenantSlug,
   canTransitionTenant,
   toTenantSlug,
 } from "./tenant";
-import { DomainError } from "../shared/money";
+import { DomainError, ForbiddenError } from "../shared/money";
 
 describe("assertValidTenantSlug", () => {
   it("acepta slugs minúsculas/dígitos/guiones internos", () => {
@@ -36,5 +38,22 @@ describe("canTransitionTenant", () => {
     expect(canTransitionTenant("ACTIVE", "SUSPENDED")).toBe(true);
     expect(canTransitionTenant("SUSPENDED", "ACTIVE")).toBe(true);
     expect(canTransitionTenant("ACTIVE", "ACTIVE")).toBe(true);
+  });
+});
+
+describe("assertTenantActive", () => {
+  it("un tenant ACTIVE deja operar a sus usuarios", () => {
+    expect(() => assertTenantActive("ACTIVE")).not.toThrow();
+  });
+
+  it("un tenant inexistente tampoco opera (falla cerrado)", () => {
+    expect(isTenantOperating(null)).toBe(false);
+    expect(() => assertTenantActive(null)).toThrow(ForbiddenError);
+  });
+
+  it("un tenant SUSPENDED bloquea el acceso (403 TENANT_SUSPENDED)", () => {
+    expect(isTenantOperating("SUSPENDED")).toBe(false);
+    expect(() => assertTenantActive("SUSPENDED")).toThrow(ForbiddenError);
+    expect(() => assertTenantActive("SUSPENDED")).toThrow(expect.objectContaining({ code: "TENANT_SUSPENDED" }));
   });
 });

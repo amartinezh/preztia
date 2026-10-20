@@ -175,6 +175,9 @@ export const registerCashPaymentInput = z
     capturedAt: z.string().datetime().optional(),
     // Día del pago elegido a mano (YYYY-MM-DD): ADMIN; coordinador solo sin el bloqueo.
     paidOn: z.string().date().optional(),
+    // Caja de oficina o cuenta que RECIBE el dinero cuando registra quien no es cobrador (ADMIN,
+    // COORDINATOR): no tiene caja de ruta. El cobrador no la envía (recibe en su caja de ruta).
+    cashBoxId: z.string().uuid().optional(),
   })
   .refine((v) => !(v.capturedAt && v.paidOn), {
     message: "Usa la hora de captura o una fecha elegida, no ambas",

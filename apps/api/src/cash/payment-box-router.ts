@@ -1,6 +1,12 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
-import { assertCanPost, ConflictError } from '@preztiaos/domain';
+import {
+  assertCanPost,
+  assertCanReceivePaymentInto,
+  ConflictError,
+  NotFoundError,
+  type CashBoxType,
+} from '@preztiaos/domain';
 import { type Tx } from '../tenancy/unit-of-work';
 import { attributionFor, lockCashBox } from './cash-ledger';
 
@@ -9,6 +15,8 @@ const TRANSIT_BOX_NAME = 'Fondos en Tránsito';
 
 // Motivo del asiento de cobro en efectivo (la caja CASH exige motivo en todo movimiento).
 const CASH_COLLECTION_REASON = 'Cobro en efectivo en ruta';
+// Motivo del abono que registra en la oficina quien no es cobrador (ADMIN/COORDINATOR).
+const OFFICE_PAYMENT_REASON = 'Abono registrado en oficina';
 
 export interface VerifiedPaymentToRoute {
   readonly tenantId: string;
@@ -149,6 +157,103 @@ export async function postCashPaymentToRouteBox(
       zoneId,
       collectorId,
       createdBy: input.receivedBy,
+    })
+    .onConflictDoNothing();
+}
+
+/** Caja de oficina o cuenta elegida para recibir un abono, ya validada. */
+export interface ReceivingBoxRef {
+  readonly id: string;
+  readonly type: CashBoxType;
+}
+
+/**
+ * Carga y valida la caja que eligió quien no es cobrador para recibir el abono de un crédito
+ * (regla de dominio `assertCanReceivePaymentInto`): activa, de oficina o bancaria, usable por la
+ * zona del crédito y en su moneda. Se llama ANTES de escribir el pago: falla sin efectos.
+ */
+export async function loadReceivingBoxTx(
+  tx: Tx,
+  input: { cashBoxId: string; creditId: string; currency: string },
+): Promise<ReceivingBoxRef> {
+  const [box] = await tx
+    .select({
+      id: schema.cashBox.id,
+      type: schema.cashBox.type,
+      assignedTo: schema.cashBox.assignedTo,
+      active: schema.cashBox.active,
+      currency: schema.cashBox.currency,
+      zonePath: schema.zone.path,
+    })
+    .from(schema.cashBox)
+    .leftJoin(schema.zone, eq(schema.zone.id, schema.cashBox.zoneId))
+    .where(eq(schema.cashBox.id, input.cashBoxId))
+    .limit(1);
+  if (!box) throw new NotFoundError('Caja que recibe el dinero no encontrada');
+  const [credit] = await tx
+    .select({ zonePath: schema.zone.path })
+    .from(schema.credit)
+    .innerJoin(schema.zone, eq(schema.zone.id, schema.credit.zoneId))
+    .where(eq(schema.credit.id, input.creditId))
+    .limit(1);
+  if (!credit) throw new NotFoundError('Crédito no encontrado');
+  assertCanReceivePaymentInto({
+    creditZonePath: credit.zonePath,
+    box: {
+      type: box.type,
+      assignedTo: box.assignedTo,
+      active: box.active,
+      zonePath: box.zonePath ?? null,
+    },
+  });
+  if (box.currency !== input.currency) {
+    throw new ConflictError(
+      'La caja que recibe el dinero es de otra moneda',
+      'RECEIVING_BOX_CURRENCY',
+    );
+  }
+  return { id: box.id, type: box.type };
+}
+
+/**
+ * Postea el abono registrado en la oficina como PAYMENT_IN en la caja elegida, dentro de la
+ * transacción del pago (atómico). Se atribuye a la zona del crédito y a ningún cobrador: no es
+ * cobro de ruta (no entra en rendiciones ni en comisiones). Idempotente por `cash_tx_payment_idx`.
+ */
+export async function postPaymentToReceivingBox(
+  tx: Tx,
+  input: {
+    readonly tenantId: string;
+    readonly paymentId: string;
+    readonly box: ReceivingBoxRef;
+    readonly amountMinor: number;
+    readonly currency: string;
+    readonly createdBy: string;
+  },
+): Promise<void> {
+  const intent = {
+    direction: 'IN' as const,
+    kind: 'PAYMENT_IN' as const,
+    amountMinor: input.amountMinor,
+    reason: OFFICE_PAYMENT_REASON,
+  };
+  await lockCashBox(tx, input.box.id);
+  // Un IN nunca depende del saldo: solo se validan monto y motivo.
+  assertCanPost({ type: input.box.type, currentBalanceMinor: 0, intent });
+  const { zoneId, collectorId } = await attributionFor(tx, input.box.id, {
+    paymentId: input.paymentId,
+  });
+  await tx
+    .insert(schema.cashTransaction)
+    .values({
+      tenantId: input.tenantId,
+      cashBoxId: input.box.id,
+      ...intent,
+      currency: input.currency,
+      paymentId: input.paymentId,
+      zoneId,
+      collectorId,
+      createdBy: input.createdBy,
     })
     .onConflictDoNothing();
 }

@@ -65,6 +65,8 @@ const accountInstallment = z.object({
 export const accountDetail = z.object({
   creditId: z.string().uuid(),
   borrowerId: z.string().uuid(),
+  /** Zona del crédito: define qué cajas pueden recibir sus abonos y fondearlo. */
+  zoneId: z.string().uuid(),
   borrowerName: z.string().nullable(),
   nationalId: z.string().nullable(),
   phone: z.string().nullable(),

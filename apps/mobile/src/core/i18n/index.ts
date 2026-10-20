@@ -73,6 +73,9 @@ const es = {
   "payments.register": "Registrar pago",
   "payments.noRouteBox":
     "No tienes una caja de ruta asignada: no puedes recibir efectivo. Pide a tu coordinador que te asigne una.",
+  "payments.receivingBox": "Caja que recibe el dinero",
+  "payments.receivingBoxHint": "Caja de la oficina o cuenta donde entró el pago (nunca la caja de ruta de un cobrador)",
+  "payments.receivingBoxEmpty": "No hay cajas de oficina ni cuentas disponibles para la zona de este crédito.",
   "payments.empty": "Sin pagos registrados",
   // Detalle / auditoría de un intento de pago
   "payment.detail.title": "Detalle del pago",
@@ -1318,6 +1321,13 @@ const es = {
   "errors.payment.dateInFuture": "La fecha del pago no puede ser futura.",
   "errors.payment.dateTooOld": "La fecha del pago es más antigua de lo permitido en Ajustes.",
   "errors.payment.dateSealed": "La fecha del pago cae en una liquidación ya cerrada.",
+  "errors.payment.receivingBoxRequired": "Elige la caja o la cuenta que recibe el dinero.",
+  "errors.payment.receivingBoxInvalid":
+    "El pago se recibe en una caja de oficina o en una cuenta bancaria, no en la caja de ruta de un cobrador.",
+  "errors.payment.receivingBoxNotAllowed": "El cobrador recibe el efectivo en su caja de ruta.",
+  "errors.payment.receivingBoxInactive": "La caja elegida está inactiva.",
+  "errors.payment.receivingBoxCurrency": "La caja elegida maneja otra moneda.",
+  "errors.auth.tenantSuspended": "La empresa está suspendida. Comunícate con el administrador de la plataforma.",
   "errors.credit.legacyReferenceTaken": "Ya se cargó un crédito con esa referencia del sistema anterior.",
   "errors.credit.interestLocked": "El interés está bloqueado: debe salir de un plan de pago activo.",
   "errors.credit.planInactive": "El plan elegido ya no está activo. Elige otro.",

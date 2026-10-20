@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import { splitAllocations, type PaymentAllocation } from '@preztiaos/domain';
 import { type Tx } from '../tenancy/unit-of-work';
@@ -100,4 +100,37 @@ async function paidSoFarMinor(tx: Tx, creditId: string): Promise<number> {
     .from(schema.installment)
     .where(eq(schema.installment.creditId, creditId));
   return Number(row?.value ?? 0);
+}
+
+// Estados desde los que un abono que salda la cartera cierra el crédito (un castigado que se
+// recupera completo también queda saldado; uno anulado no recibe abonos).
+const SETTLEABLE_STATUSES = ['ACTIVE', 'DEFAULTED'] as const;
+
+/**
+ * Refleja la regla del dominio `allocatePayment` (`creditSettled`): una cartera saldada deja el
+ * crédito SETTLED, dentro de la transacción del abono, y lo deja en la bitácora del pago. Así el
+ * crédito sale de "activos" y un PIX posterior del cliente no puede caer en un crédito ya pagado.
+ */
+export async function settleCreditTx(
+  tx: Tx,
+  input: { tenantId: string; paymentId: string; creditId: string },
+): Promise<void> {
+  const settled = await tx
+    .update(schema.credit)
+    .set({ status: 'SETTLED' })
+    .where(
+      and(
+        eq(schema.credit.id, input.creditId),
+        inArray(schema.credit.status, [...SETTLEABLE_STATUSES]),
+      ),
+    )
+    .returning({ id: schema.credit.id });
+  if (!settled.length) return;
+  await tx.insert(schema.paymentEvent).values({
+    tenantId: input.tenantId,
+    paymentId: input.paymentId,
+    creditId: input.creditId,
+    type: 'credit_settled',
+    payload: { creditId: input.creditId },
+  });
 }

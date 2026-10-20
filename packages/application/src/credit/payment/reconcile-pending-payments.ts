@@ -45,6 +45,8 @@ export interface ReconciliationRepository {
     tenantId: string;
     paymentId: string;
     bankResult: BankVerificationResult;
+    /** Monto que CONFIRMÓ el banco: el del pago, el que se abona y el que entra a la caja. */
+    creditedAmountMinor: number;
     allocation: AllocationResult;
     events: readonly PaymentAuditEvent[];
   }): Promise<void>;
@@ -152,8 +154,15 @@ export class ReconcilePendingPaymentsHandler {
       portfolio.installments,
       Money.of(decision.amountMinor, portfolio.currency),
     );
+    const readDifferent = payment.pix.amountMinor !== decision.amountMinor;
     const events: PaymentAuditEvent[] = [
-      { type: "payment_verified_by_reconciliation", payload: { creditId: portfolio.creditId } },
+      {
+        type: "payment_verified_by_reconciliation",
+        payload: {
+          creditId: portfolio.creditId,
+          ...(readDifferent ? { extractedAmountMinor: payment.pix.amountMinor, bankAmountMinor: decision.amountMinor } : {}),
+        },
+      },
       {
         type: "payment_allocated",
         payload: {
@@ -169,6 +178,7 @@ export class ReconcilePendingPaymentsHandler {
       tenantId,
       paymentId: payment.id,
       bankResult,
+      creditedAmountMinor: decision.amountMinor,
       allocation,
       events,
     });

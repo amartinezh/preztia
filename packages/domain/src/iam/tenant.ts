@@ -1,4 +1,4 @@
-import { DomainError } from "../shared/money";
+import { DomainError, ForbiddenError } from "../shared/money";
 
 // Reglas puras del agregado Tenant (plano de control). El dominio decide qué es un slug
 // válido y qué transiciones de estado son legítimas; la persistencia y la unicidad del
@@ -47,4 +47,25 @@ export function toTenantSlug(name: string): string {
  */
 export function canTransitionTenant(from: TenantStatus, to: TenantStatus): boolean {
   return TENANT_STATUSES.includes(from) && TENANT_STATUSES.includes(to);
+}
+
+/** Código estable de la empresa suspendida: el cliente lo traduce y vuelve al inicio de sesión. */
+export const TENANT_SUSPENDED = "TENANT_SUSPENDED";
+
+/** ¿Los usuarios del tenant pueden operar? Solo un tenant ACTIVE (uno inexistente, nunca). */
+export function isTenantOperating(status: TenantStatus | null): boolean {
+  return status === "ACTIVE";
+}
+
+/**
+ * SUSPENDED bloquea el acceso de TODOS los usuarios del tenant: no inician sesión, no renuevan la
+ * sesión y sus sesiones vigentes dejan de servir. Fallo rápido (403) con un motivo accionable.
+ */
+export function assertTenantActive(status: TenantStatus | null): void {
+  if (!isTenantOperating(status)) {
+    throw new ForbiddenError(
+      "La empresa está suspendida: comunícate con el administrador de la plataforma",
+      TENANT_SUSPENDED,
+    );
+  }
 }

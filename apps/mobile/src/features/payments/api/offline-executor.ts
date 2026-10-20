@@ -16,14 +16,18 @@ import { CASH_PAYMENT_KIND, paymentKeys, type CashPaymentPayload } from "./queri
  */
 export function registerCashPaymentExecutor() {
   registerExecutor(CASH_PAYMENT_KIND, async (op) => {
-    const { creditId, amountMinor, paidOn } = op.payload as CashPaymentPayload;
+    const { creditId, amountMinor, paidOn, cashBoxId } = op.payload as CashPaymentPayload;
     unwrap(
       await withRequestOptions({ idempotencyKey: op.idempotencyKey }, () =>
         api.registerCashPayment({
           headers: tenantHeader(),
           params: { creditId },
           // Una fecha elegida a mano manda sobre la hora de captura (son excluyentes).
-          body: { amountMinor, ...(paidOn ? { paidOn } : { capturedAt: op.createdAt }) },
+          body: {
+            amountMinor,
+            ...(paidOn ? { paidOn } : { capturedAt: op.createdAt }),
+            ...(cashBoxId ? { cashBoxId } : {}),
+          },
         }),
       ),
     );

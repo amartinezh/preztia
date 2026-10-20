@@ -7,6 +7,7 @@ import {
   Money,
   portfolioBalanceMinor,
   resolvePaymentDate,
+  resolveReceivingBox,
   type PortfolioInstallment,
   type RequestedPaymentDate,
   type ResolvedPaymentDate,
@@ -15,8 +16,13 @@ import {
 import { readOperationalSettingsTx } from '../tenant-config/operational-settings.reader';
 import { resolveTenantTimeZone } from '../tenant-config/tenant-timezone';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
-import { applyAllocationsTx } from './allocation-writer';
-import { postCashPaymentToRouteBox } from '../cash/payment-box-router';
+import { applyAllocationsTx, settleCreditTx } from './allocation-writer';
+import {
+  loadReceivingBoxTx,
+  postCashPaymentToRouteBox,
+  postPaymentToReceivingBox,
+  type ReceivingBoxRef,
+} from '../cash/payment-box-router';
 
 export interface CashPaymentResult {
   id: string;
@@ -26,11 +32,11 @@ export interface CashPaymentResult {
 }
 
 /**
- * Registra un abono en EFECTIVO (cobro de ruta) de forma ATÓMICA e IDEMPOTENTE.
- * Reusa el dominio puro `allocatePayment` (cascada a la cuota más antigua) y persiste
- * pago + asignaciones + actualización de cuotas + asiento PAYMENT_IN en la caja de ruta de
- * quien cobró + evento de auditoría en una sola transacción. Devuelve `null` si el crédito
- * no existe.
+ * Registra un abono en EFECTIVO (cobro de ruta, o pago en la oficina) de forma ATÓMICA e
+ * IDEMPOTENTE. Reusa el dominio puro `allocatePayment` (cascada a la cuota más antigua) y persiste
+ * pago + asignaciones + actualización de cuotas + asiento PAYMENT_IN (en la caja de ruta de quien
+ * cobró o en la caja de oficina/cuenta elegida) + crédito SETTLED si queda saldado + evento de
+ * auditoría en una sola transacción. Devuelve `null` si el crédito no existe.
  */
 @Injectable()
 export class CashPaymentDrizzleRepository {
@@ -53,8 +59,13 @@ export interface CashPaymentInput {
    * del PAGO: el asiento del libro se fecha al registrarse (ADR #41).
    */
   requestedDate?: RequestedPaymentDate | null;
-  /** Rol de quien registra: decide si puede elegir la fecha a mano. */
+  /** Rol de quien registra: decide si puede elegir la fecha a mano y dónde entra el dinero. */
   actorRole?: Role;
+  /**
+   * Caja de oficina o cuenta que recibe el dinero cuando registra quien NO es cobrador (ADMIN,
+   * COORDINATOR): no tiene caja de ruta. El cobrador no la envía: recibe en su caja de ruta.
+   */
+  receivingCashBoxId?: string | null;
 }
 
 /**
@@ -96,8 +107,10 @@ export async function registerCashPaymentTx(
 
   const installments = await loadInstallments(tx, input.creditId);
 
-  // 2b. Fecha del pago (regla de dominio): antes de mover dinero, para fallar sin efectos.
+  // 2b. Fecha del pago y caja que recibe (reglas de dominio): antes de mover dinero, para
+  //     fallar sin efectos.
   const date = await resolveDateTx(tx, input);
+  const chosenBox = await chosenReceivingBoxTx(tx, input, credit.currency);
 
   // 3. Regla de dominio: repartir el abono en cascada.
   const result = allocatePayment(
@@ -122,15 +135,26 @@ export async function registerCashPaymentTx(
     .returning({ id: schema.payment.id });
   const paymentId = inserted.id;
 
-  // El efectivo entra al libro en la caja de ruta de quien cobró (sin caja → 409, todo
-  // se revierte: no queda abono sin dinero en caja).
-  await postCashPaymentToRouteBox(tx, {
-    tenantId: input.tenantId,
-    paymentId,
-    receivedBy: input.receivedBy,
-    amountMinor: input.amountMinor,
-    currency: credit.currency,
-  });
+  // El dinero entra al libro en la caja de ruta de quien cobró (sin caja → 409, todo se
+  // revierte: no queda abono sin dinero en caja) o, si registra la oficina, en la caja elegida.
+  if (chosenBox) {
+    await postPaymentToReceivingBox(tx, {
+      tenantId: input.tenantId,
+      paymentId,
+      box: chosenBox,
+      amountMinor: input.amountMinor,
+      currency: credit.currency,
+      createdBy: input.receivedBy,
+    });
+  } else {
+    await postCashPaymentToRouteBox(tx, {
+      tenantId: input.tenantId,
+      paymentId,
+      receivedBy: input.receivedBy,
+      amountMinor: input.amountMinor,
+      currency: credit.currency,
+    });
+  }
 
   // 5. Aplicar las asignaciones con guardia de concurrencia (paid ≤ due), con su
   //    desglose capital/interés, e insertar las filas auditables de asignación.
@@ -153,8 +177,17 @@ export async function registerCashPaymentTx(
       settled: result.creditSettled,
       paidAt: date.paidAt.toISOString(),
       ...(input.requestedDate ? { dateSource: input.requestedDate.kind } : {}),
+      ...(chosenBox ? { receivingCashBoxId: chosenBox.id } : {}),
     },
   });
+  // 7. Cartera saldada ⇒ crédito SETTLED (regla del dominio), en la misma transacción.
+  if (result.creditSettled) {
+    await settleCreditTx(tx, {
+      tenantId: input.tenantId,
+      paymentId,
+      creditId: input.creditId,
+    });
+  }
   await auditPaymentDate(tx, { input, paymentId, date });
 
   return {
@@ -163,6 +196,28 @@ export async function registerCashPaymentTx(
     amountMinor: input.amountMinor,
     balanceMinor: portfolioBalanceMinor(result.installments),
   };
+}
+
+/**
+ * Caja elegida por quien no es cobrador (validada), o null si recibe la caja de ruta de quien
+ * cobra. La regla de quién elige es del dominio (`resolveReceivingBox`); sin rol explícito se trata
+ * como cobrador (la liquidación de una parada de ruta).
+ */
+async function chosenReceivingBoxTx(
+  tx: Tx,
+  input: CashPaymentInput,
+  currency: string,
+): Promise<ReceivingBoxRef | null> {
+  const receiving = resolveReceivingBox({
+    actorRole: input.actorRole ?? 'COLLECTOR',
+    requestedCashBoxId: input.receivingCashBoxId ?? null,
+  });
+  if (receiving.kind === 'ROUTE_BOX') return null;
+  return loadReceivingBoxTx(tx, {
+    cashBoxId: receiving.cashBoxId,
+    creditId: input.creditId,
+    currency,
+  });
 }
 
 /** Resuelve la fecha del pago con la política, la zona horaria y el último corte sellado del tenant. */

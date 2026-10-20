@@ -95,15 +95,18 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
     tenantId: string;
     paymentId: string;
     bankResult: BankVerificationResult;
+    creditedAmountMinor: number;
     allocation: AllocationResult;
     events: readonly PaymentAuditEvent[];
   }): Promise<void> {
     await withTenantTxFor(input.tenantId, async (tx) => {
-      // Idempotencia: solo se verifica un pago que SIGUE pendiente.
+      // Idempotencia: solo se verifica un pago que SIGUE pendiente. El pago queda por el monto que
+      // confirmó el banco (el que se abona y el que entra a la caja), no por lo leído del comprobante.
       const transitioned = await tx
         .update(schema.payment)
         .set({
           status: 'VERIFIED',
+          amountMinor: input.creditedAmountMinor,
           bankStatus: 'CONFIRMED',
           bankResponse: input.bankResult.rawResponse ?? null,
           verifiedAt: new Date(),
@@ -119,7 +122,6 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
           id: schema.payment.id,
           creditId: schema.payment.creditId,
           receiverPixKey: schema.payment.receiverPixKey,
-          amountMinor: schema.payment.amountMinor,
           currency: schema.payment.currency,
         });
       if (!transitioned.length) return; // otro proceso ya lo verificó
@@ -131,7 +133,7 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         allocation: input.allocation,
         events: input.events,
         receiverPixKey: transitioned[0].receiverPixKey,
-        amountMinor: transitioned[0].amountMinor,
+        amountMinor: input.creditedAmountMinor,
         currency: transitioned[0].currency,
       });
     });
@@ -167,6 +169,7 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
       const [credit] = await tx
         .select({
           id: schema.incomingCredit.id,
+          amountMinor: schema.incomingCredit.amountMinor,
           consumedByPaymentId: schema.incomingCredit.consumedByPaymentId,
           consumedByFieldOrderId: schema.incomingCredit.consumedByFieldOrderId,
         })
@@ -188,10 +191,13 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         .set({ consumedByPaymentId: input.paymentId })
         .where(eq(schema.incomingCredit.id, credit.id));
 
+      // El crédito REAL es la verdad del dinero: el pago queda por su monto (el que se abona y el
+      // que entra a la caja), aunque el comprobante dijera otro.
       await tx
         .update(schema.payment)
         .set({
           status: 'VERIFIED',
+          amountMinor: credit.amountMinor,
           bankStatus: 'CONFIRMED',
           bankResponse: {
             via: 'settlement_report',
@@ -209,7 +215,7 @@ export class PaymentReconciliationDrizzleRepository implements ReconciliationRep
         allocation: input.allocation,
         events: input.events,
         receiverPixKey: pay.receiverPixKey,
-        amountMinor: pay.amountMinor,
+        amountMinor: credit.amountMinor,
         currency: pay.currency,
       });
 

@@ -217,12 +217,17 @@ function buildOutcome(
   const decisionReasons =
     decision.kind === "accepted_verified" ? decision.assessment.reasons : decision.reasons;
 
+  // Verificado por el banco, el monto del pago es el que CONFIRMÓ el banco: es el que se abona y
+  // el que entra a la caja. Si la IA leyó otro, queda como evidencia en el evento de la decisión.
+  const credited = decision.kind === "accepted_verified" ? { ...pix, amountMinor: decision.amountMinor } : pix;
+  const readDifferent = credited.amountMinor !== pix.amountMinor;
   const events: PaymentAuditEvent[] = [
     {
       type: `payment_${status.toLowerCase()}`,
       payload: {
         creditId: portfolio.creditId,
         ...(decisionReasons.length ? { reasons: [...decisionReasons] } : {}),
+        ...(readDifferent ? { extractedAmountMinor: pix.amountMinor, bankAmountMinor: credited.amountMinor } : {}),
       },
     },
   ];
@@ -249,7 +254,7 @@ function buildOutcome(
     payment: paymentRecord(
       cmd,
       portfolio.creditId,
-      pix,
+      credited,
       status,
       bankStatusOf(bankResult.verification),
       bankResult.rawResponse ?? null,

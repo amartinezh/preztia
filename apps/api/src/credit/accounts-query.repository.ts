@@ -145,6 +145,7 @@ export class AccountsQueryRepository {
         .select({
           id: schema.credit.id,
           borrowerId: schema.credit.borrowerId,
+          zoneId: schema.credit.zoneId,
           principalMinor: schema.credit.principalMinor,
           interestPct: schema.credit.interestPct,
           installmentsCount: schema.credit.installmentsCount,
@@ -191,6 +192,7 @@ export class AccountsQueryRepository {
       return {
         creditId: credit.id,
         borrowerId: credit.borrowerId,
+        zoneId: credit.zoneId,
         borrowerName: fullName(credit.firstName, credit.lastName),
         nationalId: credit.nationalId ?? null,
         phone: credit.phone ?? null,
