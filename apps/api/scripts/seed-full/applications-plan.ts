@@ -2,6 +2,7 @@ import { addDays } from '@preztiaos/domain';
 import type { TenantContext } from './context';
 import type { DayPlan } from './day-plan';
 import {
+  applicationChannel,
   runApplication,
   runInquiry,
   type ApplicationSpec,
@@ -345,9 +346,14 @@ export function planApplications(
     isOn(ctx, d.daysAgo, date),
   )) {
     plan.add(draft.hour, 0, async (_at, timeline) => {
-      const zone = ctx.zone(draft.zoneKey);
+      // La solicitud se atiende en la zona a la que la enruta su canal: su coordinador la revisa
+      // y el desembolso sale de una caja que esa zona puede usar.
+      const { zone } = applicationChannel(ctx, {
+        zone: ctx.zone(draft.zoneKey),
+        viaTelegram: draft.viaTelegram,
+      });
       const collectorSpec = ctx.scenario.collectors.find(
-        (c) => c.zoneKey === draft.zoneKey && state.isActive(c),
+        (c) => c.zoneKey === zone.key && state.isActive(c),
       );
       const collector = collectorSpec ? ctx.user(collectorSpec.userKey) : null;
       const fundingBox = collectorSpec

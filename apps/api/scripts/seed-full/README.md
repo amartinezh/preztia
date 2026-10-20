@@ -112,6 +112,10 @@ cambio aprobadas/rechazadas/pendientes, notas y recordatorios enviados a mano.
 - **Conserva lo real**: credencial de IA, base de conocimiento, canales de WhatsApp y Telegram
   (con sus secretos cifrados, en la zona de igual ruta), cuentas bancarias con sus credenciales y
   llaves PIX, la identidad del tenant y las contraseñas y usuarios que ya existían.
+- **Canales reales, sin canales inventados**: si el tenant tiene menos canales que zonas (p. ej.
+  un solo número en Divinópolis), las solicitudes de las zonas sin canal entran por ese número y
+  nacen en su zona, como en la API: las revisa su coordinador y se desembolsan desde una caja de
+  esa zona.
 - **Sin mensajes a personas reales**: los teléfonos sembrados están en bloques no asignables
   (`55 DDD 9 0000-xxxx`, `57 399…`) y el recordatorio automático queda **apagado**.
 

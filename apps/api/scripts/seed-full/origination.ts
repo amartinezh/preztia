@@ -111,6 +111,24 @@ interface Applicant {
   readonly zone: ZoneRef;
 }
 
+/**
+ * Canal por el que escribe el solicitante y la zona a la que ese canal enruta la solicitud. Con
+ * menos canales que zonas (producción tiene un solo número), el cliente de una zona sin canal
+ * escribe al número de otra y la solicitud nace en la zona de ese número, como en la API.
+ */
+export function applicationChannel(
+  ctx: TenantContext,
+  spec: { readonly zone: ZoneRef; readonly viaTelegram?: boolean },
+): { channelId: string; zone: ZoneRef } {
+  const telegram = spec.viaTelegram && ctx.telegramChannel;
+  const channelId = telegram ? ctx.telegramChannel! : ctx.channelFor(spec.zone);
+  const channelZonePath = ctx.zonePathByChannel.get(channelId);
+  const zone =
+    [...ctx.zones.values()].find((z) => z.path === channelZonePath) ??
+    spec.zone;
+  return { channelId, zone };
+}
+
 /** Corre una solicitud completa dentro del día (los instantes salen de su línea de tiempo). */
 export async function runApplication(
   ctx: TenantContext,
@@ -299,12 +317,7 @@ function newApplicant(ctx: TenantContext, spec: ApplicationSpec): Applicant {
         ]
       : ['Cano Ríos', 'Salazar Toro', 'Agudelo Mesa'],
   );
-  const telegram = spec.viaTelegram && ctx.telegramChannel;
-  const channelId = telegram ? ctx.telegramChannel! : ctx.channelFor(spec.zone);
-  const channelZonePath = ctx.zonePathByChannel.get(channelId);
-  const zone =
-    [...ctx.zones.values()].find((z) => z.path === channelZonePath) ??
-    spec.zone;
+  const { channelId, zone } = applicationChannel(ctx, spec);
   return {
     first,
     last,
