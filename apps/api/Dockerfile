@@ -10,9 +10,11 @@
 ##############################  Base común  ##############################
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME="/pnpm" \
-    PATH="/pnpm:$PATH"
+    PATH="/pnpm:$PATH" \
+    COREPACK_HOME="/corepack"
 # corepack activa pnpm 9 (fijado por packageManager en package.json). node-linker=hoisted lo
-# aporta el .npmrc del repo (obligatorio para el monorepo).
+# aporta el .npmrc del repo (obligatorio para el monorepo). COREPACK_HOME fuera de /root: el pnpm
+# que descarga el builder se copia al runner, que corre como `node`.
 RUN corepack enable
 WORKDIR /app
 
@@ -45,6 +47,9 @@ ENV NODE_ENV=production
 # El workspace ya construido (incluye drizzle-kit para el servicio `migrate`, que reutiliza esta
 # misma imagen). Los secretos y hosts llegan por entorno desde docker-compose (env_file).
 COPY --from=builder /app /app
+# pnpm ya descargado: `migrate` y los `pnpm …` vía `exec` no lo bajan en cada contenedor nuevo (en
+# el VPS esa descarga se quedó colgada y dejó el despliegue a medias).
+COPY --from=builder --chown=node:node /corepack /corepack
 
 # Ejecuta como usuario sin privilegios (la imagen node trae el usuario `node`).
 USER node
