@@ -220,6 +220,19 @@ SUPER_EMAIL='super@…' SUPER_PASSWORD='…' CONFIRM=SI python3 deploy/scripts/s
 - Si una zona vieja no se puede borrar (409), el script la reporta y sigue; se elimina luego desde Ajustes → Zonas.
 - Los otros tenants (`Créditos Antioquia (demo)`, `Financiera Norte (suspendida)`) no se tocan.
 
+**Verificar producción tras cada despliegue** (solo lectura; reactiva y vuelve a desactivar el ADMIN
+temporal para consultar como administración):
+
+```bash
+SUPER_EMAIL='super@…' SUPER_PASSWORD='…' COLLECTOR_EMAIL='cobrador1@preztia.co' COLLECTOR_PASSWORD='…' \
+  python3 deploy/scripts/verify-prod.py
+```
+Comprueba el bundle web publicado, la sesión y la lista "Mis cobros de hoy" del cobrador, el refresco de
+token, el panel Hoy/Pendientes, usuarios con nombre, la cotización y el reporte diario.
+
+**Fase 2 (2026-11)** trae la migración `0072` (`app_user.display_name`): `deploy.sh` la aplica con el perfil
+`migrate` antes de levantar la API.
+
 ## Notas de seguridad
 - Ningún servicio de datos expone puertos al host: solo Caddy. El aislamiento entre empresas lo
   garantiza además RLS en Postgres.
