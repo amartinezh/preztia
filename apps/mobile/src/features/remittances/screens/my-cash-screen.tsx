@@ -1,21 +1,24 @@
 import { useState } from "react";
-import { submitRemittanceInput } from "@preztiaos/contracts";
+import { submitRemittanceInput, type SubmitRemittanceInput } from "@preztiaos/contracts";
 import {
   Banner,
   Button,
   Card,
+  ConfirmModal,
   ErrorState,
   Field,
+  formatMoney,
   Input,
-  majorToMinor,
-  minorToMajor,
+  MoneyInput,
   MoneyText,
   Row,
   Spinner,
   Stack,
   Text,
+  useToast,
 } from "@preztiaos/ui";
 
+import { moneyInputText } from "@/components/money-input-text";
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
@@ -82,12 +85,13 @@ export function MyCashScreen() {
               <Banner
                 tone="info"
                 title={t("remittance.awaiting")}
-                description={`${t("remittance.declared")}: ${minorToMajor(data.openRemittance.declaredMinor)} ${data.currency}`}
+                description={`${t("remittance.declared")}: ${formatMoney(data.openRemittance.declaredMinor, data.currency)}`}
               />
             ) : (
               <SubmitForm
                 expectedMinor={data.summary.expectedMinor}
                 canSubmit={data.status !== "UP_TO_DATE" || data.cashInHandMinor > 0}
+                currency={data.currency}
               />
             )}
           </>
@@ -97,7 +101,7 @@ export function MyCashScreen() {
         <DepositOrdersPanel mode="mine" />
 
         <Text variant="heading">{t("cash.expenses.mineTitle")}</Text>
-        <ExpenseRequestForm />
+        <ExpenseRequestForm currency={data.currency} />
         <ExpensesPanel mode="mine" currency={data.currency} />
 
         <Text variant="heading">{t("remittance.history")}</Text>
@@ -107,26 +111,58 @@ export function MyCashScreen() {
   );
 }
 
-/** Declaración de lo que entrega; se prellena con lo esperado según el libro. */
-function SubmitForm({ expectedMinor, canSubmit }: { expectedMinor: number; canSubmit: boolean }) {
-  const { t } = useT();
+/**
+ * Declaración de lo que entrega; se prellena con lo esperado según el libro. Antes de enviar se
+ * confirma lo declarado frente a lo esperado (la rendición queda sellada) y al éxito se avisa con
+ * un toast: el formulario desaparece y sin aviso parecería que no pasó nada.
+ */
+function SubmitForm({
+  expectedMinor,
+  canSubmit,
+  currency,
+}: {
+  expectedMinor: number;
+  canSubmit: boolean;
+  currency: string;
+}) {
+  const { t, tf } = useT();
+  const toast = useToast();
   const submit = useSubmitRemittance();
-  const [amount, setAmount] = useState(String(minorToMajor(expectedMinor)));
+  const [amountText, setAmountText] = useState(moneyInputText(expectedMinor));
+  const [amountMinor, setAmountMinor] = useState<number | null>(expectedMinor);
   const [note, setNote] = useState("");
+  // Declaración ya validada a la espera de confirmación explícita (`null` = sin modal).
+  const [pending, setPending] = useState<SubmitRemittanceInput | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const onSubmit = () => {
     setError(null);
+    if (amountMinor === null) {
+      setError(t("money.required"));
+      return;
+    }
     const parsed = submitRemittanceInput.safeParse({
-      declaredMinor: majorToMinor(Number(amount) || 0),
+      declaredMinor: amountMinor,
       ...(note.trim() ? { note: note.trim() } : {}),
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? t("errors.validation"));
       return;
     }
-    submit.mutate(parsed.data, {
-      onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+    setPending(parsed.data);
+  };
+
+  const confirm = () => {
+    if (!pending) return;
+    submit.mutate(pending, {
+      onSuccess: () => {
+        setPending(null);
+        toast.show({ title: t("remittance.submit.success"), tone: "success" });
+      },
+      onError: (err) => {
+        setPending(null);
+        setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
+      },
     });
   };
 
@@ -135,8 +171,14 @@ function SubmitForm({ expectedMinor, canSubmit }: { expectedMinor: number; canSu
       <Stack gap="sm">
         <Text variant="label">{t("remittance.submit.title")}</Text>
         {error ? <Banner tone="danger" title={error} /> : null}
-        <Field label={t("remittance.submit.amount")} hint={t("remittance.submit.amountHint")} required>
-          <Input keyboardType="numeric" value={amount} onChangeText={setAmount} />
+        <Field label={t("remittance.submit.amount")} hint={t("money.hint")} required>
+          <MoneyInput
+            value={amountText}
+            onChangeText={setAmountText}
+            onChangeAmount={setAmountMinor}
+            currency={currency}
+            invalidLabel={t("money.invalid")}
+          />
         </Field>
         <Field label={t("remittance.submit.note")}>
           <Input value={note} onChangeText={setNote} multiline />
@@ -144,7 +186,7 @@ function SubmitForm({ expectedMinor, canSubmit }: { expectedMinor: number; canSu
         <Button
           label={t("remittance.submit.action")}
           loading={submit.isPending}
-          disabled={!canSubmit}
+          disabled={!canSubmit || amountMinor === null}
           block
           onPress={onSubmit}
         />
@@ -154,6 +196,20 @@ function SubmitForm({ expectedMinor, canSubmit }: { expectedMinor: number; canSu
           </Text>
         ) : null}
       </Stack>
+      <ConfirmModal
+        visible={pending !== null}
+        title={t("remittance.submit.confirmTitle")}
+        description={tf("remittance.submit.confirmBody", {
+          declared: formatMoney(pending?.declaredMinor ?? 0, currency),
+          expected: formatMoney(expectedMinor, currency),
+        })}
+        confirmLabel={t("common.confirm")}
+        cancelLabel={t("common.cancel")}
+        loading={submit.isPending}
+        onConfirm={confirm}
+        onCancel={() => setPending(null)}
+        closeLabel={t("common.close")}
+      />
     </Card>
   );
 }

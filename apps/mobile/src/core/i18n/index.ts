@@ -62,7 +62,6 @@ const es = {
   "credit.new.plan.placeholder": "Selecciona un plan",
   "credit.new.plan.hint": "Un plan pre-llena interés, cuotas y periodicidad. Puedes ajustarlos.",
   "credit.new.frequency": "Periodicidad",
-  "credit.new.principal.hint": "Monto en unidades mayores",
   "credit.new.principal.invalid": "Ingresa un capital válido mayor a 0",
   "credit.new.installments.invalid": "Ingresa un número de cuotas válido (mínimo 1)",
   "credit.new.quickCreate.title": "Nuevo cliente",
@@ -580,7 +579,6 @@ const es = {
   "remittance.collector": "Cobrador",
   "remittance.submit.title": "Rendir cuentas",
   "remittance.submit.amount": "Entrego",
-  "remittance.submit.amountHint": "Monto que entregas al coordinador (unidades mayores)",
   "remittance.submit.note": "Observaciones",
   "remittance.submit.action": "Declarar entrega",
   "remittance.submit.nothing": "No tienes cobros ni efectivo por rendir.",
@@ -1353,7 +1351,135 @@ const es = {
   "errors.channels.preferredDisabled":
     "El canal preferido para cobranza debe estar habilitado. Cámbialo en el mismo guardado.",
   "errors.channels.unreachable":
-    "El cliente no es alcanzable por ningún canal habilitado (p. ej. nunca escribió al bot de Telegram)."
+    "El cliente no es alcanzable por ningún canal habilitado (p. ej. nunca escribió al bot de Telegram).",
+
+  // ── Fase 0 · usabilidad: feedback, confirmaciones y dinero ──────────────────────────────────
+  // Comunes
+  "common.confirm": "Confirmar",
+  "common.back": "Volver",
+  "common.today": "Hoy",
+  "common.yesterday": "Ayer",
+  "common.irreversible": "Esta acción no se puede deshacer.",
+  "common.loadFailed": "No se pudo cargar la información.",
+  "common.loadFailedHint": "Revisa tu conexión e inténtalo de nuevo.",
+  "common.saved": "Cambios guardados",
+  "settings.noAccess": "No tienes acceso a la configuración.",
+  // Sesión y modo sin señal
+  "auth.sessionExpiredBanner": "Tu sesión expiró. Vuelve a iniciar sesión para continuar donde estabas.",
+  "auth.showPassword": "Mostrar",
+  "auth.hidePassword": "Ocultar",
+  "offline.pendingOne": "1 operación guardada sin señal, pendiente de envío.",
+  "offline.pendingMany": "{n} operaciones guardadas sin señal, pendientes de envío.",
+  "offline.droppedTitle": "Un abono guardado sin señal fue rechazado",
+  "offline.droppedBody": "El servidor no lo aceptó y no quedó registrado. Revísalo con tu coordinador.",
+  "offline.syncedTitle": "Abonos enviados",
+  "offline.syncedBody": "{n} operación(es) guardadas sin señal ya quedaron registradas.",
+  // Dinero (campo compartido)
+  "money.invalid": "Monto no válido. Escribe solo números, por ejemplo 20000 o 20.000",
+  "money.hint": "Ejemplo: 20000 (o 20.000). Usa coma para centavos.",
+  "money.required": "Escribe el monto",
+  // Registrar abono
+  "payments.success": "Abono registrado",
+  "payments.successBalance": "Saldo restante: {amount}",
+  "payments.queued": "Abono guardado sin señal",
+  "payments.queuedHint": "Se enviará solo al recuperar la red. No lo registres de nuevo.",
+  "payments.context.client": "Cliente",
+  "payments.context.dueToday": "Cuota de hoy",
+  "payments.context.outstanding": "Saldo pendiente",
+  "payments.context.daysOverdue": "Días de atraso",
+  "payments.useDue": "Cuota de hoy",
+  "payments.useOutstanding": "Saldo total",
+  // Panel de inicio
+  "home.overdueRate": "{pct}% en mora",
+  "home.fraudRate": "{pct}% del total",
+  // Reporte diario
+  "cash.report.of": "Reporte del {date}",
+  // Confirmaciones de dinero (agente C)
+  "remittance.receive.zeroTitle": "Recibir sin efectivo",
+  "remittance.receive.zeroBody":
+    "Vas a registrar que contaste 0. Todo el efectivo esperado ({expected}) quedará como deuda del cobrador.",
+  "remittance.receive.shortfallTitle": "Recibir con faltante",
+  "remittance.receive.shortfallBody":
+    "Contaste {counted} de {expected}. El faltante de {shortfall} quedará como deuda del cobrador.",
+  "remittance.forgive.confirmTitle": "Condonar la deuda",
+  "remittance.forgive.confirmBody":
+    "La deuda de {amount} del cobrador quedará en cero. Queda en la auditoría y no se puede deshacer.",
+  "remittance.submit.confirmTitle": "Declarar entrega",
+  "remittance.submit.confirmBody": "Vas a declarar que entregas {declared}. Según el libro debes entregar {expected}.",
+  "remittance.submit.success": "Entrega declarada. Tu coordinador la recibirá y la contará.",
+  "cash.count.confirmTitle": "Registrar arqueo",
+  "cash.count.confirmBody":
+    "Contaste {counted}; el libro espera {expected}. El arqueo queda sellado y no se puede editar.",
+  "cash.count.zeroBody":
+    "Vas a registrar que contaste 0 en {box}. El descuadre será de {expected}. El arqueo queda sellado.",
+  "cash.adjust.confirmTitle": "Ajustar saldo al arqueo",
+  "cash.adjust.confirmBody":
+    "El saldo del libro pasará a {counted}. La diferencia de {diff} queda registrada como ajuste y no se puede deshacer.",
+  "settlement.close.confirmTitle": "Cerrar el período",
+  "settlement.close.confirmBody":
+    "Vas a cerrar el período {from} – {to}. Las cifras quedan selladas y no se pueden deshacer.",
+  "deposit.verify.confirmTitle": "Confirmar verificación",
+  "deposit.verify.confirmBody": "Vas a dar por verificada la consignación de {amount}. No se puede deshacer.",
+  "expenses.approve.confirmTitle": "Aprobar gasto",
+  "expenses.approve.confirmBody": "Se pagarán {amount} desde {box}. El movimiento queda en el libro.",
+  // Confirmaciones de borrado y de usuarios (agente B)
+  "zones.delete.confirmTitle": "Eliminar zona",
+  "zones.delete.confirmBody":
+    "Vas a eliminar la zona {name}. Los usuarios y canales asignados a ella perderán su alcance. No se puede deshacer.",
+  "plans.delete.confirmTitle": "Eliminar plan",
+  "plans.delete.confirmBody": "Vas a eliminar el plan {name}. Los créditos ya otorgados conservan sus condiciones.",
+  "cash.config.deleteBox.confirmTitle": "Eliminar caja",
+  "cash.config.deleteBox.confirmBody": "Vas a eliminar la caja {name}. Sus movimientos históricos se conservan.",
+  "cash.config.deleteAccount.confirmTitle": "Eliminar cuenta bancaria",
+  "cash.config.deleteAccount.confirmBody": "Vas a eliminar la cuenta {name} y sus credenciales. No se puede deshacer.",
+  "lists.delete.confirmTitle": "Eliminar lista",
+  "lists.delete.confirmBody": "Vas a eliminar la lista {name}. Los clientes no se borran, solo la agrupación.",
+  "whatsapp.channel.delete.confirmTitle": "Desvincular número de WhatsApp",
+  "whatsapp.channel.delete.confirmBody":
+    "El número dejará de atender esta zona y se borrarán sus credenciales de Meta. No se puede deshacer.",
+  "users.toggle.deactivateTitle": "Desactivar usuario",
+  "users.toggle.deactivateBody": "{email} no podrá iniciar sesión hasta que lo actives de nuevo.",
+  "users.toggle.activateTitle": "Activar usuario",
+  "users.toggle.activateBody": "{email} podrá iniciar sesión de nuevo.",
+  "users.inactive": "Inactivo",
+  // Avisos que antes usaban Alert.alert (sin efecto en web)
+  "review.docs.retryDone": "Lectura con IA completada",
+  "review.docs.retryFailed": "No se pudo reintentar la lectura con IA.",
+  "map.locationRequiredTitle": "Ubicación requerida",
+  "map.locationRequiredBody": "Activa el permiso de ubicación para trazar la ruta de cobro.",
+  "map.routeFailed": "No se pudo generar la ruta de cobro.",
+  "reminder.confirmTitle": "Enviar recordatorio de cobro",
+  "reminder.confirmBody": "El cliente recibirá ahora un mensaje con su cuota de hoy.",
+  "reminder.failed": "No se pudo enviar el recordatorio.",
+  // ── Fase 0 · claves adicionales del agente B (confirmaciones y estados) ───────────────────
+  // Recordatorio de cobro desde el listado (antes textos fijos en el botón)
+  "reminder.sentTitle": "Recordatorio enviado",
+  "reminder.sentBody": "El recordatorio de cobro salió por {channel}.",
+  "reminder.notSentTitle": "No se envió",
+  "reminder.reason.ALREADY_SENT_TODAY": "Ya se envió un recordatorio a este cliente hoy.",
+  "reminder.reason.NOTHING_DUE": "El cliente no tiene cuota por cobrar hoy.",
+  "reminder.reason.NO_PIX_KEY": "Configura la llave PIX del tenant (Ajustes) para poder cobrar.",
+  "reminder.reason.NO_ACTIVE_CREDIT": "El cliente no tiene un crédito activo o teléfono registrado.",
+  "reminder.reason.NO_REACHABLE_CHANNEL":
+    "El cliente no es alcanzable por ningún canal habilitado (p. ej. nunca escribió al bot).",
+  "reminder.a11y.whatsapp": "Enviar recordatorio de cobro por WhatsApp",
+  "reminder.a11y.generic": "Enviar recordatorio de cobro",
+  // Nueva lectura con IA de un documento del expediente
+  "review.docs.identified": "IA identificó: {type} · Confianza {confidence}%",
+  "review.docs.notReadTitle": "No se pudo leer",
+  "review.docs.tryAgain": "Inténtalo de nuevo.",
+  // Mapa de cobro: ruta sin optimizar (OSRM no disponible)
+  "map.routeDegradedTitle": "Ruta sin optimizar",
+  "map.routeDegradedBody": "El motor de rutas no estuvo disponible; se muestran los clientes sin orden óptimo.",
+  // Liquidación: el contrato no expone las fechas del próximo período a cerrar; se dice cuál es
+  "settlement.close.confirmBodyPending":
+    "Vas a cerrar el período terminado más antiguo que sigue sin cerrar ({n} pendiente(s)). Las cifras quedan selladas y no se pueden deshacer.",
+  // Roles que faltaban para el subtítulo del listado de usuarios
+  "users.role.admin": "Administrador",
+  "users.role.superAdmin": "Superadministrador",
+  // ── Fase 0 · claves adicionales del agente C (formularios de dinero) ──────────────────────
+  "common.dateFormatHint": "AAAA-MM-DD",
+  "common.dateTimeFormatHint": "AAAA-MM-DD HH:MM",
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1375,13 +1501,13 @@ const ptBR: Partial<Record<MessageKey, string>> = {
 
 const DICTS: Record<Locale, Partial<Record<MessageKey, string>>> = { es, "pt-BR": ptBR };
 
+/**
+ * Idioma de la interfaz del OPERADOR. Hoy es siempre `es`: el diccionario pt-BR cubre menos del 1 %
+ * de las claves y autodetectarlo por el dispositivo dejaba una interfaz mezclada ("Entrar / Senha"
+ * y el resto en español). El idioma en que se atiende al CLIENTE por chat es otro ajuste, por
+ * empresa (Ajustes → General). Cuando pt-BR esté completo, aquí entra la detección o un selector.
+ */
 function detectLocale(): Locale {
-  try {
-    const tag = new Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase();
-    if (tag.startsWith("pt")) return "pt-BR";
-  } catch {
-    /* sin Intl: usar es */
-  }
   return "es";
 }
 
@@ -1395,7 +1521,20 @@ export function t(key: MessageKey): string {
   return DICTS[activeLocale][key] ?? es[key] ?? key;
 }
 
+/** Valores que se interpolan en un texto: `{n}`, `{amount}`, `{name}`… */
+export type MessageVars = Record<string, string | number>;
+
+/**
+ * Traduce e interpola: `tf("offline.pendingMany", { n: 3 })` → "3 operaciones…". Sustituye cada
+ * `{clave}` por su valor; las claves sin valor se dejan tal cual para que el hueco sea visible.
+ */
+export function tf(key: MessageKey, vars: MessageVars): string {
+  return t(key).replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in vars ? String(vars[name]) : match,
+  );
+}
+
 /** Hook de traducción. Hoy el locale es de módulo; el hook deja lista la futura reactividad. */
 export function useT() {
-  return { t, locale: activeLocale };
+  return { t, tf, locale: activeLocale };
 }

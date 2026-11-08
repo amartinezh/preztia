@@ -33,6 +33,15 @@ export type CashPaymentPayload = {
   cashBoxId?: string;
 };
 
+/** Variables del abono: el payload más la clave que la pantalla fija por intento de formulario. */
+export type RegisterCashPaymentVariables = CashPaymentPayload & {
+  /**
+   * Clave de idempotencia ESTABLE mientras la persona reintenta el mismo abono (timeout, "por si
+   * acaso"): el servidor deduplica. La pantalla la genera una vez y la renueva solo tras éxito.
+   */
+  idempotencyKey: string;
+};
+
 export const paymentKeys = {
   all: ["payments"] as const,
   list: (creditId: string) => [...paymentKeys.all, "list", creditId] as const,
@@ -132,16 +141,16 @@ export type RegisterResult =
 /**
  * Registra un abono en efectivo de forma IDEMPOTENTE.
  *
- * - Genera UNA `Idempotency-Key` por operación; se reutiliza en cada reenvío.
- * - Si falla por red (offline/timeout), encola la operación con la MISMA clave para
- *   reintentarla al recuperar conexión: sin doble abono (§3.7 confiabilidad).
+ * - La `Idempotency-Key` la fija la pantalla por intento de formulario (no por toque): un segundo
+ *   toque o un reintento manual tras timeout llega con la MISMA clave y el servidor lo deduplica.
+ * - Si falla por red (offline/timeout), encola la operación con esa misma clave para reintentarla
+ *   al recuperar conexión: sin doble abono (§3.7 confiabilidad).
  * - React Query no reintenta mutaciones (el reintento seguro lo gobierna el transporte/cola).
  */
 export function useRegisterCashPayment() {
   const qc = useQueryClient();
-  return useMutation<RegisterResult, unknown, CashPaymentPayload>({
-    mutationFn: async ({ creditId, amountMinor, paidOn, cashBoxId }) => {
-      const idempotencyKey = newIdempotencyKey();
+  return useMutation<RegisterResult, unknown, RegisterCashPaymentVariables>({
+    mutationFn: async ({ creditId, amountMinor, paidOn, cashBoxId, idempotencyKey }) => {
       const extra = { ...(paidOn ? { paidOn } : {}), ...(cashBoxId ? { cashBoxId } : {}) };
       try {
         const result = unwrap(

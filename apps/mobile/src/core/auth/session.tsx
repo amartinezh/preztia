@@ -9,12 +9,17 @@ import { tokenStorage, type StoredTokens } from "./token-storage";
 
 type Status = "loading" | "authenticated" | "unauthenticated";
 
+/** Por qué se cerró la sesión: la persona lo pidió o el servidor dejó de aceptar el token. */
+export type SignOutReason = "user" | "expired";
+
 type SessionContextValue = {
   status: Status;
   claims: SessionClaims | null;
   role: UserRole | null;
+  /** Motivo del último cierre de sesión (para explicarlo en la pantalla de acceso). */
+  lastSignOutReason: SignOutReason | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: (reason?: SignOutReason) => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -26,6 +31,7 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
   const [claims, setClaims] = useState<SessionClaims | null>(null);
+  const [lastSignOutReason, setLastSignOutReason] = useState<SignOutReason | null>(null);
 
   // Aplica tokens válidos a memoria + almacenamiento seguro + snapshot del transporte.
   const applyTokens = useMemo(
@@ -48,11 +54,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useMemo(
-    () => async (): Promise<void> => {
+    () => async (reason: SignOutReason = "user"): Promise<void> => {
       await tokenStorage.clear();
       authState.clear();
       queryClient.clear(); // no filtrar datos de un tenant a la siguiente sesión
       setClaims(null);
+      setLastSignOutReason(reason);
       setStatus("unauthenticated");
     },
     [],
@@ -63,15 +70,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       async (email: string, password: string): Promise<void> => {
         const tokens = unwrap(await api.login({ body: { email, password } }));
         await applyTokens(tokens);
+        setLastSignOutReason(null);
         logger.info("session_signed_in", { tenantId: authState.getTenantId() ?? undefined });
       },
     [applyTokens],
   );
 
-  // El transporte cierra sesión ante un 401 del backend.
+  // El transporte cierra sesión ante un 401 del backend (token vencido o revocado). Un 401 del
+  // propio login (contraseña errónea) no es una sesión expirada: ahí no había sesión.
   useEffect(() => {
     authState.registerUnauthorizedHandler(() => {
-      void signOut();
+      if (authState.getAccessToken()) void signOut("expired");
     });
   }, [signOut]);
 
@@ -90,8 +99,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [applyTokens]);
 
   const value = useMemo<SessionContextValue>(
-    () => ({ status, claims, role: claims?.role ?? null, signIn, signOut }),
-    [status, claims, signIn, signOut],
+    () => ({ status, claims, role: claims?.role ?? null, lastSignOutReason, signIn, signOut }),
+    [status, claims, lastSignOutReason, signIn, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

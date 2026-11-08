@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Pressable } from "react-native";
 import type { MyRouteStop, StopOutcome } from "@preztiaos/contracts";
-import { Banner, Button, Field, Input, majorToMinor, minorToMajor, Modal, Row, Stack, Text } from "@preztiaos/ui";
+import { Banner, Button, Field, Input, Modal, MoneyInput, Row, Stack, Text } from "@preztiaos/ui";
 
+import { moneyInputText } from "@/components/money-input-text";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
+import { newIdempotencyKey } from "@/core/ids";
 import { useResolveRouteStop } from "../api/queries";
 
 const OUTCOMES: StopOutcome[] = ["PAID", "NOT_PAID", "PROMISE", "NOT_FOUND"];
@@ -17,32 +19,41 @@ export function ResolveStopModal({ stop, onClose }: { stop: MyRouteStop; onClose
   const { t } = useT();
   const resolve = useResolveRouteStop();
   const [outcome, setOutcome] = useState<StopOutcome>("PAID");
-  const [amount, setAmount] = useState(String(minorToMajor(stop.amountToCollectMinor)));
+  const [amountText, setAmountText] = useState(moneyInputText(stop.amountToCollectMinor));
+  const [amountMinor, setAmountMinor] = useState<number | null>(stop.amountToCollectMinor);
   const [reason, setReason] = useState("");
   const [promiseDate, setPromiseDate] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Clave estable por intento: un reintento manual tras perder la respuesta no abona dos veces.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => newIdempotencyKey());
+  const paidAmountMissing = outcome === "PAID" && (amountMinor === null || amountMinor <= 0);
 
   const submit = () => {
+    if (paidAmountMissing) return;
     setError(null);
     resolve.mutate(
       {
         id: stop.id,
+        idempotencyKey,
         outcome,
-        ...(outcome === "PAID" ? { collectedMinor: majorToMinor(Number(amount) || 0) } : {}),
+        ...(outcome === "PAID" && amountMinor !== null ? { collectedMinor: amountMinor } : {}),
         ...(outcome === "NOT_PAID" && reason.trim() ? { reason: reason.trim() } : {}),
         ...(outcome === "PROMISE" && promiseDate.trim() ? { promiseDate: promiseDate.trim() } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
       },
       {
-        onSuccess: onClose,
+        onSuccess: () => {
+          setIdempotencyKey(newIdempotencyKey());
+          onClose();
+        },
         onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
       },
     );
   };
 
   return (
-    <Modal visible onClose={onClose} title={stop.clientName}>
+    <Modal visible onClose={onClose} title={stop.clientName} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Row gap="sm" className="flex-wrap">
@@ -67,7 +78,13 @@ export function ResolveStopModal({ stop, onClose }: { stop: MyRouteStop; onClose
         </Row>
         {outcome === "PAID" ? (
           <Field label={t("route.resolve.collected")} hint={t("route.resolve.collectedHint")} required>
-            <Input keyboardType="numeric" value={amount} onChangeText={setAmount} />
+            <MoneyInput
+              value={amountText}
+              onChangeText={setAmountText}
+              onChangeAmount={setAmountMinor}
+              currency={stop.currency}
+              invalidLabel={t("money.invalid")}
+            />
           </Field>
         ) : null}
         {outcome === "NOT_PAID" ? (
@@ -76,14 +93,20 @@ export function ResolveStopModal({ stop, onClose }: { stop: MyRouteStop; onClose
           </Field>
         ) : null}
         {outcome === "PROMISE" ? (
-          <Field label={t("route.resolve.promiseDate")} hint="AAAA-MM-DD" required>
+          <Field label={t("route.resolve.promiseDate")} hint={t("common.dateFormatHint")} required>
             <Input value={promiseDate} onChangeText={setPromiseDate} />
           </Field>
         ) : null}
         <Field label={t("route.resolve.note")}>
           <Input value={note} onChangeText={setNote} multiline />
         </Field>
-        <Button label={t("route.resolve.submit")} loading={resolve.isPending} block onPress={submit} />
+        <Button
+          label={t("route.resolve.submit")}
+          loading={resolve.isPending}
+          disabled={paidAmountMissing}
+          block
+          onPress={submit}
+        />
       </Stack>
     </Modal>
   );

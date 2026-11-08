@@ -20,7 +20,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   return (
     <TextInput
       ref={ref}
-      placeholderTextColor="#a1a1aa"
+      placeholderTextColor="#71717a"
       className={`${BASE} ${borderTone} ${className ?? ""}`}
       {...rest}
     />

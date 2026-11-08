@@ -89,6 +89,15 @@ export function useCashDashboard() {
   });
 }
 
+/**
+ * Moneda del tenant (la del libro de cajas) para capturar y formatear montos fuera de Dinero
+ * (otorgar, migrar, aprobar). Vacía mientras carga: `formatMoney` degrada sin romper. Igual que el
+ * tablero, solo la ven ADMIN/COORDINATOR, que son quienes originan deuda.
+ */
+export function useTenantCurrency(): string {
+  return useCashDashboard().data?.currency ?? "";
+}
+
 /** Cajas/cuentas que la zona puede usar para desembolsar (el servidor aplica la regla). */
 export function useFundingBoxes(zoneId: string | null) {
   return useQuery({

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Linking } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { CollectionLogEntry } from "@preztiaos/contracts";
 import {
@@ -11,12 +12,13 @@ import {
   Row,
   Stack,
   Text,
+  useToast,
 } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
-import { useCreditCollection } from "../api/queries";
+import { useAccountDetail } from "@/features/accounts/api/queries";
 import {
   useAddObservation,
   useCollectionLog,
@@ -33,6 +35,7 @@ import { CollectionLogSection } from "../components/collection-log-section";
 export function VisitDetailScreen({ creditId }: { creditId: string }) {
   const { t } = useT();
   const router = useRouter();
+  const toast = useToast();
   const params = useLocalSearchParams<{
     name?: string;
     overdue?: string;
@@ -42,7 +45,9 @@ export function VisitDetailScreen({ creditId }: { creditId: string }) {
     phone?: string;
   }>();
 
-  const panel = useCreditCollection(creditId);
+  // La ficha del crédito la puede leer el cobrador (el panel de cobranza por chat no: es del
+  // revisor). Sirve de respaldo cuando la pantalla se abre sin los datos en la URL (recarga web).
+  const account = useAccountDetail(creditId);
   const log = useCollectionLog(creditId);
   const addObs = useAddObservation(creditId);
   const markVisited = useMarkVisited(creditId);
@@ -65,8 +70,10 @@ export function VisitDetailScreen({ creditId }: { creditId: string }) {
     return !latestVisit || Date.parse(latestNote.at) > Date.parse(latestVisit.at);
   }, [entries]);
 
-  const name = params.name || panel.data?.firstName || creditId.slice(0, 8);
-  const currency = params.currency || panel.data?.currency || "COP";
+  const name = params.name || account.data?.borrowerName || creditId.slice(0, 8);
+  const currency = params.currency || account.data?.currency || "COP";
+  const outstandingMinor = params.outstanding ? Number(params.outstanding) : account.data?.outstandingMinor;
+  const phone = params.phone || account.data?.phone || "";
 
   const translate = (err: unknown) =>
     setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
@@ -86,6 +93,7 @@ export function VisitDetailScreen({ creditId }: { creditId: string }) {
     markVisited.mutate(undefined, {
       onSuccess: () => {
         setMarked(true);
+        toast.show({ tone: "success", title: t("visits.marked") });
         router.back();
       },
       onError: translate,
@@ -109,20 +117,24 @@ export function VisitDetailScreen({ creditId }: { creditId: string }) {
                   .replace("{d}", params.days ?? "0")}
               </Text>
             ) : null}
-            {params.outstanding ? (
+            {outstandingMinor !== undefined ? (
               <Row className="justify-between">
                 <Text tone="muted">{t("visits.outstanding")}</Text>
-                <MoneyText
-                  variant="label"
-                  amountMinor={Number(params.outstanding)}
-                  currency={currency}
-                />
+                <MoneyText variant="label" amountMinor={outstandingMinor} currency={currency} />
               </Row>
             ) : null}
-            {params.phone ? (
+            {phone ? (
               <Row className="justify-between">
                 <Text tone="muted">{t("visits.phone")}</Text>
-                <Text variant="label">{params.phone}</Text>
+                <Row gap="sm">
+                  <Text variant="label">{phone}</Text>
+                  <Button
+                    label={t("route.mine.call")}
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => void Linking.openURL(`tel:${phone}`)}
+                  />
+                </Row>
               </Row>
             ) : null}
             <Button

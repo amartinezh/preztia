@@ -14,8 +14,8 @@ import {
   Field,
   Input,
   ListItem,
-  majorToMinor,
   Modal,
+  MoneyInput,
   Select,
   Spinner,
   Stack,
@@ -26,10 +26,11 @@ import {
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
+import { newIdempotencyKey } from "@/core/ids";
 import { useBorrowersList, useCreateBorrower } from "@/features/borrowers/api/queries";
 import { useInterestRules } from "../hooks/use-interest-rules";
 import { useZonesList } from "@/features/zones/api/queries";
-import { useFundingBoxes } from "@/features/cash/api/boxes-queries";
+import { useFundingBoxes, useTenantCurrency } from "@/features/cash/api/boxes-queries";
 import { FundingBoxPicker, isFundingInsufficient } from "@/features/cash/components/funding-box-picker";
 import { useGrantCredit } from "../api/queries";
 
@@ -67,12 +68,17 @@ export function GrantCreditScreen() {
   const grant = useGrantCredit();
   const zones = useZonesList();
   const rules = useInterestRules();
+  const currency = useTenantCurrency();
 
   const [borrower, setBorrower] = useState<SelectedBorrower | null>(null);
   const [zoneId, setZoneId] = useState("");
   // `null` significa "aún no elegí": cae al plan por defecto del tenant hasta que el usuario elija.
   const [planChoice, setPlanChoice] = useState<string | null>(null);
+  // Texto tecleado y monto leído en unidades menores (`null` = vacío o no es un monto).
   const [principal, setPrincipal] = useState("");
+  const [principalMinor, setPrincipalMinor] = useState<number | null>(null);
+  // Clave estable por intento de formulario: un reintento tras un timeout no desembolsa dos veces.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => newIdempotencyKey());
   // `null` en cada override significa "usa lo que dicta el plan"; cualquier edición lo fija.
   const [interestOverride, setInterestOverride] = useState<string | null>(null);
   const [installmentsOverride, setInstallmentsOverride] = useState<string | null>(null);
@@ -126,22 +132,22 @@ export function GrantCreditScreen() {
     hint: z.path,
   }));
 
-  const principalNum = Number(principal);
-  const principalMinor = Number.isFinite(principalNum) ? majorToMinor(principalNum) : 0;
+  // Sin un monto legible, cupo y saldo se evalúan con 0: no bloquean; la validación lo pide luego.
+  const principalMinorOrZero = principalMinor ?? 0;
   const overLimit =
-    !!borrower && borrower.creditLimitMinor > 0 && principalMinor > borrower.creditLimitMinor;
+    !!borrower && borrower.creditLimitMinor > 0 && principalMinorOrZero > borrower.creditLimitMinor;
   const blocked = !!borrower?.creditBlocked;
   const fundingBoxes = useFundingBoxes(zoneId || null);
   const selectedFundingBox =
     (fundingBoxes.data?.items ?? []).find((b) => b.id === fundingCashBoxId) ?? null;
-  const fundsInsufficient = isFundingInsufficient(selectedFundingBox, principalMinor);
+  const fundsInsufficient = isFundingInsufficient(selectedFundingBox, principalMinorOrZero);
 
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
     if (!borrower) next.borrowerId = t("credit.new.borrower.required");
     if (!zoneId) next.zoneId = t("credit.new.zone.required");
     if (!fundingCashBoxId) next.fundingCashBoxId = t("credit.new.funding.required");
-    if (!Number.isFinite(principalNum) || principalNum <= 0)
+    if (principalMinor === null || principalMinor <= 0)
       next.principalMinor = t("credit.new.principal.invalid");
     const installmentsNum = Math.trunc(Number(installments));
     if (!Number.isFinite(Number(installments)) || installmentsNum < 1)
@@ -159,7 +165,8 @@ export function GrantCreditScreen() {
   const onSubmit = () => {
     setSubmitError(null);
     const clientErrors = validate();
-    if (Object.keys(clientErrors).length > 0) {
+    // Un capital ilegible ya figura en `clientErrors`; comprobarlo aquí además acota el tipo.
+    if (principalMinor === null || Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors);
       return;
     }
@@ -186,10 +193,16 @@ export function GrantCreditScreen() {
       return;
     }
     setErrors({});
-    grant.mutate(parsed.data, {
-      onSuccess: (res) => router.replace(`/credit/${res.id}` as Href),
-      onError: (err) => setSubmitError(describeError(err)),
-    });
+    grant.mutate(
+      { ...parsed.data, idempotencyKey },
+      {
+        onSuccess: (res) => {
+          setIdempotencyKey(newIdempotencyKey());
+          router.replace(`/credit/${res.id}` as Href);
+        },
+        onError: (err) => setSubmitError(describeError(err)),
+      },
+    );
   };
 
   return (
@@ -242,16 +255,13 @@ export function GrantCreditScreen() {
           />
         </Field>
 
-        <Field
-          label={t("credit.new.principal")}
-          error={errors.principalMinor}
-          hint={t("credit.new.principal.hint")}
-          required
-        >
-          <Input
-            keyboardType="numeric"
+        <Field label={t("credit.new.principal")} error={errors.principalMinor} hint={t("money.hint")} required>
+          <MoneyInput
             value={principal}
             onChangeText={setPrincipal}
+            onChangeAmount={setPrincipalMinor}
+            currency={currency}
+            invalidLabel={t("money.invalid")}
             invalid={!!errors.principalMinor}
           />
         </Field>
@@ -296,7 +306,7 @@ export function GrantCreditScreen() {
             setFundingCashBoxId(id);
             setErrors((e) => ({ ...e, fundingCashBoxId: undefined }));
           }}
-          amountMinor={principalMinor}
+          amountMinor={principalMinorOrZero}
         />
         {errors.fundingCashBoxId ? (
           <Text variant="caption" tone="danger">
@@ -362,7 +372,12 @@ export function BorrowerPickerField({
         </Text>
       </Pressable>
 
-      <Modal visible={pickerOpen} onClose={() => setPickerOpen(false)} title={t("credit.new.borrower")}>
+      <Modal
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        title={t("credit.new.borrower")}
+        closeLabel={t("common.close")}
+      >
         <Stack gap="sm" className="p-4">
           <Input
             value={search}
@@ -460,7 +475,7 @@ function QuickCreateBorrowerModal({
   };
 
   return (
-    <Modal visible={visible} onClose={onClose} title={t("credit.new.quickCreate.title")}>
+    <Modal visible={visible} onClose={onClose} title={t("credit.new.quickCreate.title")} closeLabel={t("common.close")}>
       <Stack gap="md" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Field label={t("borrowers.field.nationalId")} required>

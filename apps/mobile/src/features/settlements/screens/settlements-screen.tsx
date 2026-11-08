@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable } from "react-native";
 import type { SettlementSummary } from "@preztiaos/contracts";
-import { Banner, Button, ErrorState, formatMoney, Row, Spinner, Stack, Text } from "@preztiaos/ui";
+import { Banner, Button, ConfirmModal, ErrorState, formatMoney, Row, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { DataTable, type DataRow } from "@/components/data-table";
@@ -49,15 +49,31 @@ export function SettlementsScreen() {
 }
 
 function CurrentSettlement() {
-  const { t } = useT();
+  const { t, tf } = useT();
   const { role } = useSession();
   const current = useCurrentSettlement();
   const close = useCloseSettlement();
   const [error, setError] = useState<string | null>(null);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+
+  // Sellar el período solo tras confirmar; el error queda en el Banner de la pantalla.
+  const confirmClose = () => {
+    setError(null);
+    close.mutate(undefined, {
+      onSettled: () => setConfirmingClose(false),
+      onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+    });
+  };
 
   if (current.isPending) return <Spinner label={t("common.loading")} />;
   if (current.isError || !current.data) {
-    return <ErrorState title={t("errors.unknown")} onRetry={() => void current.refetch()} />;
+    return (
+      <ErrorState
+        title={t("errors.unknown")}
+        retryLabel={t("common.retry")}
+        onRetry={() => void current.refetch()}
+      />
+    );
   }
   const data = current.data;
   return (
@@ -76,16 +92,25 @@ function CurrentSettlement() {
         <Button
           label={t("settlement.closeNext")}
           loading={close.isPending}
-          onPress={() => {
-            setError(null);
-            close.mutate(undefined, {
-              onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
-            });
-          }}
+          onPress={() => setConfirmingClose(true)}
         />
       ) : null}
       {error ? <Banner tone="danger" title={error} /> : null}
       <SettlementView view={data} />
+      {/* El contrato no trae las fechas del período que se va a sellar (la vista "en curso" es el
+          período calendario actual); se dice cuál es: el terminado más antiguo sin cerrar. */}
+      <ConfirmModal
+        visible={confirmingClose}
+        title={t("settlement.close.confirmTitle")}
+        description={tf("settlement.close.confirmBodyPending", { n: data.pendingClosures })}
+        confirmLabel={t("common.confirm")}
+        cancelLabel={t("common.cancel")}
+        closeLabel={t("common.close")}
+        tone="danger"
+        loading={close.isPending}
+        onConfirm={confirmClose}
+        onCancel={() => setConfirmingClose(false)}
+      />
     </Stack>
   );
 }

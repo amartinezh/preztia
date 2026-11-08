@@ -4,11 +4,12 @@ import {
   Banner,
   Button,
   Card,
+  ConfirmModal,
   Field,
+  formatMoney,
   Input,
-  majorToMinor,
-  minorToMajor,
   Modal,
+  MoneyInput,
   MoneyText,
   Row,
   Select,
@@ -19,6 +20,7 @@ import {
   type SelectOption,
 } from "@preztiaos/ui";
 
+import { moneyInputText } from "@/components/money-input-text";
 import { Screen } from "@/components/screen";
 import { useSession } from "@/core/auth/session";
 import { isApiError } from "@/core/errors";
@@ -130,7 +132,7 @@ function BoardCard({
         ) : null}
         {open ? (
           <Text variant="caption" tone="muted">
-            {t("remittance.declared")}: {minorToMajor(open.declaredMinor)} {row.currency} ·{" "}
+            {t("remittance.declared")}: {formatMoney(open.declaredMinor, row.currency)} ·{" "}
             {new Date(open.submittedAt).toLocaleString()}
             {open.collectorNote ? ` · ${open.collectorNote}` : ""}
           </Text>
@@ -151,28 +153,33 @@ function BoardCard({
 
 /**
  * Recepción con conteo: lo contado entra a la caja de oficina elegida; si es menos de lo esperado,
- * el faltante queda como deuda del cobrador (se muestra antes de confirmar).
+ * el faltante queda como deuda del cobrador. Recibir con 0 o con faltante convierte efectivo del
+ * cobrador en deuda y queda sellado: ambos casos exigen confirmación explícita antes de enviar.
  */
 function ReceiveModal({ row, onClose }: { row: RemittanceBoardRow; onClose: () => void }) {
-  const { t } = useT();
+  const { t, tf } = useT();
   const receive = useReceiveRemittance();
   const boxes = useCashBoxes();
   const declared = row.openRemittance?.declaredMinor ?? 0;
-  const [counted, setCounted] = useState(String(minorToMajor(declared)));
+  const [countedText, setCountedText] = useState(moneyInputText(declared));
+  const [countedMinor, setCountedMinor] = useState<number | null>(declared);
   const [destinationId, setDestinationId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Cajas de oficina: efectivo, activas y sin cobrador. El servidor valida además la zona.
   const officeOptions: SelectOption<string>[] = (boxes.data?.items ?? [])
     .filter((b) => b.type === "CASH" && b.active && b.assignedTo === null)
     .map((b) => ({ value: b.id, label: b.name }));
-  const countedMinor = majorToMinor(Number(counted) || 0);
-  const shortfallMinor = Math.max(0, row.cashInHandMinor - countedMinor);
+  const shortfallMinor = countedMinor === null ? 0 : Math.max(0, row.cashInHandMinor - countedMinor);
+  // El destino solo hace falta si entra efectivo; con 0 no hay nada que guardar en una caja.
+  const needsDestination = countedMinor !== null && countedMinor > 0;
+  const canSubmit = countedMinor !== null && (!needsDestination || destinationId !== null);
+  const money = (minor: number) => formatMoney(minor, row.currency);
 
-  const submit = () => {
-    if (!row.openRemittance) return;
-    setError(null);
+  const send = () => {
+    if (!row.openRemittance || countedMinor === null) return;
     receive.mutate(
       {
         id: row.openRemittance.id,
@@ -182,13 +189,27 @@ function ReceiveModal({ row, onClose }: { row: RemittanceBoardRow; onClose: () =
       },
       {
         onSuccess: onClose,
-        onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+        onError: (err) => {
+          setConfirming(false);
+          setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
+        },
       },
     );
   };
 
+  const submit = () => {
+    if (countedMinor === null) return;
+    setError(null);
+    // Con 0 o con faltante el efectivo pasa a deuda del cobrador: se confirma antes de sellar.
+    if (countedMinor === 0 || shortfallMinor > 0) {
+      setConfirming(true);
+      return;
+    }
+    send();
+  };
+
   return (
-    <Modal visible onClose={onClose} title={t("remittance.receive.title")}>
+    <Modal visible onClose={onClose} title={t("remittance.receive.title")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Row className="items-center justify-between">
@@ -199,10 +220,16 @@ function ReceiveModal({ row, onClose }: { row: RemittanceBoardRow; onClose: () =
           <Text tone="muted">{t("remittance.declared")}</Text>
           <MoneyText amountMinor={declared} currency={row.currency} />
         </Row>
-        <Field label={t("remittance.counted")} required>
-          <Input keyboardType="numeric" value={counted} onChangeText={setCounted} />
+        <Field label={t("remittance.counted")} hint={t("money.hint")} required>
+          <MoneyInput
+            value={countedText}
+            onChangeText={setCountedText}
+            onChangeAmount={setCountedMinor}
+            currency={row.currency}
+            invalidLabel={t("money.invalid")}
+          />
         </Field>
-        {countedMinor > 0 ? (
+        {needsDestination ? (
           <Field label={t("remittance.receive.destination")} required>
             <Select
               value={destinationId}
@@ -216,7 +243,7 @@ function ReceiveModal({ row, onClose }: { row: RemittanceBoardRow; onClose: () =
           <Banner
             tone="warning"
             title={t("remittance.receive.shortfallWarning")}
-            description={`${minorToMajor(shortfallMinor)} ${row.currency}`}
+            description={money(shortfallMinor)}
           />
         ) : null}
         <Field label={t("remittance.receive.note")}>
@@ -225,46 +252,84 @@ function ReceiveModal({ row, onClose }: { row: RemittanceBoardRow; onClose: () =
         <Button
           label={t("remittance.receive.confirm")}
           loading={receive.isPending}
-          disabled={countedMinor > 0 && !destinationId}
+          disabled={!canSubmit}
           block
           onPress={submit}
         />
       </Stack>
+      <ConfirmModal
+        visible={confirming}
+        title={countedMinor === 0 ? t("remittance.receive.zeroTitle") : t("remittance.receive.shortfallTitle")}
+        description={
+          countedMinor === 0
+            ? tf("remittance.receive.zeroBody", { expected: money(row.cashInHandMinor) })
+            : tf("remittance.receive.shortfallBody", {
+                counted: money(countedMinor ?? 0),
+                expected: money(row.cashInHandMinor),
+                shortfall: money(shortfallMinor),
+              })
+        }
+        confirmLabel={t("remittance.receive.confirm")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        loading={receive.isPending}
+        onConfirm={send}
+        onCancel={() => setConfirming(false)}
+        closeLabel={t("common.close")}
+      />
     </Modal>
   );
 }
 
-/** Cierre de deuda (solo ADMIN): nómina (se recupera) o condonación (pérdida), con motivo. */
+/**
+ * Cierre de deuda (solo ADMIN): nómina (se recupera) o condonación (pérdida), con motivo. Condonar
+ * borra deuda del cobrador y no se puede deshacer: exige confirmación explícita.
+ */
 function CloseDebtModal({ row, onClose }: { row: RemittanceBoardRow; onClose: () => void }) {
-  const { t } = useT();
+  const { t, tf } = useT();
   const close = useCloseDebt();
   const [type, setType] = useState<DebtClosureType>("PAYROLL");
-  const [amount, setAmount] = useState(String(minorToMajor(row.carriedDebtMinor)));
+  const [amountText, setAmountText] = useState(moneyInputText(row.carriedDebtMinor));
+  const [amountMinor, setAmountMinor] = useState<number | null>(row.carriedDebtMinor);
   const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const typeOptions: SelectOption<DebtClosureType>[] = [
     { value: "PAYROLL", label: t("remittance.debt.PAYROLL"), hint: t("remittance.debt.PAYROLLHint") },
     { value: "WRITE_OFF", label: t("remittance.debt.WRITE_OFF"), hint: t("remittance.debt.WRITE_OFFHint") },
   ];
 
-  const submit = () => {
-    setError(null);
+  const send = () => {
+    if (amountMinor === null) return;
     close.mutate(
       {
         collectorId: row.collectorId,
         type,
-        amountMinor: majorToMinor(Number(amount) || 0),
+        amountMinor,
         reason: reason.trim(),
       },
       {
         onSuccess: onClose,
-        onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+        onError: (err) => {
+          setConfirming(false);
+          setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
+        },
       },
     );
   };
 
+  const submit = () => {
+    setError(null);
+    // La nómina se recupera y va directo; la condonación es pérdida irreversible: se confirma.
+    if (type === "WRITE_OFF") {
+      setConfirming(true);
+      return;
+    }
+    send();
+  };
+
   return (
-    <Modal visible onClose={onClose} title={t("remittance.debt.title")}>
+    <Modal visible onClose={onClose} title={t("remittance.debt.title")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Row className="items-center justify-between">
@@ -274,8 +339,14 @@ function CloseDebtModal({ row, onClose }: { row: RemittanceBoardRow; onClose: ()
         <Field label={t("remittance.debt.type")} required>
           <Select value={type} options={typeOptions} onChange={setType} />
         </Field>
-        <Field label={t("common.amount")} required>
-          <Input keyboardType="numeric" value={amount} onChangeText={setAmount} />
+        <Field label={t("common.amount")} hint={t("money.hint")} required>
+          <MoneyInput
+            value={amountText}
+            onChangeText={setAmountText}
+            onChangeAmount={setAmountMinor}
+            currency={row.currency}
+            invalidLabel={t("money.invalid")}
+          />
         </Field>
         <Field label={t("remittance.debt.reason")} required>
           <Input value={reason} onChangeText={setReason} multiline />
@@ -283,11 +354,23 @@ function CloseDebtModal({ row, onClose }: { row: RemittanceBoardRow; onClose: ()
         <Button
           label={t("remittance.debt.confirm")}
           loading={close.isPending}
-          disabled={reason.trim().length < 3}
+          disabled={reason.trim().length < 3 || amountMinor === null || amountMinor <= 0}
           block
           onPress={submit}
         />
       </Stack>
+      <ConfirmModal
+        visible={confirming}
+        title={t("remittance.forgive.confirmTitle")}
+        description={tf("remittance.forgive.confirmBody", { amount: formatMoney(amountMinor ?? 0, row.currency) })}
+        confirmLabel={t("remittance.debt.confirm")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        loading={close.isPending}
+        onConfirm={send}
+        onCancel={() => setConfirming(false)}
+        closeLabel={t("common.close")}
+      />
     </Modal>
   );
 }

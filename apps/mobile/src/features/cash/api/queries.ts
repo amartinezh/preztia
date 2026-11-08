@@ -9,15 +9,17 @@ import { remittanceKeys } from "@/features/remittances/api/queries";
 export const cashKeys = {
   all: ["cash"] as const,
   expenses: (status?: ExpenseStatus) => [...cashKeys.all, "expenses", status ?? "all"] as const,
-  daily: () => [...cashKeys.all, "daily"] as const,
+  daily: (date?: string) => [...cashKeys.all, "daily", date ?? "today"] as const,
 };
 
 const PAGE_SIZE = 20;
 
-export function useDailyReport() {
+/** Reporte diario del día `date` (YYYY-MM-DD, fecha local del operador); sin fecha, el "hoy" del servidor. */
+export function useDailyReport(date?: string) {
   return useQuery({
-    queryKey: cashKeys.daily(),
-    queryFn: async () => unwrap(await api.getDailyReport({ headers: tenantHeader(), query: {} })),
+    queryKey: cashKeys.daily(date),
+    queryFn: async () =>
+      unwrap(await api.getDailyReport({ headers: tenantHeader(), query: date ? { date } : {} })),
   });
 }
 

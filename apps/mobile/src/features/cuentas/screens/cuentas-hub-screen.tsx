@@ -35,8 +35,9 @@ export function CuentasHubScreen() {
   } else if (can(role, "client:read")) {
     segments.push({ key: "clientes", label: t("clients.tab"), render: () => <MyClientsScreen /> });
   }
-  // b) Pagos + detalle completo de cada pago.
-  if (can(role, "payment:reconcile") || can(role, "payment:register")) {
+  // b) Pagos + detalle completo de cada pago (vista de gestión; el cobrador no concilia y la
+  //    pantalla le respondería "sin permiso").
+  if (can(role, "payment:reconcile")) {
     segments.push({ key: "pagos", label: t("payments.title"), render: () => <PaymentsHubScreen /> });
   }
   // c) Movimientos completos por cliente (ingresos/egresos). Vista de gestión (ADMIN/COORDINATOR).

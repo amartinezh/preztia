@@ -7,18 +7,20 @@ import {
   Card,
   Field,
   Input,
+  MoneyInput,
   Row,
   Select,
   Stack,
   Text,
-  majorToMinor,
-  minorToMajor,
+  formatMoney,
   type SelectOption,
 } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
+import { newIdempotencyKey } from "@/core/ids";
+import { useTenantCurrency } from "@/features/cash/api/boxes-queries";
 import { useZonesList } from "@/features/zones/api/queries";
 import { useRegisterMigratedCredit } from "../api/queries";
 import { BorrowerPickerField, type SelectedBorrower } from "./grant-credit-screen";
@@ -31,7 +33,9 @@ const FREQUENCIES: PlanFrequency[] = ["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY"];
 interface PaymentRow {
   key: number;
   paidOn: string;
+  /** Texto tecleado y su lectura en unidades menores (`null` = vacío o no es un monto). */
   amount: string;
+  amountMinor: number | null;
 }
 
 /**
@@ -44,11 +48,13 @@ export function MigrateCreditScreen() {
   const router = useRouter();
   const migrate = useRegisterMigratedCredit();
   const zones = useZonesList();
+  const currency = useTenantCurrency();
 
   const [borrower, setBorrower] = useState<SelectedBorrower | null>(null);
   const [zoneId, setZoneId] = useState("");
   const [legacyReference, setLegacyReference] = useState("");
   const [principal, setPrincipal] = useState("");
+  const [principalMinor, setPrincipalMinor] = useState<number | null>(null);
   const [interest, setInterest] = useState("");
   const [installments, setInstallments] = useState("");
   const [frequency, setFrequency] = useState<PlanFrequency>("DAILY");
@@ -56,13 +62,17 @@ export function MigrateCreditScreen() {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [nextKey, setNextKey] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  // Clave estable por intento de formulario: un reintento tras un timeout no registra dos créditos.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => newIdempotencyKey());
 
   const zoneOptions: SelectOption<string>[] = (zones.data?.items ?? []).map((z) => ({ value: z.id, label: z.name, hint: z.path }));
   const frequencyOptions = FREQUENCIES.map((f) => ({ value: f, label: t(`migrate.frequency.${f}`) }));
-  const paidTotalMinor = payments.reduce((acc, p) => acc + majorToMinor(Number(p.amount) || 0), 0);
+  const paidTotalMinor = payments.reduce((acc, p) => acc + (p.amountMinor ?? 0), 0);
+  // Mientras algún monto no sea legible no se envía: nunca se convierte en silencio a 0.
+  const amountsReadable = principalMinor !== null && payments.every((p) => p.amountMinor !== null);
 
   const addPayment = () => {
-    setPayments((rows) => [...rows, { key: nextKey, paidOn: "", amount: "" }]);
+    setPayments((rows) => [...rows, { key: nextKey, paidOn: "", amount: "", amountMinor: null }]);
     setNextKey((k) => k + 1);
   };
   const updatePayment = (key: number, patch: Partial<PaymentRow>) =>
@@ -71,26 +81,36 @@ export function MigrateCreditScreen() {
 
   const submit = () => {
     setError(null);
+    if (principalMinor === null) {
+      setError(t("money.required"));
+      return;
+    }
     const parsed = registerMigratedCreditInput.safeParse({
       borrowerId: borrower?.id,
       zoneId,
-      principalMinor: majorToMinor(Number(principal) || 0),
+      principalMinor,
       interestPct: Math.round((Number(interest.replace(",", ".")) || 0) * PERCENT_TO_BASE_THOUSAND),
       installmentsCount: Math.trunc(Number(installments)),
       frequency,
       startDate: startDate.trim(),
       ...(legacyReference.trim() ? { legacyReference: legacyReference.trim() } : {}),
-      payments: payments.map((p) => ({ paidOn: p.paidOn.trim(), amountMinor: majorToMinor(Number(p.amount) || 0) })),
+      payments: payments.map((p) => ({ paidOn: p.paidOn.trim(), amountMinor: p.amountMinor ?? 0 })),
     });
     if (!parsed.success) {
       setError(t("migrate.invalid"));
       return;
     }
-    migrate.mutate(parsed.data, {
-      onSuccess: (res) => router.replace(`/credit/${res.id}` as Href),
-      onError: (err) =>
-        setError(isApiError(err) ? (err.message && err.message !== err.messageKey ? err.message : t(err.messageKey)) : t("errors.unknown")),
-    });
+    migrate.mutate(
+      { ...parsed.data, idempotencyKey },
+      {
+        onSuccess: (res) => {
+          setIdempotencyKey(newIdempotencyKey());
+          router.replace(`/credit/${res.id}` as Href);
+        },
+        onError: (err) =>
+          setError(isApiError(err) ? (err.message && err.message !== err.messageKey ? err.message : t(err.messageKey)) : t("errors.unknown")),
+      },
+    );
   };
 
   return (
@@ -108,8 +128,14 @@ export function MigrateCreditScreen() {
           <Input value={legacyReference} onChangeText={setLegacyReference} />
         </Field>
 
-        <Field label={t("credit.new.principal")} required>
-          <Input keyboardType="numeric" value={principal} onChangeText={setPrincipal} />
+        <Field label={t("credit.new.principal")} hint={t("money.hint")} required>
+          <MoneyInput
+            value={principal}
+            onChangeText={setPrincipal}
+            onChangeAmount={setPrincipalMinor}
+            currency={currency}
+            invalidLabel={t("money.invalid")}
+          />
         </Field>
         <Field label={t("credit.new.interest")} hint={t("migrate.interestHint")} required>
           <Input keyboardType="numeric" value={interest} onChangeText={setInterest} />
@@ -127,7 +153,7 @@ export function MigrateCreditScreen() {
           </Stack>
         </Row>
         <Field label={t("migrate.startDate")} hint={t("migrate.startDateHint")} required>
-          <Input value={startDate} placeholder="AAAA-MM-DD" onChangeText={setStartDate} />
+          <Input value={startDate} placeholder={t("common.dateFormatHint")} onChangeText={setStartDate} />
         </Field>
 
         <Card>
@@ -137,10 +163,21 @@ export function MigrateCreditScreen() {
             {payments.map((p) => (
               <Row key={p.key} gap="sm" className="items-center">
                 <Stack className="flex-1">
-                  <Input value={p.paidOn} placeholder="AAAA-MM-DD" onChangeText={(v) => updatePayment(p.key, { paidOn: v })} />
+                  <Input
+                    value={p.paidOn}
+                    placeholder={t("common.dateFormatHint")}
+                    onChangeText={(v) => updatePayment(p.key, { paidOn: v })}
+                  />
                 </Stack>
                 <Stack className="flex-1">
-                  <Input keyboardType="numeric" value={p.amount} placeholder={t("common.amount")} onChangeText={(v) => updatePayment(p.key, { amount: v })} />
+                  <MoneyInput
+                    value={p.amount}
+                    placeholder={t("common.amount")}
+                    onChangeText={(v) => updatePayment(p.key, { amount: v })}
+                    onChangeAmount={(m) => updatePayment(p.key, { amountMinor: m })}
+                    currency={currency}
+                    invalidLabel={t("money.invalid")}
+                  />
                 </Stack>
                 <Button label="✕" variant="ghost" size="sm" onPress={() => removePayment(p.key)} />
               </Row>
@@ -148,12 +185,18 @@ export function MigrateCreditScreen() {
             <Button label={t("migrate.addPayment")} variant="secondary" size="sm" onPress={addPayment} />
             <Row className="justify-between">
               <Text tone="muted">{t("migrate.paidTotal")}</Text>
-              <Text variant="label">{minorToMajor(paidTotalMinor).toLocaleString()}</Text>
+              <Text variant="label">{formatMoney(paidTotalMinor, currency)}</Text>
             </Row>
           </Stack>
         </Card>
 
-        <Button label={t("migrate.submit")} loading={migrate.isPending} disabled={!borrower || !zoneId} block onPress={submit} />
+        <Button
+          label={t("migrate.submit")}
+          loading={migrate.isPending}
+          disabled={!borrower || !zoneId || !amountsReadable}
+          block
+          onPress={submit}
+        />
       </Stack>
     </Screen>
   );

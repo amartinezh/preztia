@@ -36,7 +36,7 @@ export function SettingsLayout() {
   if (!active) {
     return (
       <Screen>
-        <Text tone="muted">No tienes acceso a la configuración.</Text>
+        <Text tone="muted">{t("settings.noAccess")}</Text>
       </Screen>
     );
   }

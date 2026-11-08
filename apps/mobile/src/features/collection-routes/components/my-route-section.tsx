@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Linking } from "react-native";
 import type { MyRouteStop } from "@preztiaos/contracts";
-import { Badge, Button, Card, MoneyText, Row, Spinner, Stack, Text } from "@preztiaos/ui";
+import { Badge, Button, Card, ErrorState, MoneyText, Row, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
 import { useMarkRouteStopSeen, useMyRouteStops } from "../api/queries";
@@ -46,7 +46,17 @@ export function MyRouteSection() {
     <Stack gap="sm">
       <Text variant="heading">{t("route.mine.title")}</Text>
       {open.isPending ? <Spinner label={t("common.loading")} /> : null}
-      {!open.isPending && openItems.length === 0 ? <Text tone="muted">{t("route.mine.empty")}</Text> : null}
+      {open.isError ? (
+        <ErrorState
+          title={t("common.loadFailed")}
+          description={t("common.loadFailedHint")}
+          retryLabel={t("common.retry")}
+          onRetry={() => void open.refetch()}
+        />
+      ) : null}
+      {!open.isPending && !open.isError && openItems.length === 0 ? (
+        <Text tone="muted">{t("route.mine.empty")}</Text>
+      ) : null}
       {openItems.map((stop) => {
         const ageHours = Math.floor((now - Date.parse(stop.dispatchedAt)) / MS_PER_HOUR);
         return (

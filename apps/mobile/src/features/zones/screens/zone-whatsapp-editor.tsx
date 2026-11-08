@@ -5,6 +5,7 @@ import {
   Badge,
   Banner,
   Button,
+  ConfirmModal,
   Field,
   Input,
   Modal,
@@ -75,7 +76,7 @@ export function ZoneWhatsappEditor({
   const zoneChannels = (channels.data?.items ?? []).filter((c) => c.zoneId === zone.id);
 
   return (
-    <Modal visible={visible} onClose={onClose} title={t("zonesWa.title")}>
+    <Modal visible={visible} onClose={onClose} title={t("zonesWa.title")} closeLabel={t("common.close")}>
       <ScrollView contentContainerClassName="gap-3 p-4">
         <Text variant="caption" tone="muted">
           {zone.name} · {zone.path}
@@ -222,10 +223,21 @@ function ChannelCredentialsCard({ channel }: { channel: WhatsappChannel }) {
   const [draft, setDraft] = useState<CredDraft>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const set = (patch: Partial<CredDraft>) => {
     setDraft((d) => ({ ...d, ...patch }));
     setSaved(false);
+  };
+
+  // Desvincular solo tras confirmar. El error va al Banner de la tarjeta: este editor ya es un
+  // modal y un toast quedaría tapado por él en nativo.
+  const confirmDelete = () => {
+    setError(null);
+    remove.mutate(channel.id, {
+      onSettled: () => setConfirmingDelete(false),
+      onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+    });
   };
 
   const save = () => {
@@ -251,9 +263,21 @@ function ChannelCredentialsCard({ channel }: { channel: WhatsappChannel }) {
           label={t("common.delete")}
           variant="ghost"
           size="sm"
-          onPress={() => remove.mutate(channel.id)}
+          onPress={() => setConfirmingDelete(true)}
         />
       </Row>
+      <ConfirmModal
+        visible={confirmingDelete}
+        title={t("whatsapp.channel.delete.confirmTitle")}
+        description={t("whatsapp.channel.delete.confirmBody")}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        closeLabel={t("common.close")}
+        tone="danger"
+        loading={remove.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmingDelete(false)}
+      />
       {error ? <Banner tone="danger" title={error} /> : null}
       {saved ? <Banner tone="success" title={t("assistant.saved")} /> : null}
 

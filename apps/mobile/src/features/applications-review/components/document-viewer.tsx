@@ -1,11 +1,12 @@
-import { useEffect } from "react";
-import { Alert, Image, Linking, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Image, Linking, View } from "react-native";
 import type { BusinessPhotoVerdict } from "@preztiaos/contracts";
-import { Button, Modal, Spinner, Stack, Text } from "@preztiaos/ui";
+import { Banner, Button, Modal, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
 import { useDocumentOriginal, useReExtractDocument, type DocumentFileRef } from "../api/queries";
 import { AntifraudVisionPanel } from "./antifraud-vision-panel";
+import { reExtractionFeedback, type ReExtractionFeedback } from "./re-extraction-feedback";
 import { documentLabel } from "./review-status";
 
 type Props = {
@@ -23,25 +24,24 @@ type Props = {
  * cambiar/cerrar (no deja PII en memoria).
  */
 export function DocumentViewer({ applicationId, file, visionVerdict, onClose }: Props) {
-  const { t } = useT();
+  const i18n = useT();
+  const { t } = i18n;
   const documentType = file?.documentType ?? null;
   const query = useDocumentOriginal(applicationId, file);
   const reExtract = useReExtractDocument(applicationId);
   const url = query.data?.url;
   const isBusinessPhoto = documentType === "BUSINESS_PHOTO";
+  // Desenlace de la última pasada de IA. Va como Banner DENTRO del visor: este ya es un modal y un
+  // toast quedaría tapado por él en nativo (`Alert.alert`, además, no hace nada en web).
+  const [feedback, setFeedback] = useState<ReExtractionFeedback | null>(null);
 
   // Nueva pasada de IA sobre este documento; informa el resultado y refresca el detalle.
   const onReExtract = () => {
     if (!documentType) return;
+    setFeedback(null);
     reExtract.mutate(documentType, {
-      onSuccess: (result) =>
-        Alert.alert(
-          result.extracted ? "Lectura completada" : "No se pudo leer",
-          result.extracted
-            ? `IA identificó: ${result.identifiedType ?? "—"} · Confianza ${result.confidence ?? 0}%`
-            : (result.reason ?? "Inténtalo de nuevo."),
-        ),
-      onError: () => Alert.alert("Error", "No se pudo reintentar la lectura con IA."),
+      onSuccess: (result) => setFeedback(reExtractionFeedback(result, i18n)),
+      onError: () => setFeedback({ tone: "danger", title: t("review.docs.retryFailed") }),
     });
   };
 
@@ -62,6 +62,7 @@ export function DocumentViewer({ applicationId, file, visionVerdict, onClose }: 
             `${documentLabel(documentType)}${file && file.slot > 1 ? ` · archivo ${file.slot}` : ""}`
           : t("review.original.title")
       }
+      closeLabel={t("common.close")}
     >
       <View className="p-4">
         {query.isPending ? <Spinner label={t("common.loading")} /> : null}
@@ -96,6 +97,15 @@ export function DocumentViewer({ applicationId, file, visionVerdict, onClose }: 
 
         {/* Nueva pasada de IA: re-leer un documento o re-estudiar la foto del negocio. */}
         <View className="pt-4">
+          {feedback ? (
+            <View className="pb-3">
+              <Banner
+                tone={feedback.tone}
+                title={feedback.title}
+                {...(feedback.description ? { description: feedback.description } : {})}
+              />
+            </View>
+          ) : null}
           <Button
             label={isBusinessPhoto ? "Re-estudiar con IA" : "Reintentar lectura con IA"}
             block

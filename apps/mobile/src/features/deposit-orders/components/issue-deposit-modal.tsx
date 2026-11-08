@@ -5,9 +5,8 @@ import {
   Button,
   Field,
   Input,
-  majorToMinor,
-  minorToMajor,
   Modal,
+  MoneyInput,
   MoneyText,
   Row,
   Select,
@@ -16,6 +15,7 @@ import {
   type SelectOption,
 } from "@preztiaos/ui";
 
+import { moneyInputText } from "@/components/money-input-text";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useCashBoxes, useFundingBoxes } from "@/features/cash/api/boxes-queries";
@@ -30,7 +30,8 @@ export function IssueDepositModal({ row, onClose }: { row: RemittanceBoardRow; o
   const issue = useIssueDepositOrder();
   const funding = useFundingBoxes(row.zoneId);
   const all = useCashBoxes();
-  const [amount, setAmount] = useState(String(minorToMajor(row.cashInHandMinor)));
+  const [amountText, setAmountText] = useState(moneyInputText(row.cashInHandMinor));
+  const [amountMinor, setAmountMinor] = useState<number | null>(row.cashInHandMinor);
   const [destinationId, setDestinationId] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -41,10 +42,9 @@ export function IssueDepositModal({ row, onClose }: { row: RemittanceBoardRow; o
     : (all.data?.items ?? [])
         .filter((b) => b.type === "BANK" && b.active && b.zoneId === null)
         .map((b) => ({ value: b.id, label: b.name }));
-  const amountMinor = majorToMinor(Number(amount) || 0);
 
   const submit = () => {
-    if (!destinationId) return;
+    if (!destinationId || amountMinor === null) return;
     setError(null);
     issue.mutate(
       {
@@ -61,7 +61,7 @@ export function IssueDepositModal({ row, onClose }: { row: RemittanceBoardRow; o
   };
 
   return (
-    <Modal visible onClose={onClose} title={t("deposit.issue.title")}>
+    <Modal visible onClose={onClose} title={t("deposit.issue.title")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Text variant="label">{row.collectorEmail ?? row.cashBoxName}</Text>
@@ -69,8 +69,14 @@ export function IssueDepositModal({ row, onClose }: { row: RemittanceBoardRow; o
           <Text tone="muted">{t("remittance.cashInHand")}</Text>
           <MoneyText variant="label" amountMinor={row.cashInHandMinor} currency={row.currency} />
         </Row>
-        <Field label={t("deposit.issue.amount")} required>
-          <Input keyboardType="numeric" value={amount} onChangeText={setAmount} />
+        <Field label={t("deposit.issue.amount")} hint={t("money.hint")} required>
+          <MoneyInput
+            value={amountText}
+            onChangeText={setAmountText}
+            onChangeAmount={setAmountMinor}
+            currency={row.currency}
+            invalidLabel={t("money.invalid")}
+          />
         </Field>
         <Field label={t("deposit.issue.destination")} required>
           <Select
@@ -86,7 +92,9 @@ export function IssueDepositModal({ row, onClose }: { row: RemittanceBoardRow; o
         <Button
           label={t("deposit.issue.submit")}
           loading={issue.isPending}
-          disabled={!destinationId || amountMinor <= 0 || amountMinor > row.cashInHandMinor}
+          disabled={
+            !destinationId || amountMinor === null || amountMinor <= 0 || amountMinor > row.cashInHandMinor
+          }
           block
           onPress={submit}
         />

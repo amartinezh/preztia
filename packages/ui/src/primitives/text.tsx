@@ -24,7 +24,7 @@ const TONE: Record<Tone, string> = {
   default: "text-zinc-900 dark:text-zinc-50",
   muted: "text-zinc-500 dark:text-zinc-400",
   primary: "text-brand-600 dark:text-brand-400",
-  success: "text-emerald-600 dark:text-emerald-400",
+  success: "text-emerald-700 dark:text-emerald-400",
   danger: "text-red-600 dark:text-red-400",
   inverse: "text-white",
 };

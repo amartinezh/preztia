@@ -27,6 +27,7 @@ import {
   requiredDocumentType,
 } from '@preztiaos/contracts';
 import { JwtGuard } from '../../auth/jwt.guard';
+import { Idempotent } from '../../observability/idempotent.decorator';
 import { requireTenant } from '../../auth/require-tenant';
 import { requireReviewer } from '../../auth/require-reviewer';
 import { BorrowerPolicyRepository } from '../../credit/borrower-policy.repository';
@@ -244,8 +245,10 @@ export class ApplicationReviewController {
     };
   }
 
+  // Aprobar desembolsa: el reintento manual tras un timeout llega con la misma Idempotency-Key.
   @Post('applications/:id/approval')
   @HttpCode(200)
+  @Idempotent()
   async approve(
     @Param('id') id: string,
     @Headers('x-tenant-id') tenantId: string | undefined,

@@ -4,17 +4,19 @@ import type { DepositOrder } from "@preztiaos/contracts";
 import {
   Banner,
   Button,
+  ConfirmModal,
   Field,
+  formatMoney,
   Input,
-  majorToMinor,
-  minorToMajor,
   Modal,
+  MoneyInput,
   MoneyText,
   Spinner,
   Stack,
   Text,
 } from "@preztiaos/ui";
 
+import { moneyInputText } from "@/components/money-input-text";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useDepositBankMatches, useVerifyDeposit } from "../api/queries";
@@ -22,40 +24,54 @@ import { useDepositBankMatches, useVerifyDeposit } from "../api/queries";
 /**
  * Verificación contra el banco: el revisor confirma el monto y, si la sincronización bancaria lo
  * trajo, enlaza el ingreso que corresponde al depósito (queda consumido por la orden y la
- * conciliación de pagos ya no lo ofrece: sin doble ingreso). Nunca es automático.
+ * conciliación de pagos ya no lo ofrece: sin doble ingreso). Nunca es automático y, como no se
+ * puede deshacer, se confirma el monto antes de enviar.
  */
 export function VerifyDepositModal({ order, onClose }: { order: DepositOrder; onClose: () => void }) {
-  const { t } = useT();
+  const { t, tf } = useT();
   const verify = useVerifyDeposit();
   const matches = useDepositBankMatches(order.id);
-  const [amount, setAmount] = useState(String(minorToMajor(order.reportedAmountMinor ?? order.amountMinor)));
+  const initialMinor = order.reportedAmountMinor ?? order.amountMinor;
+  const [amountText, setAmountText] = useState(moneyInputText(initialMinor));
+  const [amountMinor, setAmountMinor] = useState<number | null>(initialMinor);
   const [bankCreditId, setBankCreditId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = () => {
+  const send = () => {
+    if (amountMinor === null) return;
     setError(null);
     verify.mutate(
       {
         id: order.id,
-        verifiedAmountMinor: majorToMinor(Number(amount) || 0),
+        verifiedAmountMinor: amountMinor,
         ...(bankCreditId ? { bankCreditId } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
       },
       {
         onSuccess: onClose,
-        onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+        onError: (err) => {
+          setConfirming(false);
+          setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
+        },
       },
     );
   };
 
   const items = matches.data?.items ?? [];
   return (
-    <Modal visible onClose={onClose} title={t("deposit.verify.title")}>
+    <Modal visible onClose={onClose} title={t("deposit.verify.title")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
-        <Field label={t("deposit.verify.amount")} required>
-          <Input keyboardType="numeric" value={amount} onChangeText={setAmount} />
+        <Field label={t("deposit.verify.amount")} hint={t("money.hint")} required>
+          <MoneyInput
+            value={amountText}
+            onChangeText={setAmountText}
+            onChangeAmount={setAmountMinor}
+            currency={order.currency}
+            invalidLabel={t("money.invalid")}
+          />
         </Field>
         <Field label={t("deposit.verify.bankMatch")} hint={t("deposit.verify.bankMatchHint")}>
           {matches.isPending ? (
@@ -92,8 +108,26 @@ export function VerifyDepositModal({ order, onClose }: { order: DepositOrder; on
         <Field label={t("deposit.report.note")}>
           <Input value={note} onChangeText={setNote} multiline />
         </Field>
-        <Button label={t("deposit.verify.confirm")} loading={verify.isPending} block onPress={submit} />
+        <Button
+          label={t("deposit.verify.confirm")}
+          loading={verify.isPending}
+          disabled={amountMinor === null || amountMinor <= 0}
+          block
+          onPress={() => setConfirming(true)}
+        />
       </Stack>
+      <ConfirmModal
+        visible={confirming}
+        title={t("deposit.verify.confirmTitle")}
+        description={tf("deposit.verify.confirmBody", { amount: formatMoney(amountMinor ?? 0, order.currency) })}
+        confirmLabel={t("deposit.verify.confirm")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        loading={verify.isPending}
+        onConfirm={send}
+        onCancel={() => setConfirming(false)}
+        closeLabel={t("common.close")}
+      />
     </Modal>
   );
 }

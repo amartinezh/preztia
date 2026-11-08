@@ -14,16 +14,16 @@ import {
   Field,
   Input,
   Modal,
+  MoneyInput,
   Row,
   Select,
   Stack,
   Text,
-  majorToMinor,
-  minorToMajor,
+  formatMoney,
 } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
-import { useFundingBoxes } from "@/features/cash/api/boxes-queries";
+import { useFundingBoxes, useTenantCurrency } from "@/features/cash/api/boxes-queries";
 import { FundingBoxPicker, isFundingInsufficient } from "@/features/cash/components/funding-box-picker";
 import { useInterestRules } from "@/features/credit/hooks/use-interest-rules";
 import { BorrowerPicker } from "./borrower-picker";
@@ -98,7 +98,9 @@ export function DecisionModal({
   const { t } = useT();
 
   const [borrower, setBorrower] = useState<{ id: string; label: string } | null>(null);
+  // Capital tecleado (sin oferta negociada) y su lectura en unidades menores (`null` = ilegible).
   const [principal, setPrincipal] = useState("");
+  const [typedPrincipalMinor, setTypedPrincipalMinor] = useState<number | null>(null);
   const [interest, setInterest] = useState("");
   const [installments, setInstallments] = useState("");
   const [reason, setReason] = useState("");
@@ -107,6 +109,7 @@ export function DecisionModal({
   // Plan elegido cuando no hubo oferta negociada (`null` = aún no elige: cae al por defecto).
   const [planChoice, setPlanChoice] = useState<string | null>(null);
   const rules = useInterestRules();
+  const currency = useTenantCurrency();
 
   // Si hay un plan negociado, sus términos definen el crédito: no se piden a mano (se ocultan).
   const fromPlan = planTerms(planOffer);
@@ -146,17 +149,21 @@ export function DecisionModal({
   // Caja/cuenta de la que saldrá el dinero: solo las que la zona del crédito puede usar.
   const fundingBoxes = useFundingBoxes(zoneId);
   const selectedBox = (fundingBoxes.data?.items ?? []).find((b) => b.id === fundingCashBoxId) ?? null;
-  const principalMinor = fromPlan ? fromPlan.principalMinor : majorToMinor(Number(principal) || 0);
+  // Sin monto legible se evalúa el saldo con 0 (no bloquea por saldo); `principalValid` gatea el envío.
+  const principalMinor = fromPlan ? fromPlan.principalMinor : (typedPrincipalMinor ?? 0);
+  const principalValid = fromPlan !== null || (typedPrincipalMinor !== null && typedPrincipalMinor > 0);
   // El servidor también valida el saldo (fail-fast), pero lo avisamos antes de enviar.
   const fundsInsufficient = isFundingInsufficient(selectedBox, principalMinor);
 
   // El motivo es obligatorio (min 3 según el contrato): gatea el envío para no aprobar sin justificar.
   const reasonValid = reason.trim().length >= MIN_REASON_LENGTH;
 
-  // Regla de negocio: aprobar requiere deudor, zona resuelta, una caja/cuenta origen con saldo y motivo.
+  // Regla de negocio: aprobar requiere deudor, zona resuelta, capital legible > 0, una caja/cuenta
+  // origen con saldo y motivo.
   const canApprove =
     borrower != null &&
     zoneId != null &&
+    principalValid &&
     fundingCashBoxId != null &&
     !fundsInsufficient &&
     !noPlanAvailable &&
@@ -167,7 +174,7 @@ export function DecisionModal({
     const candidate = {
       borrowerId: borrower.id,
       zoneId,
-      principalMinor: fromPlan ? fromPlan.principalMinor : majorToMinor(Number(principal)),
+      principalMinor,
       interestPct: fromPlan ? fromPlan.interestPct : Number(typedInterest) * PERCENT_TO_BASE_THOUSAND,
       installmentsCount: fromPlan ? fromPlan.installmentsCount : Math.trunc(Number(typedInstallments)),
       // Sin oferta negociada, el plan elegido es la fuente del interés y de la periodicidad.
@@ -205,6 +212,7 @@ export function DecisionModal({
       visible={mode != null}
       onClose={onClose}
       title={mode === "approve" ? t("review.approve.title") : t("review.reject.title")}
+      closeLabel={t("common.close")}
     >
       <View className="p-4">
         <Stack gap="md">
@@ -245,7 +253,7 @@ export function DecisionModal({
                   </Row>
                   <Row className="justify-between">
                     <Text tone="muted">{t("credit.new.principal")}</Text>
-                    <Text variant="label">{String(minorToMajor(fromPlan.principalMinor))}</Text>
+                    <Text variant="label">{formatMoney(fromPlan.principalMinor, currency)}</Text>
                   </Row>
                   <Row className="justify-between">
                     <Text tone="muted">{t("credit.new.installments")}</Text>
@@ -258,8 +266,15 @@ export function DecisionModal({
                 </Stack>
               ) : (
                 <>
-                  <Field label={t("credit.new.principal")} error={errors.principalMinor} hint="Monto en unidades mayores" required>
-                    <Input keyboardType="numeric" value={principal} onChangeText={setPrincipal} invalid={!!errors.principalMinor} />
+                  <Field label={t("credit.new.principal")} error={errors.principalMinor} hint={t("money.hint")} required>
+                    <MoneyInput
+                      value={principal}
+                      onChangeText={setPrincipal}
+                      onChangeAmount={setTypedPrincipalMinor}
+                      currency={currency}
+                      invalidLabel={t("money.invalid")}
+                      invalid={!!errors.principalMinor}
+                    />
                   </Field>
                   {rules.locked ? (
                     <Banner
@@ -318,7 +333,9 @@ export function DecisionModal({
                 <Text variant="caption" tone="muted">
                   {borrower == null || zoneId == null
                     ? t("review.approve.needBorrower")
-                    : fundingCashBoxId == null || fundsInsufficient
+                    : !principalValid
+                      ? t("money.required")
+                      : fundingCashBoxId == null || fundsInsufficient
                       ? t("review.approve.needFunding")
                       : t("review.approve.needReason")}
                 </Text>

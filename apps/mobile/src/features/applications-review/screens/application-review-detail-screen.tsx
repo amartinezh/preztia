@@ -6,6 +6,7 @@ import { Badge, Button, Card, ErrorState, Row, Spinner, Stack, Text, minorToMajo
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
+import { newIdempotencyKey } from "@/core/ids";
 import {
   useApplicationReview,
   useApproveApplication,
@@ -45,6 +46,9 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
   const [decision, setDecision] = useState<DecisionMode>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [offerError, setOfferError] = useState<string | null>(null);
+  // Aprobar desembolsa: la clave es estable por intento (un reintento tras un timeout no otorga dos
+  // veces) y se renueva solo tras el éxito.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => newIdempotencyKey());
 
   if (query.isPending) return <Spinner label={t("common.loading")} />;
   if (query.isError) {
@@ -57,8 +61,9 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
 
   const onApprove = (input: ApproveApplicationInput) => {
     setSubmitError(null);
-    approve.mutate(input, {
+    approve.mutate({ ...input, idempotencyKey }, {
       onSuccess: (res) => {
+        setIdempotencyKey(newIdempotencyKey());
         setDecision(null);
         router.replace(`/credit/${res.creditId}` as Href);
       },

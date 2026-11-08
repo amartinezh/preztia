@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { loginInput } from "@preztiaos/contracts";
 import { Banner, Button, Field, Input, Stack, Text } from "@preztiaos/ui";
 
@@ -11,8 +11,9 @@ import { useT } from "@/core/i18n";
 
 export function SignInScreen() {
   const { t } = useT();
-  const { signIn } = useSession();
+  const { signIn, lastSignOutReason } = useSession();
   const form = useZodForm(loginInput, { email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<{ message: string; correlationId?: string } | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -43,6 +44,10 @@ export function SignInScreen() {
             <Text tone="muted">{t("auth.signIn")}</Text>
           </Stack>
 
+          {lastSignOutReason === "expired" && !submitError ? (
+            <Banner tone="warning" title={t("auth.sessionExpiredBanner")} />
+          ) : null}
+
           {submitError ? (
             <Banner
               tone="danger"
@@ -57,6 +62,7 @@ export function SignInScreen() {
                 autoCapitalize="none"
                 autoComplete="email"
                 keyboardType="email-address"
+                returnKeyType="next"
                 value={form.values.email}
                 onChangeText={(v) => form.setField("email", v)}
                 invalid={!!form.errors.email}
@@ -65,14 +71,29 @@ export function SignInScreen() {
             </Field>
 
             <Field label={t("auth.password")} error={form.errors.password} required>
-              <Input
-                secureTextEntry
-                autoComplete="current-password"
-                value={form.values.password}
-                onChangeText={(v) => form.setField("password", v)}
-                invalid={!!form.errors.password}
-                accessibilityLabel={t("auth.password")}
-              />
+              <View className="relative">
+                <Input
+                  secureTextEntry={!showPassword}
+                  autoComplete="current-password"
+                  returnKeyType="go"
+                  onSubmitEditing={onSubmit}
+                  value={form.values.password}
+                  onChangeText={(v) => form.setField("password", v)}
+                  invalid={!!form.errors.password}
+                  accessibilityLabel={t("auth.password")}
+                  className="pr-24"
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+                  onPress={() => setShowPassword((v) => !v)}
+                  className="absolute right-2 top-0 h-12 justify-center px-2"
+                >
+                  <Text variant="label" tone="primary">
+                    {showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+                  </Text>
+                </Pressable>
+              </View>
             </Field>
 
             <Button

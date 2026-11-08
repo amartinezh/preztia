@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { useRouter, type Href } from "expo-router";
+import type { DailyReport } from "@preztiaos/contracts";
 import {
   Banner,
   Button,
   Card,
+  ErrorState,
   minorToMajor,
   MoneyText,
   Row,
@@ -66,7 +69,16 @@ function TreasurySummaryCard({ onOpenBoxes }: { onOpenBoxes: () => void }) {
   const { t } = useT();
   const query = useCashDashboard();
   if (query.isPending) return <Spinner label={t("common.loading")} />;
-  if (query.isError || !query.data) return <Banner tone="danger" title={t("errors.network")} />;
+  if (query.isError || !query.data) {
+    return (
+      <ErrorState
+        title={t("common.loadFailed")}
+        description={t("common.loadFailedHint")}
+        retryLabel={t("common.retry")}
+        onRetry={() => void query.refetch()}
+      />
+    );
+  }
   const d = query.data;
   return (
     <Stack gap="sm">
@@ -102,30 +114,92 @@ function Line({ label, amountMinor, currency }: { label: string; amountMinor: nu
   );
 }
 
+/** Días que se pueden consultar del reporte diario: hoy y ayer (los más usados al cuadrar). */
+type ReportDay = "today" | "yesterday";
+const DAYS_AGO: Record<ReportDay, number> = { today: 0, yesterday: 1 };
+const REPORT_DAYS: ReportDay[] = ["today", "yesterday"];
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Fecha de hace `daysAgo` días como YYYY-MM-DD en la hora LOCAL del dispositivo (no UTC). */
+function localDateDaysAgo(daysAgo: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** "martes, 3 de noviembre" a partir de YYYY-MM-DD, interpretado como fecha local (sin desfase UTC). */
+function readableDate(isoDate: string, locale: string): string {
+  const [year = 0, month = 1, day = 1] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
+/**
+ * Reporte diario con la fecha visible y elegible (hoy / ayer). La fecha se calcula en el cliente
+ * con la hora local del dispositivo y viaja al servidor, así el "hoy" es el del operador.
+ */
 function DailyReportCard() {
-  const { t } = useT();
-  const query = useDailyReport();
-  if (query.isPending) return <Spinner label={t("common.loading")} />;
-  if (query.isError || !query.data) return <Banner tone="danger" title={t("errors.network")} />;
-  const r = query.data;
+  const { t, tf, locale } = useT();
+  const [day, setDay] = useState<ReportDay>("today");
+  const date = localDateDaysAgo(DAYS_AGO[day]);
+  const query = useDailyReport(date);
+
   return (
     <Card>
       <Stack gap="xs">
-        <Text variant="heading">{t("cash.daily.title")}</Text>
-        <Line label={t("cash.field.collected")} amountMinor={r.totalCobradoMinor} currency={r.currency} />
-        <Line label={t("cash.field.lent")} amountMinor={r.totalPrestadoMinor} currency={r.currency} />
-        <Line label={t("cash.field.expenses")} amountMinor={r.gastosMinor} currency={r.currency} />
-        <Line label={t("cash.field.cashOfDay")} amountMinor={r.cajaDelDiaMinor} currency={r.currency} />
-        <Row className="justify-between">
-          <Text tone="muted">{t("cash.daily.clients")}</Text>
-          <Text variant="label">{r.clientsWithPayments}</Text>
+        <Row className="items-center justify-between">
+          <Text variant="heading">{t("cash.daily.title")}</Text>
+          <Row className="gap-2">
+            {REPORT_DAYS.map((key) => (
+              <Button
+                key={key}
+                label={t(`common.${key}`)}
+                size="sm"
+                variant={day === key ? "primary" : "secondary"}
+                onPress={() => setDay(key)}
+              />
+            ))}
+          </Row>
         </Row>
-        <Row className="justify-between">
-          <Text tone="muted">{t("cash.daily.pendingExpenses")}</Text>
-          <Text variant="label">{r.pendingExpenses}</Text>
-        </Row>
+        <Text variant="caption" tone="muted">
+          {tf("cash.report.of", { date: readableDate(date, locale) })}
+        </Text>
+        {query.isPending ? <Spinner label={t("common.loading")} /> : null}
+        {query.isError ? (
+          <ErrorState
+            title={t("common.loadFailed")}
+            description={t("common.loadFailedHint")}
+            retryLabel={t("common.retry")}
+            onRetry={() => void query.refetch()}
+          />
+        ) : null}
+        {query.data ? <DailyReportLines report={query.data} /> : null}
       </Stack>
     </Card>
+  );
+}
+
+function DailyReportLines({ report: r }: { report: DailyReport }) {
+  const { t } = useT();
+  return (
+    <>
+      <Line label={t("cash.field.collected")} amountMinor={r.totalCobradoMinor} currency={r.currency} />
+      <Line label={t("cash.field.lent")} amountMinor={r.totalPrestadoMinor} currency={r.currency} />
+      <Line label={t("cash.field.expenses")} amountMinor={r.gastosMinor} currency={r.currency} />
+      <Line label={t("cash.field.cashOfDay")} amountMinor={r.cajaDelDiaMinor} currency={r.currency} />
+      <Row className="justify-between">
+        <Text tone="muted">{t("cash.daily.clients")}</Text>
+        <Text variant="label">{r.clientsWithPayments}</Text>
+      </Row>
+      <Row className="justify-between">
+        <Text tone="muted">{t("cash.daily.pendingExpenses")}</Text>
+        <Text variant="label">{r.pendingExpenses}</Text>
+      </Row>
+    </>
   );
 }
 
@@ -139,7 +213,7 @@ function ExpensesSection({ canManage }: { canManage: boolean }) {
   return (
     <Stack gap="sm">
       <Text variant="heading">{t("cash.expenses.title")}</Text>
-      <ExpenseRequestForm />
+      <ExpenseRequestForm currency={currency} />
       <ExpensesPanel mode={canManage ? "review" : "mine"} currency={currency} />
     </Stack>
   );

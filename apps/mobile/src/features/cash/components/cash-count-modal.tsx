@@ -3,9 +3,11 @@ import {
   Badge,
   Banner,
   Button,
+  ConfirmModal,
   Field,
+  formatMoney,
   Input,
-  majorToMinor,
+  MoneyInput,
   MoneyText,
   Modal,
   Row,
@@ -17,13 +19,18 @@ import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useAdjustCashBalance, usePerformCashCount } from "../api/boxes-queries";
 
-type Box = { id: string; name: string; currency: string; type: "CASH" | "BANK" | "TRANSIT" };
+// `balanceMinor` es el saldo del libro: lo que el arqueo compara y lo que la confirmación anuncia.
+type Box = { id: string; name: string; currency: string; type: "CASH" | "BANK" | "TRANSIT"; balanceMinor: number };
+
+/** Qué sello irreversible está esperando confirmación: el arqueo o el ajuste al arqueo. */
+type Confirming = "count" | "adjust" | null;
 
 /**
  * Modal de arqueo + ajuste: el operador reporta el valor real (conteo físico o saldo del banco),
  * el sistema muestra el descuadre y, si el rol lo permite, ofrece sellarlo con un asiento de
  * AJUSTE por la diferencia exacta (motivo obligatorio). El ajuste referencia el arqueo recién
- * registrado: nunca es un monto libre.
+ * registrado: nunca es un monto libre. Arqueo y ajuste quedan sellados (append-only), así que
+ * ambos se confirman mostrando contado vs. libro antes de enviar.
  */
 export function CashCountModal({
   box,
@@ -37,13 +44,17 @@ export function CashCountModal({
   canAdjust: boolean;
   onClose: () => void;
 }) {
-  const { t } = useT();
+  const { t, tf } = useT();
   const count = usePerformCashCount();
   const adjust = useAdjustCashBalance();
-  const [counted, setCounted] = useState("");
+  const [countedText, setCountedText] = useState("");
+  const [countedMinor, setCountedMinor] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState<Confirming>(null);
   const [error, setError] = useState<string | null>(null);
+  const currency = box?.currency ?? "COP";
+  const money = (minor: number) => formatMoney(minor, currency);
 
   const result = count.data;
   const adjusted = adjust.data;
@@ -58,9 +69,9 @@ export function CashCountModal({
     (box?.type !== "TRANSIT" || result.differenceMinor > 0);
 
   const submit = () => {
-    if (!box) return;
+    if (!box || countedMinor === null) return;
+    setConfirming(null);
     setError(null);
-    const countedMinor = majorToMinor(Number(counted) || 0);
     count.mutate(
       { boxId: box.id, countedMinor, ...(notes.trim() ? { notes: notes.trim() } : {}) },
       {
@@ -72,6 +83,7 @@ export function CashCountModal({
 
   const submitAdjust = () => {
     if (!box || !result || !reason.trim()) return;
+    setConfirming(null);
     setError(null);
     adjust.mutate(
       { boxId: box.id, cashCountId: result.id, reason: reason.trim() },
@@ -85,15 +97,24 @@ export function CashCountModal({
   const close = () => {
     count.reset();
     adjust.reset();
-    setCounted("");
+    setCountedText("");
     setNotes("");
     setReason("");
+    setConfirming(null);
     setError(null);
     onClose();
   };
 
+  // Resumen de lo que se va a sellar: ajuste (contado vs. diferencia) o arqueo (contado vs. libro).
+  const confirmDescription =
+    confirming === "adjust" && result
+      ? tf("cash.adjust.confirmBody", { counted: money(result.countedMinor), diff: money(result.differenceMinor) })
+      : countedMinor === 0
+        ? tf("cash.count.zeroBody", { box: box?.name ?? "", expected: money(box?.balanceMinor ?? 0) })
+        : tf("cash.count.confirmBody", { counted: money(countedMinor ?? 0), expected: money(box?.balanceMinor ?? 0) });
+
   return (
-    <Modal visible={visible} onClose={close} title={t("cash.arqueo.title")}>
+    <Modal visible={visible} onClose={close} title={t("cash.arqueo.title")} closeLabel={t("common.close")}>
       <Stack gap="sm">
         {box ? <Text variant="label">{box.name}</Text> : null}
         {error ? <Banner tone="danger" title={error} /> : null}
@@ -135,7 +156,7 @@ export function CashCountModal({
                   loading={adjust.isPending}
                   disabled={reason.trim().length < 3}
                   block
-                  onPress={submitAdjust}
+                  onPress={() => setConfirming("adjust")}
                 />
               </Stack>
             ) : null}
@@ -144,8 +165,14 @@ export function CashCountModal({
           </Stack>
         ) : (
           <Stack gap="sm">
-            <Field label={countedLabel} required>
-              <Input value={counted} onChangeText={setCounted} keyboardType="numeric" />
+            <Field label={countedLabel} hint={t("money.hint")} required>
+              <MoneyInput
+                value={countedText}
+                onChangeText={setCountedText}
+                onChangeAmount={setCountedMinor}
+                currency={currency}
+                invalidLabel={t("money.invalid")}
+              />
             </Field>
             <Field label={t("cash.arqueo.notes")}>
               <Input value={notes} onChangeText={setNotes} />
@@ -153,12 +180,25 @@ export function CashCountModal({
             <Button
               label={t("cash.arqueo.submit")}
               loading={count.isPending}
+              disabled={countedMinor === null}
               block
-              onPress={submit}
+              onPress={() => setConfirming("count")}
             />
           </Stack>
         )}
       </Stack>
+      <ConfirmModal
+        visible={confirming !== null}
+        title={confirming === "adjust" ? t("cash.adjust.confirmTitle") : t("cash.count.confirmTitle")}
+        description={confirmDescription}
+        confirmLabel={t("common.confirm")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        loading={count.isPending || adjust.isPending}
+        onConfirm={confirming === "adjust" ? submitAdjust : submit}
+        onCancel={() => setConfirming(null)}
+        closeLabel={t("common.close")}
+      />
     </Modal>
   );
 }

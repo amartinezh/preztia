@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable } from "react-native";
 import type { DepositOrder, FieldOrderStatus } from "@preztiaos/contracts";
-import { Button, Row, Spinner, Stack, Text } from "@preztiaos/ui";
+import { Button, ErrorState, Row, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { SecureFileViewer } from "@/components/secure-file-viewer";
 import { useT } from "@/core/i18n";
@@ -62,7 +62,17 @@ export function DepositOrdersPanel({ mode }: { mode: "mine" | "review" }) {
       </Row>
 
       {list.isPending ? <Spinner label={t("common.loading")} /> : null}
-      {!list.isPending && items.length === 0 ? <Text tone="muted">{t("deposit.empty")}</Text> : null}
+      {list.isError ? (
+        <ErrorState
+          title={t("common.loadFailed")}
+          description={t("common.loadFailedHint")}
+          retryLabel={t("common.retry")}
+          onRetry={() => void list.refetch()}
+        />
+      ) : null}
+      {!list.isPending && !list.isError && items.length === 0 ? (
+        <Text tone="muted">{t("deposit.empty")}</Text>
+      ) : null}
       {items.map((order) => (
         <DepositOrderCard
           key={order.id}

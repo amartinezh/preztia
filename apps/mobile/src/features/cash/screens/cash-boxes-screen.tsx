@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   MoneyText,
   Row,
   Spinner,
@@ -71,7 +72,14 @@ export function CashBoxesScreen({ embedded = false }: { embedded?: boolean } = {
         </Row>
 
         {query.isPending ? <Spinner label={t("common.loading")} /> : null}
-        {query.isError ? <Banner tone="danger" title={t("errors.network")} /> : null}
+        {query.isError ? (
+          <ErrorState
+            title={t("common.loadFailed")}
+            description={t("common.loadFailedHint")}
+            retryLabel={t("common.retry")}
+            onRetry={() => void query.refetch()}
+          />
+        ) : null}
 
         {query.data ? (
           <Stack gap="md">
@@ -111,7 +119,13 @@ export function CashBoxesScreen({ embedded = false }: { embedded?: boolean } = {
                 />
               ))
             ) : (
-              <EmptyState title={t("cash.boxes.empty")} />
+              // Sin cajas no hay nada que operar: quien administra puede ir a crearlas desde aquí.
+              <EmptyState
+                title={t("cash.boxes.empty")}
+                {...(canAdmin
+                  ? { action: { label: t("cash.config.link"), onPress: () => router.push("/cash/config" as Href) } }
+                  : {})}
+              />
             )}
           </Stack>
         ) : null}

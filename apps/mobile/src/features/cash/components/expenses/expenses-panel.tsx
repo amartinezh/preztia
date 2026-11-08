@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Expense, ExpenseStatus } from "@preztiaos/contracts";
-import { Button, Row, Spinner, Stack, Text } from "@preztiaos/ui";
+import { Button, ErrorState, Row, Spinner, Stack, Text } from "@preztiaos/ui";
 import { Pressable } from "react-native";
 
 import { SecureFileViewer } from "@/components/secure-file-viewer";
@@ -48,7 +48,17 @@ export function ExpensesPanel({ mode, currency }: { mode: "mine" | "review"; cur
       </Row>
 
       {list.isPending ? <Spinner label={t("common.loading")} /> : null}
-      {!list.isPending && items.length === 0 ? <Text tone="muted">{t("cash.expenses.empty")}</Text> : null}
+      {list.isError ? (
+        <ErrorState
+          title={t("common.loadFailed")}
+          description={t("common.loadFailedHint")}
+          retryLabel={t("common.retry")}
+          onRetry={() => void list.refetch()}
+        />
+      ) : null}
+      {!list.isPending && !list.isError && items.length === 0 ? (
+        <Text tone="muted">{t("cash.expenses.empty")}</Text>
+      ) : null}
       {items.map((e) => (
         <ExpenseCard
           key={e.id}

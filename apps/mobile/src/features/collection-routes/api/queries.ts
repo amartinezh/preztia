@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import type { DispatchRouteInput, ResolveStopInput } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
+import { withRequestOptions } from "@/core/api/request-context";
 import { cashBoxKeys } from "@/features/cash/api/boxes-queries";
 import { remittanceKeys } from "@/features/remittances/api/queries";
 
@@ -88,12 +89,19 @@ export function useMarkRouteStopSeen() {
   });
 }
 
-/** Liquidar la visita: si pagó, el cobro entra a la caja de ruta (cambian caja y rendición). */
+/**
+ * Liquidar la visita: si pagó, el cobro entra a la caja de ruta (cambian caja y rendición). Es una
+ * operación de dinero: la clave de idempotencia es estable por intento para no abonar dos veces.
+ */
 export function useResolveRouteStop() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: string } & ResolveStopInput) =>
-      unwrap(await api.resolveRouteStop({ headers: tenantHeader(), params: { id }, body })),
+    mutationFn: async ({ id, idempotencyKey, ...body }: { id: string; idempotencyKey: string } & ResolveStopInput) =>
+      unwrap(
+        await withRequestOptions({ idempotencyKey }, () =>
+          api.resolveRouteStop({ headers: tenantHeader(), params: { id }, body }),
+        ),
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: routeKeys.all });
       void qc.invalidateQueries({ queryKey: cashBoxKeys.all });

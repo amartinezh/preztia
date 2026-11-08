@@ -20,6 +20,9 @@ export function Switch({ value, onValueChange, label, disabled }: SwitchProps) {
         value={value}
         onValueChange={onValueChange}
         disabled={disabled}
+        accessibilityLabel={label}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: value, disabled: !!disabled }}
         trackColor={{ false: "#d4d4d8", true: "#6366f1" }}
         thumbColor="#ffffff"
       />

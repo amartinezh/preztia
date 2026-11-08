@@ -1,6 +1,19 @@
 import { useState } from "react";
 import type { Expense } from "@preztiaos/contracts";
-import { Banner, Button, Field, Input, Modal, MoneyText, Row, Spinner, Stack, Text } from "@preztiaos/ui";
+import {
+  Banner,
+  Button,
+  ConfirmModal,
+  Field,
+  formatMoney,
+  Input,
+  Modal,
+  MoneyText,
+  Row,
+  Spinner,
+  Stack,
+  Text,
+} from "@preztiaos/ui";
 
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
@@ -39,15 +52,17 @@ export function ExpenseReviewModal({
   currency: string;
   onClose: () => void;
 }) {
-  const { t } = useT();
+  const { t, tf } = useT();
   const review = useReviewExpense();
   const { options, loading } = usePayingOptions(expense);
   const [boxId, setBoxId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
   const selected = options.find((o) => o.id === boxId) ?? null;
   const insufficient = selected?.balanceMinor != null && selected.balanceMinor < expense.amountMinor;
 
+  // Aprobar mueve dinero: se confirma antes (monto y caja); el error queda en el Banner del modal.
   const decide = (approve: boolean) => {
     setError(null);
     review.mutate(
@@ -55,6 +70,7 @@ export function ExpenseReviewModal({
         ? { id: expense.id, approve, ...(boxId ? { paidFromCashBoxId: boxId } : {}) }
         : { id: expense.id, approve, rejectionReason: reason.trim() },
       {
+        onSettled: () => setConfirmingApprove(false),
         onSuccess: onClose,
         onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
       },
@@ -62,7 +78,7 @@ export function ExpenseReviewModal({
   };
 
   return (
-    <Modal visible onClose={onClose} title={t("cash.expenses.review")}>
+    <Modal visible onClose={onClose} title={t("cash.expenses.review")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Row className="items-center justify-between">
@@ -72,7 +88,7 @@ export function ExpenseReviewModal({
           <MoneyText variant="label" amountMinor={expense.amountMinor} currency={currency} />
         </Row>
 
-        <Field label={t("cash.expenses.paidFrom")} hint={t("cash.expenses.paidFromHint")}>
+        <Field label={t("cash.expenses.paidFrom")} hint={t("cash.expenses.paidFromHint")} required>
           {loading ? (
             <Spinner label={t("common.loading")} />
           ) : options.length === 0 ? (
@@ -87,7 +103,26 @@ export function ExpenseReviewModal({
           loading={review.isPending}
           disabled={!boxId || insufficient}
           block
-          onPress={() => decide(true)}
+          onPress={() => setConfirmingApprove(true)}
+        />
+        {!boxId && !loading ? (
+          <Text variant="caption" tone="muted" className="text-center">
+            {t("cash.expenses.needPaidFrom")}
+          </Text>
+        ) : null}
+        <ConfirmModal
+          visible={confirmingApprove}
+          title={t("expenses.approve.confirmTitle")}
+          description={tf("expenses.approve.confirmBody", {
+            amount: formatMoney(expense.amountMinor, currency),
+            box: selected?.name ?? "",
+          })}
+          confirmLabel={t("cash.expenses.approve")}
+          cancelLabel={t("common.cancel")}
+          closeLabel={t("common.close")}
+          loading={review.isPending}
+          onConfirm={() => decide(true)}
+          onCancel={() => setConfirmingApprove(false)}
         />
 
         <Field label={t("cash.expenses.rejectionReason")} required>

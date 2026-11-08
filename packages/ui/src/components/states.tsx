@@ -33,10 +33,13 @@ export function ErrorState({
   title,
   description,
   onRetry,
+  retryLabel = "Reintentar",
 }: {
   title: string;
   description?: string;
   onRetry?: () => void;
+  /** Etiqueta del botón de reintento (la app la traduce; el default es el fallback). */
+  retryLabel?: string;
 }) {
   return (
     <View className="flex-1 items-center justify-center gap-3 p-8" accessibilityRole="alert">
@@ -48,7 +51,7 @@ export function ErrorState({
           {description}
         </Text>
       ) : null}
-      {onRetry ? <Button label="Reintentar" variant="secondary" onPress={onRetry} /> : null}
+      {onRetry ? <Button label={retryLabel} variant="secondary" onPress={onRetry} /> : null}
     </View>
   );
 }

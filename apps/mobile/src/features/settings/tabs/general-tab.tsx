@@ -235,6 +235,7 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
             value={form.settlementFrequency}
             options={SETTLEMENT_FREQUENCIES.map((f) => ({ value: f, label: t(`config.settlement.frequency.${f}`) }))}
             onChange={(v) => set("settlementFrequency", v)}
+            disabled={!canEdit}
           />
         </Field>
         {form.settlementFrequency !== "BIWEEKLY" ? (
@@ -292,6 +293,7 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
                 value={form.commissionBase}
                 options={COMMISSION_BASES.map((b) => ({ value: b, label: t(`commission.base.${b}`) }))}
                 onChange={(v) => set("commissionBase", v)}
+                disabled={!canEdit}
               />
             </Field>
           </>

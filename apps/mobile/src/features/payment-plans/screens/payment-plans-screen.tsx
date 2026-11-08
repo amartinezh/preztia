@@ -5,6 +5,7 @@ import {
   Banner,
   Button,
   Card,
+  ConfirmModal,
   Field,
   Input,
   Row,
@@ -13,6 +14,7 @@ import {
   Stack,
   Switch,
   Text,
+  useToast,
   type SelectOption,
 } from "@preztiaos/ui";
 
@@ -52,15 +54,30 @@ const toBaseThousand = (percent: number) => Math.round(percent * 10);
  * (Configuración de cobro) que se cablea en la Fase 10.
  */
 export function PaymentPlansScreen() {
-  const { t } = useT();
+  const { t, tf } = useT();
+  const toast = useToast();
   const query = usePaymentPlans();
   const update = useUpdatePaymentPlan();
   const setDefault = useSetDefaultPaymentPlan();
   const remove = useDeletePaymentPlan();
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PaymentPlanView | null>(null);
 
   const onError = (err: unknown) =>
     setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
+
+  // Eliminar solo tras confirmar; el error se avisa fuera del modal para que quede visible.
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove.mutate(pendingDelete.id, {
+      onSettled: () => setPendingDelete(null),
+      onError: (err) =>
+        toast.show({
+          tone: "danger",
+          title: isApiError(err) ? t(err.messageKey) : t("errors.unknown"),
+        }),
+    });
+  };
 
   if (query.isPending || !query.data) return <Spinner label={t("common.loading")} />;
   const plans = query.data.items;
@@ -95,7 +112,7 @@ export function PaymentPlansScreen() {
               }}
               onDelete={() => {
                 setError(null);
-                remove.mutate(plan.id, { onError });
+                setPendingDelete(plan);
               }}
             />
           ))}
@@ -103,6 +120,18 @@ export function PaymentPlansScreen() {
 
         <NewPlanForm onError={onError} clearError={() => setError(null)} />
       </Stack>
+      <ConfirmModal
+        visible={pendingDelete !== null}
+        title={t("plans.delete.confirmTitle")}
+        description={tf("plans.delete.confirmBody", { name: pendingDelete?.name ?? "" })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        closeLabel={t("common.close")}
+        tone="danger"
+        loading={remove.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </Screen>
   );
 }

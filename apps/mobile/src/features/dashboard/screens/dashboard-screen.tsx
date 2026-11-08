@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View } from "react-native";
-import { Banner, Card, formatMoney, Row, Spinner, Stack, Text, useTheme } from "@preztiaos/ui";
+import { Card, ErrorState, formatMoney, Row, Skeleton, Stack, Text, useTheme } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { useT, type MessageKey } from "@/core/i18n";
@@ -22,7 +22,7 @@ type TimePeriod = "today" | "week" | "month" | "year";
  * datos (hook) y los reparte a tarjetas/gráficos puros; el estilo se apoya en los tokens del tema.
  */
 export function DashboardScreen() {
-  const { t } = useT();
+  const { t, tf } = useT();
   const { colors } = useTheme();
   const query = useDashboardKpis();
   const kpis = query.data;
@@ -39,7 +39,7 @@ export function DashboardScreen() {
 
   // Colores derivados del tema para pasar a los componentes SVG (que no leen nativewind).
   const textColor = colors.text;
-  const muted = "#94a3b8"; // gris neutro legible sobre fondo claro u oscuro
+  const muted = colors.textMuted; // del tema: cumple contraste AA en claro y oscuro
   const track = colors.surfaceMuted;
   const surface = colors.surface;
   const border = colors.border;
@@ -62,8 +62,15 @@ export function DashboardScreen() {
           </Text>
         </Stack>
 
-        {query.isError && !kpis ? <Banner tone="danger" title={t("errors.network")} /> : null}
-        {query.isPending && !kpis ? <Spinner label={t("common.loading")} /> : null}
+        {query.isError && !kpis ? (
+          <ErrorState
+            title={t("common.loadFailed")}
+            description={t("common.loadFailedHint")}
+            retryLabel={t("common.retry")}
+            onRetry={() => void query.refetch()}
+          />
+        ) : null}
+        {query.isPending && !kpis ? <DashboardSkeleton /> : null}
 
         {kpis ? (
           <Stack gap="lg">
@@ -102,7 +109,7 @@ export function DashboardScreen() {
                   icon="⚠️"
                   label={t("home.treasury.overdue")}
                   value={money(kpis.treasury.portfolioOverdueMinor)}
-                  caption={overdueRate(kpis.treasury.portfolioActiveMinor, kpis.treasury.portfolioOverdueMinor)}
+                  caption={overdueRate(kpis.treasury.portfolioActiveMinor, kpis.treasury.portfolioOverdueMinor, tf)}
                   accent={dashboardPalette.rose}
                   textColor={textColor}
                   mutedColor={muted}
@@ -274,7 +281,7 @@ export function DashboardScreen() {
                   icon="🚨"
                   label={t("home.risk.fraud")}
                   value={String(kpis.risk.fraudAttemptsDetected)}
-                  caption={fraudRate(kpis.risk.documentUploadAttempts, kpis.risk.fraudAttemptsDetected)}
+                  caption={fraudRate(kpis.risk.documentUploadAttempts, kpis.risk.fraudAttemptsDetected, tf)}
                   accent={dashboardPalette.rose}
                   textColor={textColor}
                   mutedColor={muted}
@@ -316,6 +323,21 @@ export function DashboardScreen() {
 
 // --- Helpers de presentación (sin lógica de negocio) --------------------------
 
+/** Esqueleto con la silueta del panel: la persona ve que hay datos en camino, no cifras falsas. */
+function DashboardSkeleton() {
+  return (
+    <Stack gap="lg" accessibilityLabel="Cargando" accessibilityRole="progressbar">
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+        <Skeleton className="h-28 min-w-[150px] flex-1 rounded-2xl" />
+        <Skeleton className="h-28 min-w-[150px] flex-1 rounded-2xl" />
+        <Skeleton className="h-28 min-w-[150px] flex-1 rounded-2xl" />
+      </View>
+      <Skeleton className="h-56 w-full rounded-2xl" />
+      <Skeleton className="h-40 w-full rounded-2xl" />
+    </Stack>
+  );
+}
+
 function greeting(t: (key: MessageKey) => string): string {
   const hour = new Date().getHours();
   if (hour < 12) return t("home.greeting.morning");
@@ -332,17 +354,19 @@ function today(): string {
   });
 }
 
+type Interpolate = (key: "home.overdueRate" | "home.fraudRate", vars: { pct: number }) => string;
+
 /** Porcentaje de cartera vencida sobre la activa (mora), como leyenda de alerta. */
-function overdueRate(activeMinor: number, overdueMinor: number): string | undefined {
+function overdueRate(activeMinor: number, overdueMinor: number, tf: Interpolate): string | undefined {
   const base = activeMinor + overdueMinor;
   if (base <= 0) return undefined;
-  return `${Math.round((overdueMinor / base) * 100)}% en mora`;
+  return tf("home.overdueRate", { pct: Math.round((overdueMinor / base) * 100) });
 }
 
 /** Porcentaje de intentos de subida marcados como fraude. */
-function fraudRate(uploads: number, fraud: number): string | undefined {
+function fraudRate(uploads: number, fraud: number, tf: Interpolate): string | undefined {
   if (uploads <= 0) return undefined;
-  return `${Math.round((fraud / uploads) * 100)}% del total`;
+  return tf("home.fraudRate", { pct: Math.round((fraud / uploads) * 100) });
 }
 
 const MINUTES_PER_HOUR = 60;

@@ -60,7 +60,10 @@ export function DineroHubScreen() {
     },
   ];
 
-  const current = segments.find((s) => s.key === params.tab) ?? segments[0];
+  // Sin segmento en la URL se abre el Resumen (liquidez y reporte del día), no la Liquidación.
+  const DEFAULT_SEGMENT = "resumen";
+  const current =
+    segments.find((s) => s.key === (params.tab ?? DEFAULT_SEGMENT)) ?? segments[0];
 
   return (
     <View className="flex-1 bg-white dark:bg-zinc-950">

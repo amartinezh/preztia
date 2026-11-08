@@ -8,6 +8,8 @@ export type ModalProps = {
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  /** Etiqueta accesible del botón ✕ y del fondo (la app la traduce). */
+  closeLabel?: string;
 };
 
 /**
@@ -20,7 +22,7 @@ export type ModalProps = {
  * produciría `<button>` dentro de `<button>` (HTML inválido / error de hidratación).
  * Manteniéndolos como hermanos, tocar fuera cierra y tocar dentro no, sin botones anidados.
  */
-export function Modal({ visible, onClose, title, children }: ModalProps) {
+export function Modal({ visible, onClose, title, children, closeLabel = "Cerrar" }: ModalProps) {
   return (
     <RNModal
       visible={visible}
@@ -32,7 +34,7 @@ export function Modal({ visible, onClose, title, children }: ModalProps) {
         {/* Backdrop: cubre toda la superficie DETRÁS del panel; cerrar al tocarlo. */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Cerrar"
+          accessibilityLabel={closeLabel}
           onPress={onClose}
           className="absolute inset-0 bg-black/50"
         />
@@ -40,10 +42,12 @@ export function Modal({ visible, onClose, title, children }: ModalProps) {
         {/* Panel: es un View (no botón), por lo que sus botones internos son válidos. */}
         <View className="max-h-[90%] w-full max-w-[640px] overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <View className="flex-row items-center justify-between border-b border-zinc-200 p-4 dark:border-zinc-800">
-            <Text variant="subtitle">{title ?? ""}</Text>
+            <Text variant="subtitle" className="flex-1 pr-2" numberOfLines={2}>
+              {title ?? ""}
+            </Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Cerrar"
+              accessibilityLabel={closeLabel}
               onPress={onClose}
               className="h-11 w-11 items-center justify-center rounded-full active:bg-zinc-100 dark:active:bg-zinc-800"
             >

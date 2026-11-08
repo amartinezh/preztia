@@ -3,12 +3,16 @@ import "@/global.css";
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { useColorScheme, View } from "react-native";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ErrorBoundary, Spinner } from "@preztiaos/ui";
+import { ErrorBoundary, Spinner, ToastProvider } from "@preztiaos/ui";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { SessionProvider, useSession } from "@/core/auth/session";
+import { installZodErrorMap } from "@/core/form/zod-error-map";
 import { queryClient } from "@/core/query";
 import { logger } from "@/core/logger";
+
+// Los esquemas del contrato no traen mensajes propios: sin esto la validación hablaría en inglés.
+installZodErrorMap();
 
 export default function RootLayout() {
   const scheme = useColorScheme();
@@ -17,8 +21,10 @@ export default function RootLayout() {
       <SessionProvider>
         <ThemeProvider value={scheme === "dark" ? DarkTheme : DefaultTheme}>
           <ErrorBoundary onError={(error) => logger.error("render_crash", {}, { name: error.name })}>
-            <AnimatedSplashOverlay />
-            <RootNavigator />
+            <ToastProvider>
+              <AnimatedSplashOverlay />
+              <RootNavigator />
+            </ToastProvider>
           </ErrorBoundary>
         </ThemeProvider>
       </SessionProvider>

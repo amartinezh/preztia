@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import type { GrantCreditInput, RegisterMigratedCreditInput } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
+import { withRequestOptions } from "@/core/api/request-context";
 import { cashBoxKeys } from "@/features/cash/api/boxes-queries";
 
 const PAGE_SIZE = 20;
@@ -12,12 +13,20 @@ export const creditKeys = {
   portfolio: (creditId: string) => [...creditKeys.all, "portfolio", creditId] as const,
 };
 
-/** Carga un crédito del sistema anterior con sus abonos históricos (ADMIN). No mueve cajas. */
+/**
+ * Carga un crédito del sistema anterior con sus abonos históricos (ADMIN). No mueve cajas. La
+ * clave de idempotencia la fija la pantalla por intento de formulario: un reintento tras perder la
+ * respuesta devuelve el mismo crédito en vez de registrar otro (§3.7).
+ */
 export function useRegisterMigratedCredit() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: RegisterMigratedCreditInput) =>
-      unwrap(await api.registerMigratedCredit({ headers: tenantHeader(), body: input })),
+    mutationFn: async ({ idempotencyKey, ...input }: RegisterMigratedCreditInput & { idempotencyKey: string }) =>
+      unwrap(
+        await withRequestOptions({ idempotencyKey }, () =>
+          api.registerMigratedCredit({ headers: tenantHeader(), body: input }),
+        ),
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: creditKeys.all }),
   });
 }
@@ -42,12 +51,19 @@ export function useCreditPortfolio(creditId: string) {
   });
 }
 
-/** Otorga un crédito. Refresca la lista al tener éxito. */
+/**
+ * Otorga un crédito (desembolso: operación de dinero). La clave de idempotencia es estable por
+ * intento de formulario, así un reintento manual tras un timeout no desembolsa dos veces.
+ */
 export function useGrantCredit() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: GrantCreditInput) =>
-      unwrap(await api.grantCredit({ headers: tenantHeader(), body: input })),
+    mutationFn: async ({ idempotencyKey, ...input }: GrantCreditInput & { idempotencyKey: string }) =>
+      unwrap(
+        await withRequestOptions({ idempotencyKey }, () =>
+          api.grantCredit({ headers: tenantHeader(), body: input }),
+        ),
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: creditKeys.list() });
       // Otorgar desembolsa: el saldo de la caja de origen bajó.

@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { Alert, Pressable } from "react-native";
+import { Pressable } from "react-native";
 import * as Location from "expo-location";
 import type { CriticalRouteOutput } from "@preztiaos/contracts";
 import {
   Badge,
+  Banner,
   Button,
   Card,
   ErrorState,
@@ -12,9 +13,11 @@ import {
   Spinner,
   Stack,
   Text,
+  useToast,
 } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
+import { useT } from "@/core/i18n";
 import { useCriticalClients, useCriticalRoute } from "../api/map-queries";
 import { CollectionMap } from "../components/collection-map";
 import type { MapMarker, MapPoint } from "../components/collection-map.types";
@@ -78,10 +81,14 @@ export function CollectionMapScreen() {
  * visitarlos de la forma más eficiente desde la posición actual del cobrador.
  */
 function CriticalRouteView() {
+  const { t } = useT();
+  const toast = useToast();
   const clientsQuery = useCriticalClients();
   const route = useCriticalRoute();
   const [origin, setOrigin] = useState<MapPoint | null>(null);
   const [result, setResult] = useState<CriticalRouteOutput | null>(null);
+  // Permiso de ubicación denegado: aviso persistente, porque el cobrador debe actuar para seguir.
+  const [locationDenied, setLocationDenied] = useState(false);
 
   const clients = clientsQuery.data?.items ?? [];
 
@@ -113,9 +120,10 @@ function CriticalRouteView() {
   const generateRoute = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Ubicación requerida", "Activa el permiso de ubicación para trazar la ruta de cobro.");
+      setLocationDenied(true);
       return;
     }
+    setLocationDenied(false);
     const pos = await Location.getCurrentPositionAsync({});
     const start: MapPoint = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
     setOrigin(start);
@@ -123,13 +131,14 @@ function CriticalRouteView() {
       onSuccess: (data) => {
         setResult(data);
         if (data.degraded) {
-          Alert.alert(
-            "Ruta sin optimizar",
-            "El motor de rutas no estuvo disponible; se muestran los clientes sin orden óptimo.",
-          );
+          toast.show({
+            tone: "warning",
+            title: t("map.routeDegradedTitle"),
+            description: t("map.routeDegradedBody"),
+          });
         }
       },
-      onError: () => Alert.alert("Error", "No se pudo generar la ruta de cobro."),
+      onError: () => toast.show({ tone: "danger", title: t("map.routeFailed") }),
     });
   };
 
@@ -139,6 +148,7 @@ function CriticalRouteView() {
       <ErrorState
         title="Mapa de cobro"
         description="No se pudieron cargar los clientes críticos."
+        retryLabel={t("common.retry")}
         onRetry={() => clientsQuery.refetch()}
       />
     );
@@ -157,6 +167,14 @@ function CriticalRouteView() {
       ) : (
         <>
           <CollectionMap center={center} markers={markers} route={routeGeometry} />
+
+          {locationDenied ? (
+            <Banner
+              tone="warning"
+              title={t("map.locationRequiredTitle")}
+              description={t("map.locationRequiredBody")}
+            />
+          ) : null}
 
           <Button
             label="Generar ruta crítica"

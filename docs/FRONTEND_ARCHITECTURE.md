@@ -2,7 +2,7 @@
 
 > **Estado:** documento vivo. Complementa [ARCHITECTURE.md](ARCHITECTURE.md) (fuente de verdad del sistema).
 > **Ámbito:** la app cliente `apps/mobile` (Expo SDK 56 + Expo Router + NativeWind v4) y el design system `@preztiaos/ui`.
-> **Última actualización:** 2026-06-14 (IAM por roles en el cliente: slices `tenants/users/zones/collectors/clients`, menú role-aware en `(tabs)/_layout.tsx`, primitivos `Select`/`Switch`).
+> **Última actualización:** 2026-11-08 (Fase 0 de usabilidad, ADR #50: `MoneyInput`, `ConfirmModal`, `ToastProvider`, mapa de errores de zod en español, cola offline observable, idioma del operador fijo en `es`).
 
 Esta guía define **cómo se escribe el frontend** para cumplir —y demostrar— los atributos de
 calidad vinculantes de [§3](ARCHITECTURE.md#3-atributos-de-calidad-y-estándares-de-código) y
@@ -117,3 +117,21 @@ npx expo export --platform web                     # valida el bundle Metro + á
 **Chequeos manuales clave:** sin JWT → redirige a `sign-in` y la API responde 401; las peticiones
 llevan `Authorization`, `X-Correlation-Id` e `Idempotency-Key`; los logs no contienen PII; en modo
 avión un abono se encola y se reenvía **una sola vez** al recuperar red (sin doble abono).
+
+---
+
+## 7. Convenciones de usabilidad (Fase 0, ADR #50)
+
+Nacen del informe [INFORME_USABILIDAD.md](INFORME_USABILIDAD.md). Son obligatorias en toda pantalla nueva o tocada.
+
+| Regla | Cómo se cumple |
+|---|---|
+| **El dinero nunca se convierte en silencio.** | Todo monto tecleado usa `MoneyInput` (`@preztiaos/ui`): guarda el TEXTO en estado y recibe el entero menor por `onChangeAmount` (`null` = inválido/ambiguo). El botón de enviar va `disabled` mientras sea `null`. Prohibido `Number(texto) \|\| 0`. |
+| **Lo irreversible se confirma con un resumen.** | `ConfirmModal` con título, qué va a pasar (montos con `formatMoney`, fechas, "no se puede deshacer") y `tone="danger"` para borrar o sellar. |
+| **Toda mutación responde.** | `useToast().show({ tone, title, description })` al terminar (éxito, encolado sin señal, error). Si la pantalla navega al éxito, el toast va antes de `router.back()`. `Alert.alert` está prohibido (no-op en web). |
+| **Reintentar el mismo intento no duplica dinero.** | La pantalla genera la `Idempotency-Key` una vez por intento de formulario (`useState(() => newIdempotencyKey())`), la pasa en las variables de la mutación y la renueva solo tras éxito. El hook la envía con `withRequestOptions`. |
+| **Sin señal no se pierde ni se repite.** | La cola offline (`core/offline/queue.ts`) notifica pendientes (`subscribePending`) y cada barrido devuelve `processed`/`dropped`; `useOfflineSync` corre al montar, al volver la red (web) y al volver la app al frente (`AppState`), y el layout lo cuenta con toasts. |
+| **Nunca datos de ejemplo como si fueran reales.** | Sin `placeholderData` con mocks; mientras carga se usan `Skeleton` con la silueta de la pantalla. |
+| **Errores en el idioma de la persona.** | `installZodErrorMap()` en la raíz traduce los mensajes de zod; los `DomainError` siguen mapeados en `core/errors`. Un error de carga se muestra con `ErrorState` + `retryLabel={t("common.retry")}`, nunca como lista vacía. |
+| **Un solo idioma por sesión.** | El operador ve la app en `es` (`detectLocale()` fijo) hasta completar pt-BR; el idioma al cliente es del tenant (ADR #47). Las primitivas de `@preztiaos/ui` reciben sus textos por prop (`closeLabel`, `retryLabel`, `invalidLabel`). `tf(key, vars)` interpola `{n}`. |
+| **Cada pantalla apilada tiene salida.** | Todas las rutas de `app/(app)/_layout.tsx` (también las modales) declaran `detail(título, ancla)` para el botón atrás con fallback en web. |

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { DepositOrder } from "@preztiaos/contracts";
-import { Banner, Button, Field, Input, majorToMinor, minorToMajor, Modal, Stack } from "@preztiaos/ui";
+import { Banner, Button, Field, Input, Modal, MoneyInput, Stack } from "@preztiaos/ui";
 
+import { moneyInputText } from "@/components/money-input-text";
 import { ReceiptPicker } from "@/components/receipt-picker";
 import type { PickedFile } from "@/core/api/multipart";
 import { isApiError } from "@/core/errors";
@@ -27,7 +28,8 @@ function parseLocalStamp(text: string): Date | null {
 export function ReportDepositModal({ order, onClose }: { order: DepositOrder; onClose: () => void }) {
   const { t } = useT();
   const report = useReportDeposit();
-  const [amount, setAmount] = useState(String(minorToMajor(order.amountMinor)));
+  const [amountText, setAmountText] = useState(moneyInputText(order.amountMinor));
+  const [amountMinor, setAmountMinor] = useState<number | null>(order.amountMinor);
   const [when, setWhen] = useState(localStamp(new Date()));
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
@@ -37,8 +39,7 @@ export function ReportDepositModal({ order, onClose }: { order: DepositOrder; on
   const submit = () => {
     setError(null);
     const depositedAt = parseLocalStamp(when);
-    const amountMinor = majorToMinor(Number(amount) || 0);
-    if (!depositedAt || amountMinor <= 0) {
+    if (!depositedAt || amountMinor === null || amountMinor <= 0) {
       setError(t("errors.validation"));
       return;
     }
@@ -63,13 +64,19 @@ export function ReportDepositModal({ order, onClose }: { order: DepositOrder; on
   };
 
   return (
-    <Modal visible onClose={onClose} title={t("deposit.report.title")}>
+    <Modal visible onClose={onClose} title={t("deposit.report.title")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
-        <Field label={t("deposit.report.amount")} required>
-          <Input keyboardType="numeric" value={amount} onChangeText={setAmount} />
+        <Field label={t("deposit.report.amount")} hint={t("money.hint")} required>
+          <MoneyInput
+            value={amountText}
+            onChangeText={setAmountText}
+            onChangeAmount={setAmountMinor}
+            currency={order.currency}
+            invalidLabel={t("money.invalid")}
+          />
         </Field>
-        <Field label={t("deposit.report.when")} hint="AAAA-MM-DD HH:MM" required>
+        <Field label={t("deposit.report.when")} hint={t("common.dateTimeFormatHint")} required>
           <Input value={when} onChangeText={setWhen} />
         </Field>
         <Field label={t("deposit.report.reference")}>
@@ -79,7 +86,13 @@ export function ReportDepositModal({ order, onClose }: { order: DepositOrder; on
           <Input value={note} onChangeText={setNote} multiline />
         </Field>
         <ReceiptPicker value={receipt} onChange={setReceipt} onError={setError} />
-        <Button label={t("deposit.report.submit")} loading={report.isPending} disabled={!receipt} block onPress={submit} />
+        <Button
+          label={t("deposit.report.submit")}
+          loading={report.isPending}
+          disabled={!receipt || amountMinor === null}
+          block
+          onPress={submit}
+        />
       </Stack>
     </Modal>
   );

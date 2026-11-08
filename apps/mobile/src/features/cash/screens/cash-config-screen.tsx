@@ -12,6 +12,7 @@ import {
   Banner,
   Button,
   Card,
+  ConfirmModal,
   ErrorState,
   Field,
   Input,
@@ -22,6 +23,7 @@ import {
   Stack,
   Switch,
   Text,
+  useToast,
   type SelectOption,
 } from "@preztiaos/ui";
 
@@ -106,11 +108,26 @@ export function CashConfigScreen() {
 // --- Cuentas bancarias ------------------------------------------------------
 
 function BankAccountsSection() {
-  const { t } = useT();
+  const { t, tf } = useT();
+  const toast = useToast();
   const list = useBankAccounts();
   const del = useDeleteBankAccount();
   // null = cerrado; { account } presente = editar; { account: undefined } = crear.
   const [editor, setEditor] = useState<{ account?: BankAccount } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<BankAccount | null>(null);
+
+  // Borrar la cuenta (y sus credenciales) solo tras confirmar; el error se avisa fuera del modal.
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    del.mutate(pendingDelete.id, {
+      onSettled: () => setPendingDelete(null),
+      onError: (err) =>
+        toast.show({
+          tone: "danger",
+          title: isApiError(err) ? t(err.messageKey) : t("errors.unknown"),
+        }),
+    });
+  };
 
   return (
     <Stack gap="sm">
@@ -119,7 +136,7 @@ function BankAccountsSection() {
       {list.isPending ? <Spinner label={t("common.loading")} /> : null}
       {list.data?.items.length ? (
         list.data.items.map((a) => (
-          <BankAccountCard key={a.id} account={a} onEdit={() => setEditor({ account: a })} onDelete={() => del.mutate(a.id)} />
+          <BankAccountCard key={a.id} account={a} onEdit={() => setEditor({ account: a })} onDelete={() => setPendingDelete(a)} />
         ))
       ) : list.data ? (
         <Text tone="muted">{t("cash.accounts.empty")}</Text>
@@ -128,6 +145,18 @@ function BankAccountsSection() {
       {editor ? (
         <BankAccountModal account={editor.account} onClose={() => setEditor(null)} />
       ) : null}
+      <ConfirmModal
+        visible={pendingDelete !== null}
+        title={t("cash.config.deleteAccount.confirmTitle")}
+        description={tf("cash.config.deleteAccount.confirmBody", { name: pendingDelete?.label ?? "" })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        closeLabel={t("common.close")}
+        tone="danger"
+        loading={del.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </Stack>
   );
 }
@@ -373,6 +402,7 @@ function BankAccountModal({
       visible
       onClose={onClose}
       title={isEdit ? t("cash.accounts.edit") : t("cash.accounts.create")}
+      closeLabel={t("common.close")}
     >
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
@@ -556,12 +586,27 @@ function BankAccountModal({
 // --- Cajas ------------------------------------------------------------------
 
 function CashBoxesSection() {
-  const { t } = useT();
+  const { t, tf } = useT();
+  const toast = useToast();
   const accounts = useBankAccounts();
   const boxes = useCashBoxes();
   const collectors = useUsersList("COLLECTOR");
   const del = useDeleteCashBox();
   const [editor, setEditor] = useState<{ box?: CashBox } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CashBox | null>(null);
+
+  // Borrar la caja solo tras confirmar; el error se avisa fuera del modal para que quede visible.
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    del.mutate(pendingDelete.id, {
+      onSettled: () => setPendingDelete(null),
+      onError: (err) =>
+        toast.show({
+          tone: "danger",
+          title: isApiError(err) ? t(err.messageKey) : t("errors.unknown"),
+        }),
+    });
+  };
 
   const accountOptions: SelectOption<string>[] = (accounts.data?.items ?? []).map((a) => ({
     value: a.id,
@@ -604,7 +649,7 @@ function CashBoxesSection() {
               </Stack>
               <Row className="gap-2">
                 <IconButton glyph="✎" label={t("common.edit")} onPress={() => setEditor({ box: b })} />
-                <IconButton glyph="🗑" label={t("common.delete")} tone="danger" onPress={() => del.mutate(b.id)} />
+                <IconButton glyph="🗑" label={t("common.delete")} tone="danger" onPress={() => setPendingDelete(b)} />
               </Row>
             </Row>
           </Card>
@@ -622,6 +667,18 @@ function CashBoxesSection() {
           onClose={() => setEditor(null)}
         />
       ) : null}
+      <ConfirmModal
+        visible={pendingDelete !== null}
+        title={t("cash.config.deleteBox.confirmTitle")}
+        description={tf("cash.config.deleteBox.confirmBody", { name: pendingDelete?.name ?? "" })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        closeLabel={t("common.close")}
+        tone="danger"
+        loading={del.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </Stack>
   );
 }
@@ -696,7 +753,12 @@ function CashBoxModal({
   };
 
   return (
-    <Modal visible onClose={onClose} title={isEdit ? t("cash.boxes.edit") : t("cash.boxes.add")}>
+    <Modal
+      visible
+      onClose={onClose}
+      title={isEdit ? t("cash.boxes.edit") : t("cash.boxes.add")}
+      closeLabel={t("common.close")}
+    >
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Field label={t("cash.boxes.name")} required>

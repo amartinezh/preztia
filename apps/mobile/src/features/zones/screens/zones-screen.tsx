@@ -6,6 +6,7 @@ import { createZoneInput } from "@preztiaos/contracts";
 import {
   Banner,
   Button,
+  ConfirmModal,
   Field,
   Input,
   ListItem,
@@ -15,6 +16,7 @@ import {
   Spinner,
   Stack,
   Text,
+  useToast,
   type SelectOption,
 } from "@preztiaos/ui";
 
@@ -25,11 +27,26 @@ import { ZoneWhatsappEditor } from "./zone-whatsapp-editor";
 
 /** CRUD del árbol de zonas (ADMIN). La indentación refleja la profundidad del path ltree. */
 export function ZonesScreen() {
-  const { t } = useT();
+  const { t, tf } = useT();
+  const toast = useToast();
   const query = useZonesList();
   const remove = useDeleteZone();
   const [creating, setCreating] = useState(false);
   const [whatsappZone, setWhatsappZone] = useState<ZoneNode | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ZoneNode | null>(null);
+
+  // Eliminar solo tras confirmar; el error se avisa fuera del modal para que quede visible.
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove.mutate(pendingDelete.id, {
+      onSettled: () => setPendingDelete(null),
+      onError: (err) =>
+        toast.show({
+          tone: "danger",
+          title: isApiError(err) ? t(err.messageKey) : t("errors.unknown"),
+        }),
+    });
+  };
 
   if (query.isPending) return <Spinner label={t("common.loading")} />;
   const zones = query.data?.items ?? [];
@@ -67,7 +84,7 @@ export function ZonesScreen() {
                       label={t("zones.action.delete")}
                       variant="ghost"
                       size="sm"
-                      onPress={() => remove.mutate(item.id)}
+                      onPress={() => setPendingDelete(item)}
                     />
                   </Row>
                 }
@@ -81,6 +98,18 @@ export function ZonesScreen() {
         visible={whatsappZone !== null}
         onClose={() => setWhatsappZone(null)}
         zone={whatsappZone}
+      />
+      <ConfirmModal
+        visible={pendingDelete !== null}
+        title={t("zones.delete.confirmTitle")}
+        description={tf("zones.delete.confirmBody", { name: pendingDelete?.name ?? "" })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        closeLabel={t("common.close")}
+        tone="danger"
+        loading={remove.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
       />
     </SafeAreaView>
   );
@@ -131,7 +160,7 @@ function CreateZoneModal({
   };
 
   return (
-    <Modal visible={visible} onClose={onClose} title={t("zones.new.title")}>
+    <Modal visible={visible} onClose={onClose} title={t("zones.new.title")} closeLabel={t("common.close")}>
       <Stack gap="md" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Field label={t("zones.new.name")} required>

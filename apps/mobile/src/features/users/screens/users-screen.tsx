@@ -7,6 +7,7 @@ import {
   Badge,
   Banner,
   Button,
+  ConfirmModal,
   Field,
   Input,
   ListItem,
@@ -16,32 +17,61 @@ import {
   Spinner,
   Stack,
   Text,
+  useToast,
   type SelectOption,
 } from "@preztiaos/ui";
 
 import { useSession } from "@/core/auth/session";
 import { isApiError } from "@/core/errors";
-import { useT } from "@/core/i18n";
+import { useT, type MessageKey } from "@/core/i18n";
 import { useCreateUser, useUpdateUser, useUsersList } from "../api/queries";
+
+// Nombre del rol para el operador (el enum del contrato obliga a nombrar todo rol nuevo).
+const ROLE_KEY: Record<UserSummary["role"], MessageKey> = {
+  SUPER_ADMIN: "users.role.superAdmin",
+  ADMIN: "users.role.admin",
+  COORDINATOR: "users.role.coordinator",
+  COLLECTOR: "users.role.collector",
+};
 
 /**
  * CRUD de usuarios del tenant. El ADMIN crea coordinadores/cobradores; el COORDINATOR solo
  * crea cobradores (el backend impone la jerarquía y el alcance de zonas → 403 si se excede).
  */
 export function UsersScreen() {
-  const { t } = useT();
+  const { t, tf } = useT();
+  const toast = useToast();
   const { role } = useSession();
   const query = useUsersList();
   const update = useUpdateUser();
   const [creating, setCreating] = useState(false);
+  // Usuario cuya (des)activación espera confirmación.
+  const [pendingToggle, setPendingToggle] = useState<UserSummary | null>(null);
 
   const items = useMemo<UserSummary[]>(
     () => query.data?.pages.flatMap((p) => p.items) ?? [],
     [query.data],
   );
 
+  // Cambiar el estado solo tras confirmar; el error se avisa fuera del modal para que quede visible.
+  const confirmToggle = () => {
+    if (!pendingToggle) return;
+    update.mutate(
+      { id: pendingToggle.id, active: !pendingToggle.active },
+      {
+        onSettled: () => setPendingToggle(null),
+        onError: (err) =>
+          toast.show({
+            tone: "danger",
+            title: isApiError(err) ? t(err.messageKey) : t("errors.unknown"),
+          }),
+      },
+    );
+  };
+
   if (query.isPending) return <Spinner label={t("common.loading")} />;
   const canEdit = role === "ADMIN";
+  const deactivating = pendingToggle?.active === true;
 
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-white dark:bg-zinc-950">
@@ -62,22 +92,32 @@ export function UsersScreen() {
         renderItem={({ item }) => (
           <ListItem
             title={item.email}
-            subtitle={`${item.role}${item.zonePaths.length ? ` · ${item.zonePaths.join(", ")}` : ""}`}
-            onPress={
-              canEdit
-                ? () => update.mutate({ id: item.id, active: !item.active })
-                : undefined
-            }
+            subtitle={`${t(ROLE_KEY[item.role])}${item.zonePaths.length ? ` · ${item.zonePaths.join(", ")}` : ""}`}
+            onPress={canEdit ? () => setPendingToggle(item) : undefined}
             trailing={
               <Badge
                 tone={item.active ? "success" : "neutral"}
-                label={item.active ? t("users.active") : "—"}
+                label={item.active ? t("users.active") : t("users.inactive")}
               />
             }
           />
         )}
       />
       <CreateUserModal visible={creating} onClose={() => setCreating(false)} />
+      <ConfirmModal
+        visible={pendingToggle !== null}
+        title={deactivating ? t("users.toggle.deactivateTitle") : t("users.toggle.activateTitle")}
+        description={tf(deactivating ? "users.toggle.deactivateBody" : "users.toggle.activateBody", {
+          email: pendingToggle?.email ?? "",
+        })}
+        confirmLabel={t("common.confirm")}
+        cancelLabel={t("common.cancel")}
+        closeLabel={t("common.close")}
+        tone={deactivating ? "danger" : "primary"}
+        loading={update.isPending}
+        onConfirm={confirmToggle}
+        onCancel={() => setPendingToggle(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -138,7 +178,7 @@ export function CreateUserModal({ visible, onClose }: { visible: boolean; onClos
   };
 
   return (
-    <Modal visible={visible} onClose={onClose} title={t("users.new.title")}>
+    <Modal visible={visible} onClose={onClose} title={t("users.new.title")} closeLabel={t("common.close")}>
       <Stack gap="md" className="p-4">
         {submitError ? <Banner tone="danger" title={submitError} /> : null}
         <Field label={t("users.new.email")} error={errors.email} required>

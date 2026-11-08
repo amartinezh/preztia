@@ -10,6 +10,7 @@ import type {
 } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
+import { withRequestOptions } from "@/core/api/request-context";
 import { authState } from "@/core/auth/auth-state";
 import { env } from "@/core/env";
 import { normalizeHttpError } from "@/core/errors";
@@ -102,12 +103,19 @@ export function useApplicationConversation(id: string, enabled: boolean) {
   });
 }
 
-/** Aprueba el expediente y genera el crédito. Refresca lista y detalle. */
+/**
+ * Aprueba el expediente y genera el crédito (desembolso). Refresca lista y detalle. La clave de
+ * idempotencia es estable por intento: un reintento tras perder la respuesta no otorga dos veces.
+ */
 export function useApproveApplication(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: ApproveApplicationInput) =>
-      unwrap(await api.approveApplication({ headers: tenantHeader(), params: { id }, body: input })),
+    mutationFn: async ({ idempotencyKey, ...input }: ApproveApplicationInput & { idempotencyKey: string }) =>
+      unwrap(
+        await withRequestOptions({ idempotencyKey }, () =>
+          api.approveApplication({ headers: tenantHeader(), params: { id }, body: input }),
+        ),
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: reviewKeys.all });
       void qc.invalidateQueries({ queryKey: reviewKeys.detail(id) });

@@ -32,6 +32,24 @@ export function registerExecutor(kind: string, executor: Executor) {
   executors.set(kind, executor);
 }
 
+/** Resultado de un barrido: enviadas, descartadas por error de negocio y las que siguen en cola. */
+export type FlushResult = { processed: number; dropped: number; remaining: number };
+
+type QueueListener = (pending: number) => void;
+const listeners = new Set<QueueListener>();
+
+/** Avisa a la UI cada vez que cambia el número de operaciones pendientes (encolar o vaciar). */
+export function subscribePending(listener: QueueListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notifyPending(pending: number) {
+  for (const listener of listeners) listener(pending);
+}
+
 async function readAll(): Promise<QueuedOperation[]> {
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
@@ -67,6 +85,7 @@ export async function enqueue(
   const ops = await readAll();
   ops.push(op);
   await writeAll(ops);
+  notifyPending(ops.length);
   logger.info("offline_enqueued", {}, { kind, id: op.id });
   return op;
 }
@@ -82,10 +101,11 @@ let flushing = false;
  * con un error de negocio (4xx, no recuperable reintentando). Si falla por red/5xx, se
  * conserva para un intento posterior y se detiene el barrido (preserva el orden).
  */
-export async function flush(): Promise<{ processed: number; remaining: number }> {
-  if (flushing) return { processed: 0, remaining: await pendingCount() };
+export async function flush(): Promise<FlushResult> {
+  if (flushing) return { processed: 0, dropped: 0, remaining: await pendingCount() };
   flushing = true;
   let processed = 0;
+  let dropped = 0;
   try {
     let ops = await readAll();
     while (ops.length > 0) {
@@ -111,14 +131,17 @@ export async function flush(): Promise<{ processed: number; remaining: number }>
           logger.warn("offline_retry_later", {}, { id: op.id, attempts: op.attempts });
           break; // detener; se reintentará al próximo flush
         }
-        // Error de negocio: descartar (no se resolverá reintentando) y seguir.
+        // Error de negocio: descartar (no se resolverá reintentando) y seguir. Se cuenta para que
+        // la UI se lo diga a la persona: un cobro "guardado" que el servidor rechazó no existe.
         logger.error("offline_dropped", {}, { id: op.id });
+        dropped += 1;
         ops = ops.slice(1);
         await writeAll(ops);
       }
     }
-    return { processed, remaining: ops.length };
+    return { processed, dropped, remaining: ops.length };
   } finally {
     flushing = false;
+    notifyPending(await pendingCount());
   }
 }

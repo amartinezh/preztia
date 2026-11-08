@@ -1,10 +1,10 @@
-import { Alert, View } from "react-native";
-import { Badge, Button, Card, Row, Stack, Text } from "@preztiaos/ui";
+import { Badge, Button, Card, Row, Stack, Text, useToast } from "@preztiaos/ui";
 import type { ApplicationDocumentDetail } from "@preztiaos/contracts";
 
 import { useT } from "@/core/i18n";
 import { useReExtractDocument, type DocumentFileRef } from "../api/queries";
 import { AntifraudVisionPanel } from "./antifraud-vision-panel";
+import { reExtractionFeedback } from "./re-extraction-feedback";
 import { documentLabel, documentStatusBadge } from "./review-status";
 
 type Props = {
@@ -46,20 +46,17 @@ function DocumentCard({
   doc: ApplicationDocumentDetail;
   onViewOriginal: (file: DocumentFileRef) => void;
 }) {
-  const { t } = useT();
+  const i18n = useT();
+  const { t } = i18n;
+  const toast = useToast();
   const badge = documentStatusBadge(doc.status);
   const reExtract = useReExtractDocument(applicationId);
 
+  // El resultado se informa con un aviso (toast): `Alert.alert` no hace nada en web.
   const onReExtract = () => {
     reExtract.mutate(doc.documentType, {
-      onSuccess: (result) =>
-        Alert.alert(
-          result.extracted ? "Lectura completada" : "No se pudo leer",
-          result.extracted
-            ? `IA identificó: ${result.identifiedType ?? "—"} · Confianza ${result.confidence ?? 0}%`
-            : (result.reason ?? "Inténtalo de nuevo."),
-        ),
-      onError: () => Alert.alert("Error", "No se pudo reintentar la lectura con IA."),
+      onSuccess: (result) => toast.show(reExtractionFeedback(result, i18n)),
+      onError: () => toast.show({ tone: "danger", title: t("review.docs.retryFailed") }),
     });
   };
 

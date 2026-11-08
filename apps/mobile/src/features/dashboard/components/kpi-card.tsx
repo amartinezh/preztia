@@ -76,7 +76,7 @@ export function KpiCard({
         <Text variant="caption" style={{ color: mutedColor }}>
           {label}
         </Text>
-        <Text variant="subtitle" style={{ color: textColor }} numberOfLines={1} adjustsFontSizeToFit>
+        <Text variant="subtitle" style={{ color: textColor }} numberOfLines={2}>
           {value}
         </Text>
         {caption ? (

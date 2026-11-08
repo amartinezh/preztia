@@ -6,6 +6,7 @@ import {
   Banner,
   Button,
   EmptyState,
+  ErrorState,
   Field,
   Input,
   ListItem,
@@ -44,6 +45,16 @@ export function MyClientsScreen() {
   };
 
   if (query.isPending) return <Spinner label={t("common.loading")} />;
+  if (query.isError) {
+    return (
+      <ErrorState
+        title={t("common.loadFailed")}
+        description={t("common.loadFailedHint")}
+        retryLabel={t("common.retry")}
+        onRetry={() => void query.refetch()}
+      />
+    );
+  }
 
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-white dark:bg-zinc-950">
@@ -132,7 +143,7 @@ function ProposeChangeModal({
   };
 
   return (
-    <Modal visible={client !== null} onClose={onClose} title={t("clients.propose.title")}>
+    <Modal visible={client !== null} onClose={onClose} title={t("clients.propose.title")} closeLabel={t("common.close")}>
       <Stack gap="md" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
         <Field label={t("clients.propose.firstName")}>
