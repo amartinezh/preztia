@@ -25,8 +25,9 @@ APP = os.environ.get("APP_URL", "https://app.preztia.co").rstrip("/")
 TENANT = os.environ.get("TENANT_ID", "00000000-0000-0000-0000-000000000001")
 DOMAIN = os.environ.get("USERS_DOMAIN", "preztia.co")
 TEMP_ADMIN = f"setup-brasil@{DOMAIN}"
+# Fragmentos SIN acentos ni eñes: el bundle minificado escapa los caracteres no ASCII (\xf1, \xea).
 EXPECT_STRINGS = os.environ.get(
-    "EXPECT_STRINGS", "Mis cobros de hoy|Entregas de cobradores|Português (Brasil)|Cambiar contraseña"
+    "EXPECT_STRINGS", "Mis cobros de hoy|Entregas de cobradores|Portugu|Cambiar contrase"
 ).split("|")
 
 failures = 0
