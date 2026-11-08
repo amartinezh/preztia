@@ -26,10 +26,11 @@ import {
 } from "@preztiaos/ui";
 
 import { isApiError } from "@/core/errors";
+import { useDebouncedValue } from "@/core/hooks/use-debounced-value";
 import { t, useT } from "@/core/i18n";
 import type { MessageKey } from "@/core/i18n";
 import {
-  useBorrowersList,
+  useBorrowersInfinite,
   useCreateBorrower,
   useUpdateBorrower,
 } from "../api/queries";
@@ -47,22 +48,27 @@ const COLOR_TONE: Record<BorrowerColor, BadgeTone> = {
   ORANGE: "warning",
 };
 
-/** Registro de CLIENTES (deudores): listado con búsqueda, alta, edición, color, cupo y bloqueo. */
+/**
+ * Registro de CLIENTES (deudores): listado paginado con búsqueda unificada (nombre, cédula o
+ * teléfono) en servidor, alta, edición, color, cupo y bloqueo.
+ */
 export function BorrowersScreen() {
-  const { t } = useT();
+  const { t, tf } = useT();
   const router = useRouter();
-  const [name, setName] = useState("");
+  const [search, setSearch] = useState("");
+  const q = useDebouncedValue(search.trim());
   const [withoutCredits, setWithoutCredits] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<BorrowerSummary | null>(null);
   const [assigning, setAssigning] = useState<BorrowerSummary | null>(null);
   const [reporting, setReporting] = useState<BorrowerSummary | null>(null);
 
-  const query = useBorrowersList({
-    ...(name.trim() ? { name: name.trim() } : {}),
+  const query = useBorrowersInfinite({
+    ...(q ? { q } : {}),
     ...(withoutCredits ? { withoutCredits: true } : {}),
   });
-  const items = query.data?.items ?? [];
+  const items = query.data?.pages.flatMap((p) => p.items) ?? [];
+  const total = query.data?.pages[0]?.total;
 
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-white dark:bg-zinc-950">
@@ -71,6 +77,9 @@ export function BorrowersScreen() {
         keyExtractor={(b) => b.id}
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-[880px] gap-2 p-4"
+        onEndReached={() => query.hasNextPage && query.fetchNextPage()}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={query.isFetchingNextPage ? <Spinner /> : null}
         ListHeaderComponent={
           <Stack gap="sm" className="pb-2">
             <Row className="justify-between">
@@ -81,15 +90,21 @@ export function BorrowersScreen() {
               </Row>
             </Row>
             <Input
-              value={name}
-              onChangeText={setName}
-              placeholder={t("borrowers.list.search")}
+              value={search}
+              onChangeText={setSearch}
+              placeholder={t("search.unified")}
+              autoCapitalize="none"
             />
             <Switch
               value={withoutCredits}
               onValueChange={setWithoutCredits}
               label={t("borrowers.list.withoutCredits")}
             />
+            {total !== undefined ? (
+              <Text variant="caption" tone="muted">
+                {total === 1 ? t("borrowers.list.totalOne") : tf("borrowers.list.total", { n: total })}
+              </Text>
+            ) : null}
           </Stack>
         }
         ListEmptyComponent={

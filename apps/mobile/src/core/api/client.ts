@@ -84,6 +84,8 @@ export const api = initClient(contract, {
     getAccessToken: authState.getAccessToken,
     getTenantId: authState.getTenantId,
     onUnauthorized: authState.notifyUnauthorized,
+    // Indirección vía `authState` para no importar `core/auth/refresh` (que importa este cliente).
+    refreshSession: authState.requestRefresh,
   }),
 });
 

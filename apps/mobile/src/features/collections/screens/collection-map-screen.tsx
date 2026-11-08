@@ -90,7 +90,7 @@ function CriticalRouteView() {
   // Permiso de ubicación denegado: aviso persistente, porque el cobrador debe actuar para seguir.
   const [locationDenied, setLocationDenied] = useState(false);
 
-  const clients = clientsQuery.data?.items ?? [];
+  const clients = useMemo(() => clientsQuery.data?.items ?? [], [clientsQuery.data]);
 
   // Orden de visita por crédito (cuando ya hay ruta), para numerar los marcadores.
   const orderByCredit = useMemo(() => {

@@ -4,8 +4,9 @@ import { Stack, Text } from "@preztiaos/ui";
 import { tint } from "./palette";
 
 interface KpiCardProps {
-  /** Emoji o glifo corto que ancla visualmente la métrica (sin dependencia de iconos). */
-  icon: string;
+  /** Emoji o glifo corto que ancla visualmente la métrica (sin dependencia de iconos). Opcional:
+   *  sin él la tarjeta es más compacta (filas densas como "Hoy"). */
+  icon?: string;
   label: string;
   /** Valor ya formateado (dinero o conteo). */
   value: string;
@@ -61,18 +62,20 @@ export function KpiCard({
         }}
       />
       <Stack gap="sm">
-        <View
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 12,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: tint(accent, 0.2),
-          }}
-        >
-          <Text style={{ fontSize: 18 }}>{icon}</Text>
-        </View>
+        {icon ? (
+          <View
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 12,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: tint(accent, 0.2),
+            }}
+          >
+            <Text style={{ fontSize: 18 }}>{icon}</Text>
+          </View>
+        ) : null}
         <Text variant="caption" style={{ color: mutedColor }}>
           {label}
         </Text>

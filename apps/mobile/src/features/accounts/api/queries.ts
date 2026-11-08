@@ -1,12 +1,17 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import type { CreditStatus } from "@preztiaos/contracts";
 
 import { api, tenantHeader, unwrap } from "@/core/api/client";
 
 export interface AccountsListParams {
+  /** Búsqueda unificada en servidor: nombre, cédula o teléfono (OR). */
+  q?: string;
   name?: string;
   nationalId?: string;
   phone?: string;
   onlyOverdue?: boolean;
+  /** Estado del crédito, filtrado en servidor (no sobre las páginas ya cargadas). */
+  status?: CreditStatus;
 }
 
 const PAGE_SIZE = 20;
@@ -29,10 +34,12 @@ export function useAccountsList(params: AccountsListParams = {}) {
           query: {
             page: pageParam,
             pageSize: PAGE_SIZE,
+            ...(params.q ? { q: params.q } : {}),
             ...(params.name ? { name: params.name } : {}),
             ...(params.nationalId ? { nationalId: params.nationalId } : {}),
             ...(params.phone ? { phone: params.phone } : {}),
             ...(params.onlyOverdue ? { onlyOverdue: true } : {}),
+            ...(params.status ? { status: params.status } : {}),
           },
         }),
       ),

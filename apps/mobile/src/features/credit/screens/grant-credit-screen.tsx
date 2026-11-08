@@ -25,9 +25,10 @@ import {
 
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
+import { useDebouncedValue } from "@/core/hooks/use-debounced-value";
 import { useT } from "@/core/i18n";
 import { newIdempotencyKey } from "@/core/ids";
-import { useBorrowersList, useCreateBorrower } from "@/features/borrowers/api/queries";
+import { useBorrowersInfinite, useCreateBorrower } from "@/features/borrowers/api/queries";
 import { useInterestRules } from "../hooks/use-interest-rules";
 import { useZonesList } from "@/features/zones/api/queries";
 import { useFundingBoxes, useTenantCurrency } from "@/features/cash/api/boxes-queries";
@@ -336,8 +337,9 @@ function borrowerSubtitle(b: BorrowerSummary): string {
 }
 
 /**
- * Campo de selección del DEUDOR: abre un buscador (por nombre/cédula) con la cartera de clientes
- * y permite crear uno nuevo sin salir de la pantalla (alta rápida). El elegido queda seleccionado.
+ * Campo de selección del DEUDOR: abre un buscador (nombre, cédula o teléfono, en servidor) con la
+ * cartera de clientes y permite crear uno nuevo sin salir de la pantalla (alta rápida). El elegido
+ * queda seleccionado. Si hay más coincidencias que las mostradas, pide refinar la búsqueda.
  */
 export function BorrowerPickerField({
   selected,
@@ -348,12 +350,14 @@ export function BorrowerPickerField({
   error?: string;
   onSelect: (borrower: SelectedBorrower) => void;
 }) {
-  const { t } = useT();
+  const { t, tf } = useT();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const list = useBorrowersList(search.trim() ? { name: search.trim() } : {});
-  const items = list.data?.items ?? [];
+  const q = useDebouncedValue(search.trim());
+  const list = useBorrowersInfinite(q ? { q } : {});
+  const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const total = list.data?.pages[0]?.total ?? items.length;
 
   const borderTone = error ? "border-red-500" : "border-zinc-200 dark:border-zinc-700";
 
@@ -411,6 +415,11 @@ export function BorrowerPickerField({
               />
             ))
           )}
+          {total > items.length ? (
+            <Text variant="caption" tone="muted">
+              {tf("borrowers.picker.showing", { n: items.length, m: total })}
+            </Text>
+          ) : null}
         </Stack>
       </Modal>
 

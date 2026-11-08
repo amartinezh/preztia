@@ -41,7 +41,7 @@ export function PortfolioMapView() {
   const query = usePortfolioMapClients();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const clients = query.data?.items ?? [];
+  const clients = useMemo(() => query.data?.items ?? [], [query.data]);
   const selected = clients.find((c) => c.creditId === selectedId) ?? null;
 
   const markers = useMemo<MapMarker[]>(

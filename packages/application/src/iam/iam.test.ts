@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { ConflictError, ForbiddenError, NotFoundError } from "@preztiaos/domain";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from "@preztiaos/domain";
 import type {
   ActorContext,
   CollectorAssignmentStore,
@@ -21,12 +25,21 @@ import {
 } from "./tenants";
 import { CreateUserHandler } from "./users";
 import { CreateZoneHandler } from "./zones";
-import { AssignCollectorClientsHandler } from "./collectors";
+import {
+  AssignCollectorClientsHandler,
+  UpdateCollectorClientsHandler,
+} from "./collectors";
 
 const hasher: PasswordHasher = { hash: async (p) => `hash:${p}` };
 
 function adminActor(over: Partial<ActorContext> = {}): ActorContext {
-  return { userId: "admin-1", role: "ADMIN", tenantId: "t1", zonePaths: [], ...over };
+  return {
+    userId: "admin-1",
+    role: "ADMIN",
+    tenantId: "t1",
+    zonePaths: [],
+    ...over,
+  };
 }
 function coordinatorActor(over: Partial<ActorContext> = {}): ActorContext {
   return {
@@ -70,7 +83,10 @@ class FakeUserStore implements UserStore {
       ...(input.zonePaths !== undefined ? { zonePaths: input.zonePaths } : {}),
     };
   }
-  async findById(input: { tenantId: string; userId: string }): Promise<UserRecord | null> {
+  async findById(input: {
+    tenantId: string;
+    userId: string;
+  }): Promise<UserRecord | null> {
     return this.byId[input.userId] ?? null;
   }
 }
@@ -83,14 +99,21 @@ describe("CreateTenantHandler", () => {
       remove: async () => false,
       findById: async () => null,
     };
-    const out = await new CreateTenantHandler(store).execute({ name: "Acme Microcréditos" });
+    const out = await new CreateTenantHandler(store).execute({
+      name: "Acme Microcréditos",
+    });
     expect(out.slug).toBe("acme-microcreditos");
     expect(out.id).toMatch(/[0-9a-f-]{36}/);
   });
 });
 
 describe("CreateTenantAdminHandler", () => {
-  const activeTenant: TenantRecord = { id: "t1", name: "Acme", slug: "acme", status: "ACTIVE" };
+  const activeTenant: TenantRecord = {
+    id: "t1",
+    name: "Acme",
+    slug: "acme",
+    status: "ACTIVE",
+  };
 
   it("provisiona un ADMIN vinculado al tenant destino", async () => {
     const users = new FakeUserStore();
@@ -100,7 +123,11 @@ describe("CreateTenantAdminHandler", () => {
       remove: async () => false,
       findById: async () => activeTenant,
     };
-    const out = await new CreateTenantAdminHandler(tenants, users, hasher).execute({
+    const out = await new CreateTenantAdminHandler(
+      tenants,
+      users,
+      hasher,
+    ).execute({
       tenantId: "t1",
       email: "Admin@Acme.test",
       password: "changeme-123",
@@ -121,7 +148,11 @@ describe("CreateTenantAdminHandler", () => {
       findById: async () => null,
     };
     await expect(
-      new CreateTenantAdminHandler(tenants, new FakeUserStore(), hasher).execute({
+      new CreateTenantAdminHandler(
+        tenants,
+        new FakeUserStore(),
+        hasher,
+      ).execute({
         tenantId: "missing",
         email: "a@b.test",
         password: "changeme-123",
@@ -137,7 +168,11 @@ describe("CreateTenantAdminHandler", () => {
       findById: async () => ({ ...activeTenant, status: "SUSPENDED" }),
     };
     await expect(
-      new CreateTenantAdminHandler(tenants, new FakeUserStore(), hasher).execute({
+      new CreateTenantAdminHandler(
+        tenants,
+        new FakeUserStore(),
+        hasher,
+      ).execute({
         tenantId: "t1",
         email: "a@b.test",
         password: "changeme-123",
@@ -147,7 +182,12 @@ describe("CreateTenantAdminHandler", () => {
 });
 
 describe("UpdateTenantAdminHandler", () => {
-  const activeTenant: TenantRecord = { id: "t1", name: "Acme", slug: "acme", status: "ACTIVE" };
+  const activeTenant: TenantRecord = {
+    id: "t1",
+    name: "Acme",
+    slug: "acme",
+    status: "ACTIVE",
+  };
   const tenants: TenantStore = {
     create: async () => undefined,
     update: async () => null,
@@ -165,7 +205,11 @@ describe("UpdateTenantAdminHandler", () => {
 
   it("desactiva un admin sin borrarlo", async () => {
     const users = new FakeUserStore({ u1: adminRecord });
-    const out = await new UpdateTenantAdminHandler(tenants, users, hasher).execute({
+    const out = await new UpdateTenantAdminHandler(
+      tenants,
+      users,
+      hasher,
+    ).execute({
       tenantId: "t1",
       adminId: "u1",
       active: false,
@@ -186,9 +230,16 @@ describe("UpdateTenantAdminHandler", () => {
   });
 
   it("falla si el tenant no existe", async () => {
-    const missingTenant: TenantStore = { ...tenants, findById: async () => null };
+    const missingTenant: TenantStore = {
+      ...tenants,
+      findById: async () => null,
+    };
     await expect(
-      new UpdateTenantAdminHandler(missingTenant, new FakeUserStore(), hasher).execute({
+      new UpdateTenantAdminHandler(
+        missingTenant,
+        new FakeUserStore(),
+        hasher,
+      ).execute({
         tenantId: "missing",
         adminId: "u1",
         active: false,
@@ -197,7 +248,9 @@ describe("UpdateTenantAdminHandler", () => {
   });
 
   it("no toca usuarios que no son ADMIN del tenant", async () => {
-    const users = new FakeUserStore({ u1: { ...adminRecord, role: "COORDINATOR" } });
+    const users = new FakeUserStore({
+      u1: { ...adminRecord, role: "COORDINATOR" },
+    });
     await expect(
       new UpdateTenantAdminHandler(tenants, users, hasher).execute({
         tenantId: "t1",
@@ -210,7 +263,12 @@ describe("UpdateTenantAdminHandler", () => {
 });
 
 describe("PurgeTenantDataHandler", () => {
-  const activeTenant: TenantRecord = { id: "t1", name: "Acme", slug: "acme", status: "ACTIVE" };
+  const activeTenant: TenantRecord = {
+    id: "t1",
+    name: "Acme",
+    slug: "acme",
+    status: "ACTIVE",
+  };
   const tenantsFound: TenantStore = {
     create: async () => undefined,
     update: async () => null,
@@ -228,7 +286,11 @@ describe("PurgeTenantDataHandler", () => {
     };
     const files: TenantFilePurger = { purge: async () => 7 };
 
-    const report = await new PurgeTenantDataHandler(tenantsFound, data, files).execute("t1");
+    const report = await new PurgeTenantDataHandler(
+      tenantsFound,
+      data,
+      files,
+    ).execute("t1");
 
     expect(purgedFor).toEqual(["t1"]);
     // INVARIANTE: rowsDeleted === Σ de los conteos por tabla.
@@ -238,7 +300,10 @@ describe("PurgeTenantDataHandler", () => {
   });
 
   it("falla si el tenant no existe y NO purga nada", async () => {
-    const missingTenant: TenantStore = { ...tenantsFound, findById: async () => null };
+    const missingTenant: TenantStore = {
+      ...tenantsFound,
+      findById: async () => null,
+    };
     const data: TenantDataPurger = {
       purge: async () => {
         throw new Error("no debería llamarse");
@@ -265,7 +330,10 @@ describe("CreateUserHandler", () => {
       role: "COORDINATOR",
       zonePaths: ["co.valle"],
     });
-    expect(users.created[0]).toMatchObject({ role: "COORDINATOR", tenantId: "t1" });
+    expect(users.created[0]).toMatchObject({
+      role: "COORDINATOR",
+      tenantId: "t1",
+    });
   });
 
   it("COORDINATOR crea un COBRADOR dentro de su subárbol", async () => {
@@ -367,11 +435,18 @@ describe("AssignCollectorClientsHandler", () => {
     const calls: { borrowerIds: readonly string[]; assignedBy: string }[] = [];
     const assignments: CollectorAssignmentStore = {
       replaceAssignments: async (input) => {
-        calls.push({ borrowerIds: input.borrowerIds, assignedBy: input.assignedBy });
+        calls.push({
+          borrowerIds: input.borrowerIds,
+          assignedBy: input.assignedBy,
+        });
       },
+      updateAssignments: async () => ({ assigned: 0 }),
     };
     const users = new FakeUserStore({ "cob-1": collector });
-    const out = await new AssignCollectorClientsHandler(assignments, users).execute({
+    const out = await new AssignCollectorClientsHandler(
+      assignments,
+      users,
+    ).execute({
       actor: coordinatorActor(),
       collectorId: "cob-1",
       borrowerIds: ["b1", "b2", "b1"],
@@ -382,12 +457,135 @@ describe("AssignCollectorClientsHandler", () => {
   });
 
   it("rechaza asignar clientes a un usuario que no es cobrador", async () => {
-    const users = new FakeUserStore({ "cob-1": { ...collector, role: "COORDINATOR" } });
+    const users = new FakeUserStore({
+      "cob-1": { ...collector, role: "COORDINATOR" },
+    });
     await expect(
       new AssignCollectorClientsHandler(
-        { replaceAssignments: async () => undefined },
+        {
+          replaceAssignments: async () => undefined,
+          updateAssignments: async () => ({ assigned: 0 }),
+        },
         users,
-      ).execute({ actor: coordinatorActor(), collectorId: "cob-1", borrowerIds: ["b1"] }),
+      ).execute({
+        actor: coordinatorActor(),
+        collectorId: "cob-1",
+        borrowerIds: ["b1"],
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
+  });
+});
+
+describe("UpdateCollectorClientsHandler", () => {
+  const collector: UserRecord = {
+    id: "cob-1",
+    tenantId: "t1",
+    email: "cob@acme.test",
+    role: "COLLECTOR",
+    zonePaths: ["co.antioquia"],
+    active: true,
+  };
+
+  /** Doble en memoria: la cartera es un Set; agregar es idempotente y quitar ignora ausentes. */
+  class FakeAssignments implements CollectorAssignmentStore {
+    readonly portfolio: Set<string>;
+    readonly calls: Array<{
+      add: readonly string[];
+      remove: readonly string[];
+      assignedBy: string;
+    }> = [];
+    constructor(initial: readonly string[] = []) {
+      this.portfolio = new Set(initial);
+    }
+    async replaceAssignments(): Promise<void> {
+      throw new Error("no debe reemplazar la cartera");
+    }
+    async updateAssignments(input: {
+      assignedBy: string;
+      add: readonly string[];
+      remove: readonly string[];
+    }): Promise<{ assigned: number }> {
+      this.calls.push({
+        add: input.add,
+        remove: input.remove,
+        assignedBy: input.assignedBy,
+      });
+      for (const id of input.remove) this.portfolio.delete(id);
+      for (const id of input.add) this.portfolio.add(id);
+      return { assigned: this.portfolio.size };
+    }
+  }
+
+  it("agrega y quita por deltas sin tocar el resto y devuelve el total resultante", async () => {
+    const assignments = new FakeAssignments(["b1", "b2", "b3"]);
+    const users = new FakeUserStore({ "cob-1": collector });
+    const out = await new UpdateCollectorClientsHandler(
+      assignments,
+      users,
+    ).execute({
+      actor: coordinatorActor(),
+      collectorId: "cob-1",
+      add: ["b4"],
+      remove: ["b1"],
+    });
+    expect(out.assigned).toBe(3);
+    expect([...assignments.portfolio]).toEqual(["b2", "b3", "b4"]);
+    expect(assignments.calls[0]!.assignedBy).toBe("coord-1");
+  });
+
+  it("deduplica cada lista antes de persistir", async () => {
+    const assignments = new FakeAssignments();
+    const users = new FakeUserStore({ "cob-1": collector });
+    await new UpdateCollectorClientsHandler(assignments, users).execute({
+      actor: coordinatorActor(),
+      collectorId: "cob-1",
+      add: ["b1", "b1", "b2"],
+      remove: ["b9", "b9"],
+    });
+    expect(assignments.calls[0]!.add).toEqual(["b1", "b2"]);
+    expect(assignments.calls[0]!.remove).toEqual(["b9"]);
+  });
+
+  it("rechaza agregar y quitar el mismo cliente en una operación (add ∩ remove = ∅)", async () => {
+    const assignments = new FakeAssignments(["b1"]);
+    const users = new FakeUserStore({ "cob-1": collector });
+    await expect(
+      new UpdateCollectorClientsHandler(assignments, users).execute({
+        actor: coordinatorActor(),
+        collectorId: "cob-1",
+        add: ["b1", "b2"],
+        remove: ["b1"],
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+    // Nada se persistió: la orden contradictoria se rechaza completa.
+    expect(assignments.calls).toHaveLength(0);
+  });
+
+  it("rechaza ajustar la cartera de un usuario que no es cobrador", async () => {
+    const users = new FakeUserStore({
+      "cob-1": { ...collector, role: "COORDINATOR" },
+    });
+    await expect(
+      new UpdateCollectorClientsHandler(new FakeAssignments(), users).execute({
+        actor: coordinatorActor(),
+        collectorId: "cob-1",
+        add: ["b1"],
+        remove: [],
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("falla con 404 si el cobrador no existe en el tenant", async () => {
+    await expect(
+      new UpdateCollectorClientsHandler(
+        new FakeAssignments(),
+        new FakeUserStore(),
+      ).execute({
+        actor: coordinatorActor(),
+        collectorId: "nadie",
+        add: ["b1"],
+        remove: [],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

@@ -16,6 +16,7 @@ import {
 import { readOperationalSettingsTx } from '../tenant-config/operational-settings.reader';
 import { resolveTenantTimeZone } from '../tenant-config/tenant-timezone';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
+import { afterCollectorCashPaymentTx } from '../collections/collector-payment-followup';
 import { applyAllocationsTx, settleCreditTx } from './allocation-writer';
 import {
   loadReceivingBoxTx,
@@ -41,10 +42,38 @@ export interface CashPaymentResult {
 @Injectable()
 export class CashPaymentDrizzleRepository {
   async register(input: CashPaymentInput): Promise<CashPaymentResult | null> {
-    return withTenantTxFor(input.tenantId, (tx) =>
-      registerCashPaymentTx(tx, input),
-    );
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      // Un reintento idempotente devuelve el abono ya materializado: no repite lo que lo sigue.
+      const replay = input.idempotencyKey
+        ? await existsByIdempotencyKey(tx, input.idempotencyKey)
+        : false;
+      const result = await registerCashPaymentTx(tx, input);
+      const collectorCollected =
+        (input.actorRole ?? 'COLLECTOR') === 'COLLECTOR';
+      if (result && !replay && collectorCollected) {
+        // Cobrar es UN gesto: la parada de ruta abierta queda liquidada y la visita registrada.
+        await afterCollectorCashPaymentTx(tx, {
+          tenantId: input.tenantId,
+          creditId: result.creditId,
+          collectorId: input.receivedBy,
+          paymentId: result.id,
+          amountMinor: result.amountMinor,
+        });
+      }
+      return result;
+    });
   }
+}
+
+async function existsByIdempotencyKey(
+  tx: Tx,
+  idempotencyKey: string,
+): Promise<boolean> {
+  const [existing] = await tx
+    .select({ id: schema.payment.id })
+    .from(schema.payment)
+    .where(eq(schema.payment.idempotencyKey, idempotencyKey));
+  return existing !== undefined;
 }
 
 export interface CashPaymentInput {

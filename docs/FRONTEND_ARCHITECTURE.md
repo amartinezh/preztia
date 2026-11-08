@@ -2,7 +2,7 @@
 
 > **Estado:** documento vivo. Complementa [ARCHITECTURE.md](ARCHITECTURE.md) (fuente de verdad del sistema).
 > **Ámbito:** la app cliente `apps/mobile` (Expo SDK 56 + Expo Router + NativeWind v4) y el design system `@preztiaos/ui`.
-> **Última actualización:** 2026-11-08 (Fase 0 de usabilidad, ADR #50: `MoneyInput`, `ConfirmModal`, `ToastProvider`, mapa de errores de zod en español, cola offline observable, idioma del operador fijo en `es`).
+> **Última actualización:** 2026-11-08 (Fases 0 y 1 de usabilidad, ADR #50 y #51: `MoneyInput`, `ConfirmModal`, `ToastProvider`, mapa de errores de zod, cola offline con fallidas visibles, sesión con refresco, "Mis cobros de hoy", búsqueda unificada `q`).
 
 Esta guía define **cómo se escribe el frontend** para cumplir —y demostrar— los atributos de
 calidad vinculantes de [§3](ARCHITECTURE.md#3-atributos-de-calidad-y-estándares-de-código) y
@@ -135,3 +135,13 @@ Nacen del informe [INFORME_USABILIDAD.md](INFORME_USABILIDAD.md). Son obligatori
 | **Errores en el idioma de la persona.** | `installZodErrorMap()` en la raíz traduce los mensajes de zod; los `DomainError` siguen mapeados en `core/errors`. Un error de carga se muestra con `ErrorState` + `retryLabel={t("common.retry")}`, nunca como lista vacía. |
 | **Un solo idioma por sesión.** | El operador ve la app en `es` (`detectLocale()` fijo) hasta completar pt-BR; el idioma al cliente es del tenant (ADR #47). Las primitivas de `@preztiaos/ui` reciben sus textos por prop (`closeLabel`, `retryLabel`, `invalidLabel`). `tf(key, vars)` interpola `{n}`. |
 | **Cada pantalla apilada tiene salida.** | Todas las rutas de `app/(app)/_layout.tsx` (también las modales) declaran `detail(título, ancla)` para el botón atrás con fallback en web. |
+
+## 8. Sesión, cola offline y lista operativa del cobrador (Fase 1, ADR #51)
+
+| Pieza | Dónde | Regla |
+|---|---|---|
+| **Renovación de sesión** | `core/auth/refresh.ts`, `core/auth/refresh-policy.ts`, `core/api/fetcher.ts` | Un 401 renueva UNA vez con el refresh token (mutex: varias peticiones concurrentes → un solo refresco) y reintenta la petición original con la misma `Idempotency-Key`; renovación proactiva cuando faltan < 2 min para `exp`; sin red el refresco queda "unavailable" y la sesión se conserva (la cola offline sigue). Solo un refresco rechazado (401/403) cierra sesión con motivo `expired`. `/auth/login` y `/auth/refresh` quedan fuera del interceptor. |
+| **Cola offline con fallidas visibles** | `core/offline/queue.ts`, `core/offline/use-offline-operations.ts`, `features/remittances/components/offline-operations-section.tsx` | Un rechazo de negocio (4xx) NO se descarta: pasa a `failed` persistido con `reason`; la persona lo ve en "Pendientes de envío" (Mi caja) con Reintentar / Descartar (confirmado). `usePendingPaymentsByCredit()` marca en las listas del cobrador los clientes con abono pendiente o rechazado. |
+| **Mis cobros de hoy** | `features/collections/api/today-queries.ts`, `features/collections/screens/collection-today-screen.tsx` (hub Clientes del cobrador e Inicio) | Todos los clientes asignados (no solo los en mora) con cuota, lo que debe hoy, saldo y estado (semáforo); búsqueda `q` con `useDebouncedValue`; botón **Cobrar** → abono; tocar la fila → detalle del cobro (bitácora, llamar). Al registrar el abono se invalidan `collectionTodayKeys.all` y las visitas. El servidor hace el resto del gesto (parada de ruta liquidada + visita). |
+| **Búsqueda en servidor** | `features/accounts/api/queries.ts`, `features/borrowers/api/queries.ts#useBorrowersInfinite` | Un solo campo "nombre, cédula o teléfono" que envía `q`; filtros de estado al servidor (`status`, `onlyOverdue`); nunca filtrar las páginas ya cargadas. Los pickers muestran "Mostrando N de M". |
+| **Asignación por deltas** | `features/collectors/api/queries.ts#useUpdateCollectorClients`, `assign-clients-screen.tsx` | Guardar envía solo `{ add, remove }` calculados frente a `assigned`; nunca reemplaza la cartera con lo cargado. |

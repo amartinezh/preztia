@@ -8,6 +8,7 @@ import {
   gte,
   ilike,
   inArray,
+  lt,
   lte,
   or,
   type SQL,
@@ -24,6 +25,10 @@ import {
   type PortfolioInstallment,
 } from '@preztiaos/domain';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
+import {
+  businessDayBoundsIn,
+  resolveTenantTimeZone,
+} from '../tenant-config/tenant-timezone';
 
 // Estados que representan un intento NO efectivo (fallido o pendiente) para la auditoría.
 const FAILED_STATUSES: PaymentStatusContract[] = [
@@ -84,7 +89,9 @@ export class PaymentsQueryRepository {
     toDate?: string;
   }): Promise<{ items: PaymentSummary[]; total: number }> {
     return withTenantTxFor(input.tenantId, async (tx) => {
-      const where = buildAttemptFilters(input);
+      // Los días del filtro son días de negocio de la EMPRESA (ADR #46), no UTC.
+      const timeZone = await resolveTenantTimeZone(tx, input.tenantId);
+      const where = buildAttemptFilters(input, timeZone);
 
       const [totalRow] = await tx
         .select({ value: count() })
@@ -255,16 +262,19 @@ function extractFlagReasons(payloads: unknown[]): string[] | null {
  * opcional e independiente; se combinan con AND. La búsqueda de texto (`q`) abarca pagador,
  * CPF/CNPJ, banco emisor y end-to-end id (el revisor está autorizado a ver la PII completa).
  */
-function buildAttemptFilters(input: {
-  status?: PaymentStatusContract;
-  failedOnly?: boolean;
-  q?: string;
-  bankStatus?: BankStatusContract;
-  minAmountMinor?: number;
-  maxAmountMinor?: number;
-  fromDate?: string;
-  toDate?: string;
-}): SQL | undefined {
+function buildAttemptFilters(
+  input: {
+    status?: PaymentStatusContract;
+    failedOnly?: boolean;
+    q?: string;
+    bankStatus?: BankStatusContract;
+    minAmountMinor?: number;
+    maxAmountMinor?: number;
+    fromDate?: string;
+    toDate?: string;
+  },
+  timeZone: string,
+): SQL | undefined {
   const filters: SQL[] = [];
 
   if (input.status) {
@@ -295,15 +305,22 @@ function buildAttemptFilters(input: {
     filters.push(lte(schema.payment.amountMinor, input.maxAmountMinor));
   }
 
-  // Rango de la fecha de pago: [fromDate 00:00, toDate 23:59:59.999] inclusivo.
+  // Rango de la fecha de pago en días de negocio de la empresa: [inicio de fromDate, inicio del
+  // día siguiente a toDate), con la zona horaria del tenant.
   if (input.fromDate) {
     filters.push(
-      gte(schema.payment.paidAt, new Date(`${input.fromDate}T00:00:00.000Z`)),
+      gte(
+        schema.payment.paidAt,
+        businessDayBoundsIn(input.fromDate, timeZone).start,
+      ),
     );
   }
   if (input.toDate) {
     filters.push(
-      lte(schema.payment.paidAt, new Date(`${input.toDate}T23:59:59.999Z`)),
+      lt(
+        schema.payment.paidAt,
+        businessDayBoundsIn(input.toDate, timeZone).end,
+      ),
     );
   }
 

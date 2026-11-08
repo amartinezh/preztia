@@ -3,10 +3,11 @@ import type { CreateBorrowerInput, ExtractedIdentityView } from "@preztiaos/cont
 import { Badge, Banner, Button, Field, Input, ListItem, Row, Stack, Text } from "@preztiaos/ui";
 
 import { isApiError } from "@/core/errors";
+import { useDebouncedValue } from "@/core/hooks/use-debounced-value";
 import { useT } from "@/core/i18n";
 import {
   findBorrowerByNationalId,
-  useBorrowersList,
+  useBorrowersInfinite,
   useCreateBorrower,
 } from "@/features/borrowers/api/queries";
 
@@ -28,15 +29,19 @@ type Props = {
  * habilita el botón de aprobar (regla de negocio). No decide la transacción: solo selecciona.
  */
 export function BorrowerPicker({ extractedIdentity, applicantPhone, selected, onSelect }: Props) {
-  const { t } = useT();
+  const { t, tf } = useT();
   const create = useCreateBorrower();
   const [term, setTerm] = useState("");
   const [error, setError] = useState<string | null>(null);
   // Mientras, tras un conflicto de cédula, resolvemos el cliente ya existente para reusarlo.
   const [resolving, setResolving] = useState(false);
 
-  const search = useBorrowersList(term.trim().length >= MIN_SEARCH ? { name: term.trim() } : {});
-  const results = term.trim().length >= MIN_SEARCH ? search.data?.items ?? [] : [];
+  // Búsqueda unificada (nombre, cédula o teléfono) en servidor, con retardo al teclear.
+  const q = useDebouncedValue(term.trim());
+  const searching = q.length >= MIN_SEARCH;
+  const search = useBorrowersInfinite(searching ? { q } : {});
+  const results = searching ? search.data?.pages.flatMap((p) => p.items) ?? [] : [];
+  const total = searching ? search.data?.pages[0]?.total ?? results.length : 0;
 
   // Solo se puede crear desde OCR si hay cédula y nombre legibles.
   const canCreateFromOcr =
@@ -137,7 +142,7 @@ export function BorrowerPicker({ extractedIdentity, applicantPhone, selected, on
 
       {/* Elegir un cliente ya registrado. */}
       <Field label={t("borrower.searchExisting")}>
-        <Input value={term} onChangeText={setTerm} placeholder={t("borrower.searchPlaceholder")} />
+        <Input value={term} onChangeText={setTerm} placeholder={t("search.unified")} />
       </Field>
       {results.map((b) => (
         <ListItem
@@ -149,6 +154,11 @@ export function BorrowerPicker({ extractedIdentity, applicantPhone, selected, on
           }
         />
       ))}
+      {total > results.length ? (
+        <Text variant="caption" tone="muted">
+          {tf("borrowers.picker.showing", { n: results.length, m: total })}
+        </Text>
+      ) : null}
     </Stack>
   );
 }

@@ -9,6 +9,7 @@ import { useT } from "@/core/i18n";
 import { BorrowersScreen } from "@/features/borrowers/screens/borrowers-screen";
 import { ClientMovementsScreen } from "@/features/clients/screens/client-movements-screen";
 import { MyClientsScreen } from "@/features/clients/screens/my-clients-screen";
+import { CollectionTodayScreen } from "@/features/collections/screens/collection-today-screen";
 import { CollectorsScreen } from "@/features/collectors/screens/collectors-screen";
 import { OperationsScreen } from "@/features/operations/screens/operations-screen";
 import { PaymentsHubScreen } from "@/features/payments/screens/payments-hub-screen";
@@ -33,6 +34,9 @@ export function CuentasHubScreen() {
   if (can(role, "borrower:manage")) {
     segments.push({ key: "clientes", label: t("borrowers.tab"), render: () => <BorrowersScreen /> });
   } else if (can(role, "client:read")) {
+    // El cobrador abre su lista operativa (todos sus clientes con cuota y "Cobrar"); la vista de
+    // datos de contacto queda como segundo segmento para proponer cambios.
+    segments.push({ key: "cobros", label: t("today.tab"), render: () => <CollectionTodayScreen /> });
     segments.push({ key: "clientes", label: t("clients.tab"), render: () => <MyClientsScreen /> });
   }
   // b) Pagos + detalle completo de cada pago (vista de gestión; el cobrador no concilia y la

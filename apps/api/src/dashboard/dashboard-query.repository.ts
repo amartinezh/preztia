@@ -1,12 +1,29 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, eq, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  eq,
+  gte,
+  lt,
+  sql,
+  type AnyColumn,
+  type SQL,
+} from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
+import type { CashTxKind } from '@preztiaos/domain';
 import type {
   ApplicationTimingWindow,
   DashboardApplicationTimings,
   DashboardKpisOutput,
+  DashboardPending,
+  DashboardToday,
 } from '@preztiaos/contracts';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
+import {
+  businessDayBounds,
+  type BusinessDayBounds,
+} from '../tenant-config/tenant-timezone';
+import { sumTreasuryByClass, type TreasuryByClass } from './treasury-by-class';
 
 // Umbral del veredicto antifraude a partir del cual un documento se considera intento de
 // fraude (SCORE_SUSPICIOUS en StructuralAntifraudService). Constante con nombre, sin número mágico.
@@ -21,6 +38,27 @@ const DECISION_EVENT = 'MANUAL_REVIEW_DECISION';
 // Suma firmada del libro mayor de caja: IN suma, OUT resta. Espejo de cash-query.repository.
 const signedCashSum = sql<number>`COALESCE(SUM(CASE WHEN ${schema.cashTransaction.direction} = 'IN' THEN ${schema.cashTransaction.amountMinor} ELSE -${schema.cashTransaction.amountMinor} END), 0)`;
 
+// Saldo pendiente de una cuota: lo que falta por pagar de ella.
+const installmentOutstanding = sql`${schema.installment.amountDueMinor} - ${schema.installment.paidMinor}`;
+
+// Asientos del libro de cajas que el dueño lee como "prestado hoy" y "gastos de hoy".
+const DISBURSEMENT_KIND: CashTxKind = 'DISBURSEMENT';
+const EXPENSE_KIND: CashTxKind = 'EXPENSE';
+
+// Bloque "Pendientes": estados que esperan una acción humana. Cada constante refleja el criterio
+// del read model dueño de ese flujo (bandeja de solicitudes, gastos, tablero de rendiciones,
+// consignaciones y pagos), para que el contador del panel coincida con lo que esa pantalla lista.
+const APPLICATION_AWAITING_DECISION = 'IN_REVIEW';
+const EXPENSE_AWAITING_APPROVAL = 'PENDING';
+const REMITTANCE_AWAITING_RECEPTION = 'SUBMITTED';
+const DEPOSIT_ORDER_KIND = 'DEPOSIT';
+const DEPOSIT_AWAITING_VERIFICATION = 'REPORTED';
+// Un pago espera confirmación cuando sigue UNVERIFIED y su evaluación de conciliación (fase 2)
+// quedó PENDING_REVIEW: crédito real reservado a la espera de aprobación (payments-query).
+const PAYMENT_UNVERIFIED = 'UNVERIFIED';
+const SETTLEMENT_ASSESSMENT_PHASE = 'PHASE2_SETTLEMENT';
+const ASSESSMENT_PENDING_REVIEW = 'PENDING_REVIEW';
+
 /**
  * Read model del DASHBOARD INICIAL (CQRS): consolida en una sola consulta agrupada los KPIs
  * financieros, de conversión de solicitudes y de riesgo/fraude del tenant. Solo lectura; RLS
@@ -32,17 +70,14 @@ export class DashboardQueryRepository {
     tenantId: string;
     currency: string;
   }): Promise<DashboardKpisOutput> {
-    const today = todayIso();
     return withTenantTxFor(input.tenantId, async (tx) => {
-      // --- Tesorería: efectivo en cajas activas ------------------------------
-      const [cash] = await tx
-        .select({ v: signedCashSum })
-        .from(schema.cashBox)
-        .leftJoin(
-          schema.cashTransaction,
-          eq(schema.cashTransaction.cashBoxId, schema.cashBox.id),
-        )
-        .where(eq(schema.cashBox.active, true));
+      // "Hoy" es el día de negocio de la EMPRESA (ADR #46), no el de UTC: en Colombia el panel
+      // no se vacía a las 19:00.
+      const day = await businessDayBounds(tx, input.tenantId);
+      const today = day.date;
+
+      // --- Tesorería: saldo de las cajas activas, repartido por clase -------
+      const treasury = await this.getTreasuryByClass(tx);
 
       // --- Cartera activa: deuda vigente de créditos ACTIVE ------------------
       const [portfolioActive] = await tx
@@ -97,8 +132,10 @@ export class DashboardQueryRepository {
 
       return {
         currency: input.currency,
+        today: await this.getToday(tx, day, treasury),
+        pending: await this.getPending(tx),
         treasury: {
-          cashAvailableMinor: Number(cash?.v ?? 0),
+          cashAvailableMinor: treasury.totalMinor,
           portfolioActiveMinor: Number(portfolioActive?.v ?? 0),
           portfolioOverdueMinor: Number(portfolioOverdue?.v ?? 0),
         },
@@ -114,6 +151,132 @@ export class DashboardQueryRepository {
         },
       };
     });
+  }
+
+  /**
+   * Saldo de cada caja activa (Σ asientos firmados, agrupado en BD) y reparto por clase
+   * (oficina / ruta / banco / tránsito) con la regla pura `sumTreasuryByClass`. Mismo criterio de
+   * saldo que el libro de cajas (cash-query.repository), para que el panel y Dinero coincidan.
+   */
+  private async getTreasuryByClass(tx: Tx): Promise<TreasuryByClass> {
+    const rows = await tx
+      .select({
+        type: schema.cashBox.type,
+        assignedTo: schema.cashBox.assignedTo,
+        balanceMinor: signedCashSum,
+      })
+      .from(schema.cashBox)
+      .leftJoin(
+        schema.cashTransaction,
+        eq(schema.cashTransaction.cashBoxId, schema.cashBox.id),
+      )
+      .where(eq(schema.cashBox.active, true))
+      .groupBy(schema.cashBox.id);
+    return sumTreasuryByClass(
+      rows.map((row) => ({
+        type: row.type,
+        assignedTo: row.assignedTo,
+        balanceMinor: Number(row.balanceMinor ?? 0),
+      })),
+    );
+  }
+
+  /**
+   * Bloque "HOY": cómo va el negocio en el día de negocio `day`. Cobrado = abonos aplicados en la
+   * ventana `[start, end)` sin los históricos de créditos migrados (mismo criterio que el reporte
+   * diario); esperado/vencido = pendiente de las cuotas de créditos ACTIVE que vencen hoy / antes;
+   * prestado y gastos = asientos del libro de cajas del día. Tres consultas agregadas, sin N+1.
+   */
+  private async getToday(
+    tx: Tx,
+    day: BusinessDayBounds,
+    treasury: TreasuryByClass,
+  ): Promise<DashboardToday> {
+    const withinDay = (col: AnyColumn): SQL =>
+      and(gte(col, day.start), lt(col, day.end)) as SQL;
+
+    const [collected] = await tx
+      .select({
+        v: sql<number>`COALESCE(SUM(${schema.paymentAllocation.amountMinor}), 0)`,
+      })
+      .from(schema.paymentAllocation)
+      .innerJoin(
+        schema.payment,
+        eq(schema.payment.id, schema.paymentAllocation.paymentId),
+      )
+      .where(
+        and(
+          withinDay(schema.paymentAllocation.createdAt),
+          eq(schema.payment.historical, false),
+        ),
+      );
+
+    const [due] = await tx
+      .select({
+        expectedToday: sql<number>`COALESCE(SUM(${installmentOutstanding}) FILTER (WHERE ${schema.installment.dueDate} = ${day.date}), 0)`,
+        overdue: sql<number>`COALESCE(SUM(${installmentOutstanding}) FILTER (WHERE ${schema.installment.dueDate} < ${day.date}), 0)`,
+      })
+      .from(schema.installment)
+      .innerJoin(
+        schema.credit,
+        eq(schema.credit.id, schema.installment.creditId),
+      )
+      .where(eq(schema.credit.status, 'ACTIVE'));
+
+    const [moves] = await tx
+      .select({
+        lent: sql<number>`COALESCE(SUM(${schema.cashTransaction.amountMinor}) FILTER (WHERE ${schema.cashTransaction.kind} = ${DISBURSEMENT_KIND}), 0)`,
+        expenses: sql<number>`COALESCE(SUM(${schema.cashTransaction.amountMinor}) FILTER (WHERE ${schema.cashTransaction.kind} = ${EXPENSE_KIND}), 0)`,
+      })
+      .from(schema.cashTransaction)
+      .where(withinDay(schema.cashTransaction.createdAt));
+
+    return {
+      date: day.date,
+      collectedMinor: Number(collected?.v ?? 0),
+      expectedTodayMinor: Number(due?.expectedToday ?? 0),
+      overdueDueMinor: Number(due?.overdue ?? 0),
+      lentMinor: Number(moves?.lent ?? 0),
+      expensesMinor: Number(moves?.expenses ?? 0),
+      cashOfficeMinor: treasury.officeMinor,
+      cashRouteMinor: treasury.routeMinor,
+      bankMinor: treasury.bankMinor,
+    };
+  }
+
+  /**
+   * Bloque "PENDIENTES": contadores de lo que espera una acción humana, en una sola pasada
+   * (cinco subconsultas escalares; RLS aísla cada tabla por tenant).
+   */
+  private async getPending(tx: Tx): Promise<DashboardPending> {
+    const rows = (await tx.execute(sql`
+      SELECT
+        (SELECT count(*) FROM ${schema.creditApplication}
+           WHERE ${schema.creditApplication.status} = ${APPLICATION_AWAITING_DECISION}) AS applications,
+        (SELECT count(*) FROM ${schema.expense}
+           WHERE ${schema.expense.status} = ${EXPENSE_AWAITING_APPROVAL}) AS expenses,
+        (SELECT count(*) FROM ${schema.collectorRemittance}
+           WHERE ${schema.collectorRemittance.status} = ${REMITTANCE_AWAITING_RECEPTION}) AS remittances,
+        (SELECT count(*) FROM ${schema.fieldOrder}
+           WHERE ${schema.fieldOrder.kind} = ${DEPOSIT_ORDER_KIND}
+             AND ${schema.fieldOrder.status} = ${DEPOSIT_AWAITING_VERIFICATION}) AS deposits,
+        (SELECT count(*) FROM ${schema.payment}
+           WHERE ${schema.payment.status} = ${PAYMENT_UNVERIFIED}
+             AND EXISTS (
+               SELECT 1 FROM ${schema.fraudAssessment}
+               WHERE ${schema.fraudAssessment.paymentId} = ${schema.payment.id}
+                 AND ${schema.fraudAssessment.phase} = ${SETTLEMENT_ASSESSMENT_PHASE}
+                 AND ${schema.fraudAssessment.status} = ${ASSESSMENT_PENDING_REVIEW}
+             )) AS payments
+    `)) as unknown as PendingRow[];
+    const row = rows[0];
+    return {
+      applicationsToApprove: Number(row?.applications ?? 0),
+      expensesToApprove: Number(row?.expenses ?? 0),
+      remittancesToReceive: Number(row?.remittances ?? 0),
+      depositsToVerify: Number(row?.deposits ?? 0),
+      paymentsToConfirm: Number(row?.payments ?? 0),
+    };
   }
 
   /**
@@ -186,6 +349,12 @@ function windowColumns(name: string, since: ReturnType<typeof sql>) {
 // Fila cruda: cada ventana aporta cuatro columnas (conteo + tres promedios), posibles null.
 type TimingRow = Record<string, number | string | null>;
 
+// Fila cruda de los contadores pendientes: count(*) llega como bigint (string) desde Postgres.
+type PendingRow = Record<
+  'applications' | 'expenses' | 'remittances' | 'deposits' | 'payments',
+  number | string | null
+>;
+
 // Traduce las columnas de una ventana a su DTO. AVG/ROUND devuelven null cuando no hay filas
 // que cumplan el filtro (periodo sin datos), lo que preserva la semántica `nullable` del tramo.
 function mapWindow(
@@ -203,8 +372,4 @@ function mapWindow(
 function toIntOrNull(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   return Math.round(Number(value));
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
 }

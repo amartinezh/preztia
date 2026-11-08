@@ -74,12 +74,13 @@ export class BorrowersController {
   ) {
     const tenant = requireTenant(tenantId);
     requireRole(authorization, DATA_PLANE_ROLES);
-    const { page, pageSize, nationalId, name, withoutCredits } =
+    const { page, pageSize, q, nationalId, name, withoutCredits } =
       listBorrowersQuery.parse(query);
     const { items, total } = await this.queries.listBorrowers({
       tenantId: tenant,
       page,
       pageSize,
+      ...(q ? { q } : {}),
       ...(nationalId ? { nationalId } : {}),
       ...(name ? { name } : {}),
       ...(withoutCredits ? { withoutCredits } : {}),

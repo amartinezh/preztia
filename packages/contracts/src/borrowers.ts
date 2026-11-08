@@ -47,6 +47,8 @@ export const listBorrowersOutput = z.object({
 
 // Filtros del listado (Cédula/Nombre del legado + "Mostrar solo clientes sin créditos").
 export const listBorrowersQuery = paginationQuery.extend({
+  /** Búsqueda unificada: nombre, cédula o teléfono (coincidencia parcial, OR). */
+  q: z.string().trim().min(1).max(80).optional(),
   nationalId: z.string().trim().min(1).max(40).optional(),
   name: z.string().trim().min(1).max(80).optional(),
   withoutCredits: z.coerce.boolean().optional(),

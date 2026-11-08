@@ -21,7 +21,7 @@ import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { tenantToday } from '../tenant-config/tenant-timezone';
 import { findRouteBox } from '../cash/payment-box-router';
 import { registerCashPaymentTx } from '../payments/cash-payment.repository';
-import { daysSince } from './critical-clients.repository';
+import { recordVisitTx } from './collector-payment-followup';
 import { loadRouteCandidates, type RouteCandidate } from './route-candidates';
 
 type StopRow = typeof schema.routeStop.$inferSelect;
@@ -168,7 +168,13 @@ export class CollectionRouteDrizzleRepository {
         body: noteFor(input.body),
       });
       if (countsAsVisit(input.body.outcome)) {
-        await recordVisit(tx, input.tenantId, stop, input.collectorId, today);
+        await recordVisitTx(tx, {
+          tenantId: input.tenantId,
+          creditId: stop.creditId,
+          borrowerId: stop.borrowerId,
+          collectorId: input.collectorId,
+          today,
+        });
       }
 
       const now = new Date();
@@ -271,36 +277,6 @@ function noteFor(body: ResolveStopInput): string {
     body.note?.trim(),
   ].filter(Boolean);
   return [OUTCOME_NOTE[body.outcome], ...details].join(' · ');
-}
-
-/** Visita con el nivel de mora al momento (base del reagendamiento por ciclo). */
-async function recordVisit(
-  tx: Tx,
-  tenantId: string,
-  stop: StopRow,
-  collectorId: string,
-  today: string,
-): Promise<void> {
-  const installments = await tx
-    .select({
-      dueDate: schema.installment.dueDate,
-      amountDueMinor: schema.installment.amountDueMinor,
-      paidMinor: schema.installment.paidMinor,
-    })
-    .from(schema.installment)
-    .where(eq(schema.installment.creditId, stop.creditId));
-  const overdue = installments.filter(
-    (i) => i.dueDate < today && i.paidMinor < i.amountDueMinor,
-  );
-  const earliest = overdue.map((i) => i.dueDate).sort()[0] ?? null;
-  await tx.insert(schema.collectionVisit).values({
-    tenantId,
-    creditId: stop.creditId,
-    borrowerId: stop.borrowerId,
-    collectorId,
-    overdueCountAtVisit: overdue.length,
-    daysOverdueAtVisit: daysSince(earliest, today),
-  });
 }
 
 async function loadOwnStop(

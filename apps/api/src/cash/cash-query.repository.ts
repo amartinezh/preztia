@@ -28,6 +28,7 @@ import type { CashTxDirection, CashTxKind } from '@preztiaos/domain';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { findRouteBox } from './payment-box-router';
 import { balanceOfBox } from './cash-ledger';
+import { businessDayBounds } from '../tenant-config/tenant-timezone';
 
 // Suma firmada de un libro mayor: IN suma, OUT resta. Reutilizada por el dashboard.
 const signedSum = sql<number>`COALESCE(SUM(CASE WHEN ${schema.cashTransaction.direction} = 'IN' THEN ${schema.cashTransaction.amountMinor} ELSE -${schema.cashTransaction.amountMinor} END), 0)`;
@@ -191,9 +192,8 @@ export class CashQueryRepository {
       const lastCountByBox = new Map(
         countRows.map((r) => [r.cashBoxId, r.createdAt]),
       );
-      const todayStart = new Date(
-        `${new Date().toISOString().slice(0, 10)}T00:00:00Z`,
-      );
+      // "Hoy" es el día de negocio de la EMPRESA (ADR #46), no el de UTC.
+      const { start: todayStart } = await businessDayBounds(tx, input.tenantId);
 
       const boxes = rows.map((row) => {
         const balanceMinor = Number(row.balanceMinor ?? 0);
@@ -298,17 +298,21 @@ export class CashQueryRepository {
     });
   }
 
+  /**
+   * P&L del día de negocio `date` (YYYY-MM-DD) o, si no viene, del "hoy" de la EMPRESA. La ventana
+   * se resuelve en la zona horaria del tenant (ADR #46): en Colombia el reporte no se vacía a las
+   * 19:00 ni mezcla el recaudo de la noche con el día siguiente.
+   */
   async getDailyReport(input: {
     tenantId: string;
-    date: string;
+    date?: string;
     currency: string;
   }): Promise<DailyReport> {
-    const dayStart = new Date(`${input.date}T00:00:00Z`);
-    const dayEnd = new Date(`${input.date}T23:59:59.999Z`);
-    const within = (col: AnyColumn): SQL =>
-      and(gte(col, dayStart), lte(col, dayEnd)) as SQL;
-
     return withTenantTxFor(input.tenantId, async (tx) => {
+      const day = await businessDayBounds(tx, input.tenantId, input.date);
+      const within = (col: AnyColumn): SQL =>
+        and(gte(col, day.start), lt(col, day.end)) as SQL;
+
       const [cobrado] = await tx
         .select({
           value: sql<number>`COALESCE(SUM(${schema.paymentAllocation.amountMinor}), 0)`,
@@ -370,7 +374,7 @@ export class CashQueryRepository {
       const totalPrestadoMinor = Number(prestado?.value ?? 0);
       const gastosMinor = Number(gastos?.value ?? 0);
       return {
-        date: input.date,
+        date: day.date,
         currency: input.currency,
         totalCobradoMinor,
         totalPrestadoMinor,

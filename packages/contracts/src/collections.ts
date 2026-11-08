@@ -1,6 +1,8 @@
 import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 
+import { paginationQuery } from "./payments";
+
 import { messagingProvider } from "./tenant-config";
 
 const c = initContract();
@@ -162,6 +164,68 @@ export type VisitTarget = z.infer<typeof visitTarget>;
 
 export const listVisitTargetsQuery = z.object({ status: visitStatus });
 
+// ── Mis cobros de hoy: la lista OPERATIVA del cobrador ──────────────────────────────────────
+// Todos los créditos ACTIVE de sus clientes asignados (no solo los en mora), con lo que debe
+// cobrar hoy, lo que ya cobró hoy y el saldo. Es el camino para abonar al cliente al día.
+export const collectionTodayStatus = z.enum(["PENDING", "PAID_TODAY", "UP_TO_DATE"]);
+export type CollectionTodayStatus = z.infer<typeof collectionTodayStatus>;
+
+export const collectionTodayItem = z.object({
+  creditId: z.string().uuid(),
+  borrowerId: z.string().uuid(),
+  borrowerName: z.string(),
+  nationalId: z.string().nullable(),
+  phone: z.string().nullable(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  currency: z.string(),
+  /** Valor de la cuota pactada (la primera; la última absorbe el redondeo). */
+  installmentValueMinor: z.number().int(),
+  /** Lo que debería cobrar hoy: pendiente de las cuotas vencidas hasta hoy inclusive. */
+  dueTodayMinor: z.number().int(),
+  /** Saldo total pendiente del crédito. */
+  outstandingMinor: z.number().int(),
+  overdueCount: z.number().int(),
+  daysOverdue: z.number().int(),
+  /** Abonos del día de negocio de hoy (zona horaria de la empresa). */
+  paidTodayMinor: z.number().int(),
+  lastPaymentAt: z.string().nullable(),
+  /** Parada de ruta abierta despachada por el coordinador para este crédito, si la hay. */
+  openRouteStopId: z.string().uuid().nullable(),
+  /** PENDING = debe cobrar hoy; PAID_TODAY = ya abonó hoy y no debe más por hoy; UP_TO_DATE = nada vence hoy. */
+  status: collectionTodayStatus,
+});
+export type CollectionTodayItem = z.infer<typeof collectionTodayItem>;
+
+export const collectionTodaySummary = z.object({
+  /** Σ dueTodayMinor de todos los clientes del cobrador (no solo la página). */
+  expectedMinor: z.number().int(),
+  /** Σ paidTodayMinor de todos los clientes del cobrador. */
+  collectedMinor: z.number().int(),
+  pendingCount: z.number().int(),
+  paidCount: z.number().int(),
+  clientsCount: z.number().int(),
+});
+export type CollectionTodaySummary = z.infer<typeof collectionTodaySummary>;
+
+export const listCollectionTodayQuery = paginationQuery.extend({
+  /** Búsqueda por nombre, cédula o teléfono (coincidencia parcial). */
+  q: z.string().trim().min(1).max(80).optional(),
+  status: collectionTodayStatus.optional(),
+});
+
+export const listCollectionTodayOutput = z.object({
+  /** Día de negocio (YYYY-MM-DD) en la zona horaria de la empresa. */
+  date: z.string(),
+  currency: z.string(),
+  summary: collectionTodaySummary,
+  items: z.array(collectionTodayItem),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  total: z.number().int(),
+});
+export type ListCollectionTodayOutput = z.infer<typeof listCollectionTodayOutput>;
+
 export const listVisitTargetsOutput = z.object({
   // Umbral vigente (cuotas vencidas) del tenant con el que se arma el listado; informa la UI.
   threshold: z.number().int(),
@@ -245,6 +309,14 @@ export const collectionsContract = c.router({
     query: listVisitTargetsQuery,
     responses: { 200: listVisitTargetsOutput },
     summary: "Clientes del cobrador por visitar (status=pending) o ya visitados (status=visited)",
+  },
+  listCollectionToday: {
+    method: "GET",
+    path: "/me/collection-today",
+    headers: tenantHeaders,
+    query: listCollectionTodayQuery,
+    responses: { 200: listCollectionTodayOutput },
+    summary: "Mis cobros de hoy: todos los clientes del cobrador con cuota, saldo, cobrado hoy y estado",
   },
   listCollectionLog: {
     method: "GET",

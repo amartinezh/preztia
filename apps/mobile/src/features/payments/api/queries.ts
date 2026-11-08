@@ -17,6 +17,7 @@ import { enqueue } from "@/core/offline/queue";
 import { isApiError } from "@/core/errors";
 import { creditKeys } from "@/features/credit/api/queries";
 import { cashBoxKeys } from "@/features/cash/api/boxes-queries";
+import { collectionTodayKeys } from "@/features/collections/api/today-queries";
 import { remittanceKeys } from "@/features/remittances/api/queries";
 
 const PAGE_SIZE = 20;
@@ -178,6 +179,9 @@ export function useRegisterCashPayment() {
       // El cobro entró a la caja de ruta: saldos, "efectivo en poder" y la rendición cambian.
       void qc.invalidateQueries({ queryKey: cashBoxKeys.all });
       void qc.invalidateQueries({ queryKey: remittanceKeys.all });
+      // Y el cliente cambia de "por cobrar" a "cobrado hoy" en Mis cobros (y en el inicio).
+      void qc.invalidateQueries({ queryKey: collectionTodayKeys.all });
+      void qc.invalidateQueries({ queryKey: ["collections", "visits"] });
     },
   });
 }

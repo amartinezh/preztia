@@ -6,6 +6,7 @@ import {
   gte,
   ilike,
   inArray,
+  lt,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -16,8 +17,22 @@ import {
   summarizeAccount,
   type PortfolioInstallment,
 } from '@preztiaos/domain';
-import type { AccountDetail, AccountRow } from '@preztiaos/contracts';
-import { withTenantTxFor } from '../tenancy/unit-of-work';
+import type {
+  AccountDetail,
+  AccountRow,
+  CreditStatus,
+} from '@preztiaos/contracts';
+import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
+import {
+  businessDayBounds,
+  tenantToday,
+  type BusinessDayBounds,
+} from '../tenant-config/tenant-timezone';
+import {
+  borrowerFullName,
+  borrowerSearchPredicate,
+  containsPattern,
+} from '../borrowers/borrower-search';
 
 const MILLIS_PER_DAY = 86_400_000;
 
@@ -31,30 +46,35 @@ export class AccountsQueryRepository {
     tenantId: string;
     page: number;
     pageSize: number;
+    /** Búsqueda unificada: nombre, cédula o teléfono del cliente (OR). */
+    q?: string;
     name?: string;
     nationalId?: string;
     phone?: string;
     onlyOverdue?: boolean;
+    /** Estado del crédito, filtrado aquí y no sobre las páginas ya cargadas. */
+    status?: CreditStatus;
   }): Promise<{ items: AccountRow[]; total: number }> {
-    const today = todayIso();
     return withTenantTxFor(input.tenantId, async (tx) => {
+      // "Hoy" (atraso, "Pago en Fecha", "Cobrado hoy") es el día de negocio de la EMPRESA (ADR #46).
+      const day = await businessDayBounds(tx, input.tenantId);
+      const today = day.date;
       const filters: SQL[] = [];
+      if (input.q) filters.push(borrowerSearchPredicate(input.q));
       if (input.name) {
-        filters.push(
-          ilike(
-            sql`${schema.borrower.firstName} || ' ' || ${schema.borrower.lastName}`,
-            `%${input.name}%`,
-          ),
-        );
+        filters.push(ilike(borrowerFullName, containsPattern(input.name)));
       }
       if (input.nationalId) {
         filters.push(
-          ilike(schema.borrower.nationalId, `%${input.nationalId}%`),
+          ilike(schema.borrower.nationalId, containsPattern(input.nationalId)),
         );
       }
       if (input.phone) {
-        filters.push(ilike(schema.borrower.phone, `%${input.phone}%`));
+        filters.push(
+          ilike(schema.borrower.phone, containsPattern(input.phone)),
+        );
       }
+      if (input.status) filters.push(eq(schema.credit.status, input.status));
       const where = filters.length ? and(...filters) : undefined;
 
       const earliestOverdue = sql<
@@ -103,7 +123,7 @@ export class AccountsQueryRepository {
       const collectedTodayByCredit = await this.collectedTodayByCredit(
         tx,
         rows.map((r) => r.creditId),
-        today,
+        day,
       );
 
       const items: AccountRow[] = rows.map((row) => ({
@@ -139,8 +159,8 @@ export class AccountsQueryRepository {
     tenantId: string;
     creditId: string;
   }): Promise<AccountDetail | null> {
-    const today = todayIso();
     return withTenantTxFor(input.tenantId, async (tx) => {
+      const today = await tenantToday(tx, input.tenantId);
       const [credit] = await tx
         .select({
           id: schema.credit.id,
@@ -228,17 +248,17 @@ export class AccountsQueryRepository {
 
   /**
    * Suma, por crédito, los abonos (payment_allocation) aplicados HOY ("Cobrado hoy"). Ventana =
-   * el día de hoy (operación diaria; ya no hay liquidación que cierre el período).
+   * el día de negocio de la empresa `[start, end)` (operación diaria; ya no hay liquidación que
+   * cierre el período).
    */
   private async collectedTodayByCredit(
-    tx: Parameters<Parameters<typeof withTenantTxFor>[1]>[0],
+    tx: Tx,
     creditIds: string[],
-    today: string,
+    day: BusinessDayBounds,
   ): Promise<Map<string, number>> {
     const result = new Map<string, number>();
     if (creditIds.length === 0) return result;
 
-    const dayStart = new Date(`${today}T00:00:00Z`);
     const rows = await tx
       .select({
         creditId: schema.installment.creditId,
@@ -252,7 +272,8 @@ export class AccountsQueryRepository {
       .where(
         and(
           inArray(schema.installment.creditId, creditIds),
-          gte(schema.paymentAllocation.createdAt, dayStart),
+          gte(schema.paymentAllocation.createdAt, day.start),
+          lt(schema.paymentAllocation.createdAt, day.end),
         ),
       )
       .groupBy(schema.installment.creditId);
@@ -289,10 +310,6 @@ export class AccountsQueryRepository {
 function fullName(first: string | null, last: string | null): string | null {
   const name = `${first ?? ''} ${last ?? ''}`.trim();
   return name.length ? name : null;
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function daysSince(dateIso: string | null, today: string): number {

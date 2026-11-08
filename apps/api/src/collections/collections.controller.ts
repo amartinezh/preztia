@@ -19,6 +19,7 @@ import {
 import {
   addCollectionObservationInput,
   criticalRouteInput,
+  listCollectionTodayQuery,
   listVisitTargetsQuery,
   type CriticalRouteOutput,
   type MarkCollectionVisitedOutput,
@@ -34,7 +35,9 @@ import { CriticalClientsRepository } from './critical-clients.repository';
 import { PortfolioMapRepository } from './portfolio-map.repository';
 import { OsrmRouteOptimizer } from './osrm-route-optimizer';
 import { VisitTargetsRepository } from './visit-targets.repository';
+import { CollectionTodayRepository } from './collection-today.repository';
 import { CollectionLogRepository } from './collection-log.repository';
+import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 
 const uuid = z.string().uuid();
 
@@ -60,6 +63,7 @@ export class CollectionsController {
     private readonly portfolioMap: PortfolioMapRepository,
     private readonly routeOptimizer: OsrmRouteOptimizer,
     private readonly visitTargets: VisitTargetsRepository,
+    private readonly collectionToday: CollectionTodayRepository,
     private readonly collectionLog: CollectionLogRepository,
     private readonly addObservation: AddCollectionObservationHandler,
     private readonly markVisited: MarkCollectionVisitedHandler,
@@ -174,6 +178,30 @@ export class CollectionsController {
       tenantId: tenant,
       collectorId: session.userId,
       status,
+    });
+  }
+
+  /**
+   * Mis cobros de hoy: TODOS los clientes del cobrador (no solo los en mora), con cuota, saldo, lo
+   * cobrado hoy y su estado. Es la lista operativa desde la que abona al cliente al día.
+   */
+  @Get('me/collection-today')
+  async listCollectionToday(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: Record<string, string>,
+  ) {
+    const tenant = requireTenant(tenantId);
+    const session = requireRole(authorization, COLLECTOR_ROLES);
+    const { page, pageSize, q, status } = listCollectionTodayQuery.parse(query);
+    return this.collectionToday.list({
+      tenantId: tenant,
+      collectorId: session.userId,
+      currency: await resolveTenantCurrency(tenant),
+      page,
+      pageSize,
+      ...(q ? { q } : {}),
+      ...(status ? { status } : {}),
     });
   }
 

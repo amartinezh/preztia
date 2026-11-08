@@ -26,6 +26,7 @@ import { ExpenseRequestForm } from "@/features/cash/components/expenses/expense-
 import { DepositOrdersPanel } from "@/features/deposit-orders/components/deposit-orders-panel";
 import { ExpensesPanel } from "@/features/cash/components/expenses/expenses-panel";
 import { useMyRemittance, useMyRemittanceHistory, useSubmitRemittance } from "../api/queries";
+import { OfflineOperationsSection } from "../components/offline-operations-section";
 import {
   ObligationBadge,
   RemittanceHistoryItem,
@@ -42,15 +43,33 @@ export function MyCashScreen() {
   const { t } = useT();
   const mine = useMyRemittance();
 
-  if (mine.isPending) return <Spinner label={t("common.loading")} />;
-  if (mine.isError || !mine.data) {
-    return <ErrorState title={t("errors.unknown")} onRetry={() => void mine.refetch()} />;
+  // Lo guardado sin señal se muestra SIEMPRE arriba, también cuando la caja no carga (sin red es
+  // justo cuando hay pendientes): la persona nunca pierde de vista un abono que el servidor no tiene.
+  if (mine.isPending || mine.isError || !mine.data) {
+    return (
+      <Screen>
+        <Stack gap="lg">
+          <OfflineOperationsSection currency={null} />
+          {mine.isPending ? (
+            <Spinner label={t("common.loading")} />
+          ) : (
+            <ErrorState
+              title={t("common.loadFailed")}
+              description={t("common.loadFailedHint")}
+              retryLabel={t("common.retry")}
+              onRetry={() => void mine.refetch()}
+            />
+          )}
+        </Stack>
+      </Screen>
+    );
   }
   const data = mine.data;
 
   return (
     <Screen>
       <Stack gap="lg">
+        <OfflineOperationsSection currency={data.currency} />
         <Text variant="subtitle">{t("remittance.mine.title")}</Text>
 
         {!data.hasRouteBox ? (

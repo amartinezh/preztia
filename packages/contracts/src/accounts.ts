@@ -45,12 +45,16 @@ export const listAccountsOutput = z.object({
 });
 
 export const listAccountsQuery = paginationQuery.extend({
+  /** Búsqueda unificada: nombre, cédula o teléfono del cliente (coincidencia parcial, OR). */
+  q: z.string().trim().min(1).max(80).optional(),
   name: z.string().trim().min(1).max(80).optional(),
   nationalId: z.string().trim().min(1).max(40).optional(),
   /** Búsqueda por teléfono del cliente (coincidencia parcial). */
   phone: z.string().trim().min(1).max(40).optional(),
   /** Solo cuentas con días de atraso > 0. */
   onlyOverdue: z.coerce.boolean().optional(),
+  /** Estado del crédito, filtrado en el servidor (no sobre las páginas ya cargadas). */
+  status: creditStatus.optional(),
 });
 
 const accountInstallment = z.object({

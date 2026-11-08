@@ -7,6 +7,16 @@
 
 ---
 
+## Estado de ejecución (2026-11-08)
+
+| Fase | Estado | Detalle |
+|---|---|---|
+| Fase 0 | ✅ Hecha y en producción | ADR #50. Críticos cerrados: C2 (MoneyInput), C3 (clave por intento, cola observable, avisos), C4 (toasts), C5 (sin mock), C9 (confirmaciones), C10 (Idempotency-Key en otorgar/migrar/aprobar/parada). Parcial: C6 (fecha visible y seleccionable en el reporte). |
+| Fase 1 | ✅ Hecha (pendiente de desplegar) | ADR #51. Críticos cerrados: C1 ("Mis cobros de hoy" + cobrar es un gesto: abono liquida la parada y registra la visita), C6 ("hoy" en TZ del tenant en reporte, panel, cuentas y pagos), C7 (refresco de sesión), C8 (asignación por deltas), C3 completo (fallidas visibles con reintentar/descartar). Altos cerrados: A1 (panel Hoy + Pendientes), A5 (búsqueda `q` y filtros en servidor, paginación de Clientes y pickers). |
+| Fase 2 | ⏳ Pendiente | Glosario/renombrar Dinero, unificar read-models de caja, vista previa del cronograma, unificar detalles de crédito, checklist de onboarding, IAM (contraseñas, zonas), `DataTable` v2, pt-BR completo, `DateField`, etiquetas accesibles en `Field`. |
+
+---
+
 ## 1. Veredicto
 
 La base técnica del cliente es sólida: navegación por rol con pocas pestañas, contratos compartidos, dinero en unidades menores, idempotencia en el abono en efectivo, cola offline, botones de ≥44 px, errores de dominio traducidos a mensajes accionables. Sin embargo, **hoy la aplicación no es intuitiva ni fácil de manejar para sus dos usuarios clave**, por razones que no son estéticas sino de flujo y de confianza:

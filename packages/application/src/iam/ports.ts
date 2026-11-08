@@ -102,7 +102,10 @@ export interface UserStore {
     active?: boolean;
     passwordHash?: string;
   }): Promise<UserRecord | null>;
-  findById(input: { tenantId: string; userId: string }): Promise<UserRecord | null>;
+  findById(input: {
+    tenantId: string;
+    userId: string;
+  }): Promise<UserRecord | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +143,10 @@ export interface ZoneStore {
     tenantId: string;
     zoneId: string;
   }): Promise<{ deleted: boolean; hasChildren: boolean }>;
-  findById(input: { tenantId: string; zoneId: string }): Promise<ZoneRecord | null>;
+  findById(input: {
+    tenantId: string;
+    zoneId: string;
+  }): Promise<ZoneRecord | null>;
   /** Vincula un coordinador a una zona (idempotente). */
   assignCoordinator(input: {
     tenantId: string;
@@ -164,4 +170,16 @@ export interface CollectorAssignmentStore {
     assignedBy: string;
     borrowerIds: readonly string[];
   }): Promise<void>;
+  /**
+   * Ajusta la cartera por DELTAS en una sola transacción: inserta `add` (idempotente: un cliente
+   * ya asignado no se duplica) y borra `remove`; el resto no se toca. Devuelve cuántos clientes
+   * quedan asignados al cobrador tras la operación.
+   */
+  updateAssignments(input: {
+    tenantId: string;
+    collectorId: string;
+    assignedBy: string;
+    add: readonly string[];
+    remove: readonly string[];
+  }): Promise<{ assigned: number }>;
 }

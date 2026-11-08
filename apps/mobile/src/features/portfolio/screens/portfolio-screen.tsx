@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import type { AccountRow } from "@preztiaos/contracts";
+import type { CreditStatus } from "@preztiaos/contracts";
 import {
   Badge,
   Button,
@@ -18,15 +18,17 @@ import {
 import { useSession } from "@/core/auth/session";
 import { can } from "@/core/auth/authorization";
 import { csvDownloadAvailable, downloadCsv } from "@/core/export/download-csv";
+import { useDebouncedValue } from "@/core/hooks/use-debounced-value";
 import { useT } from "@/core/i18n";
 import { useExportAccounts } from "@/features/reporting/api/queries";
 import { creditStatusBadge } from "@/features/credit/components/credit-status";
 import { useAccountsList } from "@/features/accounts/api/queries";
 import { WhatsappReminderButton } from "@/features/collections/components/whatsapp-reminder-button";
 
-// Filtro de estado de la cartera. "En mora" se resuelve en servidor (onlyOverdue); el resto
-// filtra sobre las páginas ya cargadas (la API de cuentas no expone filtro por estado).
+// Filtro de estado de la cartera. TODOS se resuelven en servidor: "En mora" por `onlyOverdue` y
+// Activos/Pagados por `status` (filtrar las páginas cargadas escondía cuentas existentes).
 type Filter = "ALL" | "ACTIVE" | "SETTLED" | "OVERDUE";
+const STATUS_BY_FILTER: Partial<Record<Filter, CreditStatus>> = { ACTIVE: "ACTIVE", SETTLED: "SETTLED" };
 const FILTERS: { value: Filter; key: "cartera.filter.all" | "cartera.filter.active" | "cartera.filter.settled" | "cartera.filter.overdue" }[] = [
   { value: "ALL", key: "cartera.filter.all" },
   { value: "ACTIVE", key: "cartera.filter.active" },
@@ -41,11 +43,13 @@ const FILTERS: { value: Filter; key: "cartera.filter.all" | "cartera.filter.acti
  * pagas, días de mora). Paginada (§3.7).
  */
 export function PortfolioScreen() {
-  const { t } = useT();
+  const { t, tf } = useT();
   const router = useRouter();
   const { role } = useSession();
   const exportCsv = useExportAccounts();
-  const [name, setName] = useState("");
+  const [search, setSearch] = useState("");
+  // Lo tecleado viaja al servidor cuando la persona deja de escribir (una petición, no una por tecla).
+  const q = useDebouncedValue(search.trim());
   const [filter, setFilter] = useState<Filter>("ALL");
 
   const canExport = can(role, "borrower:manage") && csvDownloadAvailable();
@@ -56,17 +60,16 @@ export function PortfolioScreen() {
   const runExport = () =>
     exportCsv.mutate(undefined, { onSuccess: (res) => downloadCsv(res.filename, res.csv) });
 
+  const status = STATUS_BY_FILTER[filter];
   const query = useAccountsList({
-    ...(name.trim() ? { name: name.trim() } : {}),
+    ...(q ? { q } : {}),
     ...(filter === "OVERDUE" ? { onlyOverdue: true } : {}),
+    ...(status ? { status } : {}),
   });
 
-  const items = useMemo<AccountRow[]>(() => {
-    const all = query.data?.pages.flatMap((p) => p.items) ?? [];
-    if (filter === "ACTIVE") return all.filter((a) => a.status === "ACTIVE");
-    if (filter === "SETTLED") return all.filter((a) => a.status === "SETTLED");
-    return all;
-  }, [query.data, filter]);
+  const items = query.data?.pages.flatMap((p) => p.items) ?? [];
+  // Total del servidor para el filtro/búsqueda vigente (no solo lo cargado hasta ahora).
+  const total = query.data?.pages[0]?.total;
 
   return (
     <View className="flex-1 bg-white dark:bg-zinc-950">
@@ -129,7 +132,7 @@ export function PortfolioScreen() {
                 ) : null}
               </Row>
             </Row>
-            <Input value={name} onChangeText={setName} placeholder={t("accounts.list.search")} />
+            <Input value={search} onChangeText={setSearch} placeholder={t("accounts.list.search")} autoCapitalize="none" />
             <Row gap="sm" className="flex-wrap">
               {FILTERS.map((f) => {
                 const active = filter === f.value;
@@ -152,6 +155,11 @@ export function PortfolioScreen() {
                 );
               })}
             </Row>
+            {total !== undefined ? (
+              <Text variant="caption" tone="muted">
+                {total === 1 ? t("accounts.list.totalOne") : tf("accounts.list.total", { n: total })}
+              </Text>
+            ) : null}
           </Stack>
         }
         ListEmptyComponent={

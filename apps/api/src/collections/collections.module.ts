@@ -23,6 +23,7 @@ import { ReminderIdempotencyRepository } from './reminder-idempotency.repository
 import { CollectionAuditLogAdapter } from './collection-audit.log';
 import { CollectionReminderCron } from './collection-reminder.cron';
 import { VisitTargetsRepository } from './visit-targets.repository';
+import { CollectionTodayRepository } from './collection-today.repository';
 import { CollectionNoteRepositoryAdapter } from './collection-note.repository';
 import { CollectionVisitRepositoryAdapter } from './collection-visit.repository';
 import { CollectionVisitAuditLogAdapter } from './collection-visit-audit.log';
@@ -61,6 +62,8 @@ import { ClientLanguageRepository } from '../tenant-config/client-language.repos
 
     // Visitas de cobro en campo (perfil del cobrador): read model + adaptadores append-only.
     VisitTargetsRepository,
+    // Mis cobros de hoy: lista operativa del cobrador (todos sus clientes, no solo los en mora).
+    CollectionTodayRepository,
     CollectionNoteRepositoryAdapter,
     CollectionVisitRepositoryAdapter,
     CollectionVisitAuditLogAdapter,

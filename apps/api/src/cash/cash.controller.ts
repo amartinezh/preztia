@@ -187,12 +187,11 @@ export class CashController {
     const tenant = requireTenant(tenantId);
     // P&L del día de todo el tenant: solo ADMIN/COORDINATOR.
     requireRole(authorization, MANAGER_ROLES);
-    const date =
-      z.string().date().optional().parse(query.date) ??
-      new Date().toISOString().slice(0, 10);
+    // Sin fecha, el read model usa el "hoy" de la EMPRESA (zona horaria del tenant, ADR #46).
+    const date = z.string().date().optional().parse(query.date);
     return this.queries.getDailyReport({
       tenantId: tenant,
-      date,
+      ...(date ? { date } : {}),
       currency: await resolveTenantCurrency(tenant),
     });
   }

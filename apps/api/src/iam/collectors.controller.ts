@@ -4,13 +4,21 @@ import {
   Get,
   Headers,
   Param,
+  Patch,
   Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { AssignCollectorClientsHandler } from '@preztiaos/application';
-import { assignClientsInput, paginationQuery } from '@preztiaos/contracts';
+import {
+  AssignCollectorClientsHandler,
+  UpdateCollectorClientsHandler,
+} from '@preztiaos/application';
+import {
+  assignClientsInput,
+  paginationQuery,
+  updateCollectorClientsInput,
+} from '@preztiaos/contracts';
 import { JwtGuard } from '../auth/jwt.guard';
 import { requireTenant } from '../auth/require-tenant';
 import { requireRole, type Session } from '../auth/require-role';
@@ -27,12 +35,14 @@ const COLLECTOR_ROLES = ['COLLECTOR'] as const;
 
 /**
  * Frontera HTTP de la asignación cobrador → clientes. El coordinador lista los clientes de su
- * alcance y reemplaza la cartera de un cobrador; el cobrador lee solo sus clientes asignados.
+ * alcance y reemplaza o ajusta por deltas la cartera de un cobrador; el cobrador lee solo sus
+ * clientes asignados.
  */
 @Controller()
 @UseGuards(JwtGuard)
 export class CollectorsController {
   private readonly assignHandler: AssignCollectorClientsHandler;
+  private readonly updateHandler: UpdateCollectorClientsHandler;
 
   constructor(
     private readonly assignments: CollectorClientRepository,
@@ -40,6 +50,10 @@ export class CollectorsController {
     private readonly users: UserDrizzleRepository,
   ) {
     this.assignHandler = new AssignCollectorClientsHandler(
+      this.assignments,
+      this.users,
+    );
+    this.updateHandler = new UpdateCollectorClientsHandler(
       this.assignments,
       this.users,
     );
@@ -80,6 +94,26 @@ export class CollectorsController {
       actor: actorFrom(session),
       collectorId: uuid.parse(id),
       borrowerIds: dto.borrowerIds,
+    });
+  }
+
+  // Ajuste por deltas: la pantalla envía solo lo marcado/desmarcado y no necesita cargar toda la
+  // cartera para guardar (hallazgo C8). Misma autorización que el reemplazo.
+  @Patch('collectors/:id/clients')
+  async update(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
+  ) {
+    requireTenant(tenantId);
+    const session = requireRole(authorization, CLIENT_ASSIGNER_ROLES);
+    const dto = updateCollectorClientsInput.parse(body);
+    return this.updateHandler.execute({
+      actor: actorFrom(session),
+      collectorId: uuid.parse(id),
+      add: dto.add,
+      remove: dto.remove,
     });
   }
 

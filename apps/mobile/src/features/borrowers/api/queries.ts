@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   BorrowerSummary,
   CreateBorrowerInput,
@@ -9,6 +9,8 @@ import { api, tenantHeader, unwrap } from "@/core/api/client";
 
 export interface BorrowersListParams {
   page?: number;
+  /** Búsqueda unificada en servidor: nombre, cédula o teléfono (OR). */
+  q?: string;
   name?: string;
   withoutCredits?: boolean;
 }
@@ -16,11 +18,23 @@ export interface BorrowersListParams {
 export const borrowerKeys = {
   all: ["borrowers"] as const,
   list: (params: BorrowersListParams) => [...borrowerKeys.all, "list", params] as const,
+  infinite: (params: BorrowersListParams) => [...borrowerKeys.all, "infinite", params] as const,
 };
 
 const PAGE_SIZE = 20;
 
-/** Lista paginada de clientes del tenant, con filtros de nombre y "sin créditos". */
+/** Parámetros de consulta de una página del listado (comparten los filtros ambos hooks). */
+function listQuery(params: BorrowersListParams, page: number) {
+  return {
+    page,
+    pageSize: PAGE_SIZE,
+    ...(params.q ? { q: params.q } : {}),
+    ...(params.name ? { name: params.name } : {}),
+    ...(params.withoutCredits ? { withoutCredits: true } : {}),
+  };
+}
+
+/** Una página de clientes del tenant (búsqueda `q` o `name`, filtro "sin créditos"). */
 export function useBorrowersList(params: BorrowersListParams = {}) {
   return useQuery({
     queryKey: borrowerKeys.list(params),
@@ -28,14 +42,24 @@ export function useBorrowersList(params: BorrowersListParams = {}) {
       unwrap(
         await api.listBorrowers({
           headers: tenantHeader(),
-          query: {
-            page: params.page ?? 1,
-            pageSize: PAGE_SIZE,
-            ...(params.name ? { name: params.name } : {}),
-            ...(params.withoutCredits ? { withoutCredits: true } : {}),
-          },
+          query: listQuery(params, params.page ?? 1),
         }),
       ),
+  });
+}
+
+/**
+ * Listado INFINITO de clientes con búsqueda unificada `q` (nombre, cédula o teléfono) en servidor.
+ * El total viene en cada página (`total`) para decir "N clientes" / "Mostrando N de M".
+ */
+export function useBorrowersInfinite(params: Omit<BorrowersListParams, "page"> = {}) {
+  return useInfiniteQuery({
+    queryKey: borrowerKeys.infinite(params),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) =>
+      unwrap(await api.listBorrowers({ headers: tenantHeader(), query: listQuery(params, pageParam) })),
+    getNextPageParam: (last) =>
+      last.page * last.pageSize < last.total ? last.page + 1 : undefined,
   });
 }
 

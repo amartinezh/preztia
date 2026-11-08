@@ -3,9 +3,14 @@ import { and, count, desc, eq, ilike, sql, type SQL } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type { BorrowerNote, BorrowerSummary } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import {
+  borrowerFullName,
+  borrowerSearchPredicate,
+  containsPattern,
+} from './borrower-search';
 
-// Read models de clientes: listado paginado con filtros (Cédula/Nombre + "sin créditos") y
-// notas de cobro. RLS garantiza que solo aparecen los clientes del tenant.
+// Read models de clientes: listado paginado con filtros (búsqueda unificada `q`, Cédula/Nombre +
+// "sin créditos") y notas de cobro. RLS garantiza que solo aparecen los clientes del tenant.
 
 @Injectable()
 export class BorrowersQueryRepository {
@@ -13,25 +18,23 @@ export class BorrowersQueryRepository {
     tenantId: string;
     page: number;
     pageSize: number;
+    /** Búsqueda unificada: nombre, cédula o teléfono (OR). */
+    q?: string;
     nationalId?: string;
     name?: string;
     withoutCredits?: boolean;
   }): Promise<{ items: BorrowerSummary[]; total: number }> {
     return withTenantTxFor(input.tenantId, async (tx) => {
       const conditions: SQL[] = [];
+      if (input.q) conditions.push(borrowerSearchPredicate(input.q));
       if (input.nationalId) {
         conditions.push(
-          ilike(schema.borrower.nationalId, `%${input.nationalId}%`),
+          ilike(schema.borrower.nationalId, containsPattern(input.nationalId)),
         );
       }
       if (input.name) {
         // Coincide contra "nombre apellido" para que la búsqueda sea natural.
-        conditions.push(
-          ilike(
-            sql`${schema.borrower.firstName} || ' ' || ${schema.borrower.lastName}`,
-            `%${input.name}%`,
-          ),
-        );
+        conditions.push(ilike(borrowerFullName, containsPattern(input.name)));
       }
       if (input.withoutCredits) {
         conditions.push(

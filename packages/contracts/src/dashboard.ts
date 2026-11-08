@@ -63,8 +63,48 @@ export const dashboardApplicationTimings = z.object({
 });
 export type DashboardApplicationTimings = z.infer<typeof dashboardApplicationTimings>;
 
+// Bloque "HOY": cómo va el negocio en el día de negocio de la EMPRESA (zona horaria del tenant).
+export const dashboardToday = z.object({
+  /** Día de negocio (YYYY-MM-DD) en la zona horaria de la empresa al que se refieren las cifras. */
+  date: z.string(),
+  /** Cobrado hoy: Σ abonos aplicados a cuotas hoy (sin los históricos de créditos migrados). */
+  collectedMinor: z.number().int(),
+  /** Esperado hoy: Σ pendiente de las cuotas que vencen hoy en créditos activos. */
+  expectedTodayMinor: z.number().int(),
+  /** Vencido pendiente: Σ pendiente de cuotas vencidas antes de hoy (lo que se arrastra). */
+  overdueDueMinor: z.number().int(),
+  /** Prestado hoy: Σ desembolsos del día. */
+  lentMinor: z.number().int(),
+  /** Gastos pagados hoy. */
+  expensesMinor: z.number().int(),
+  /** Efectivo en cajas de oficina (CASH sin cobrador). */
+  cashOfficeMinor: z.number().int(),
+  /** Efectivo en la calle: Σ cajas de ruta de los cobradores. */
+  cashRouteMinor: z.number().int(),
+  /** Dinero en cuentas bancarias. */
+  bankMinor: z.number().int(),
+});
+export type DashboardToday = z.infer<typeof dashboardToday>;
+
+// Bloque "PENDIENTES": lo que espera una acción humana, con contador para ir directo.
+export const dashboardPending = z.object({
+  /** Solicitudes con expediente completo esperando decisión (IN_REVIEW). */
+  applicationsToApprove: z.number().int(),
+  /** Solicitudes de gasto pendientes de aprobación. */
+  expensesToApprove: z.number().int(),
+  /** Rendiciones declaradas por cobradores, pendientes de recibir y contar. */
+  remittancesToReceive: z.number().int(),
+  /** Consignaciones reportadas por cobradores, pendientes de verificar. */
+  depositsToVerify: z.number().int(),
+  /** Pagos PIX conciliados con un crédito real que esperan aprobación manual. */
+  paymentsToConfirm: z.number().int(),
+});
+export type DashboardPending = z.infer<typeof dashboardPending>;
+
 export const dashboardKpisOutput = z.object({
   currency: z.string(),
+  today: dashboardToday,
+  pending: dashboardPending,
   treasury: dashboardTreasury,
   applications: dashboardApplications,
   applicationTimings: dashboardApplicationTimings,

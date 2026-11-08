@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
+import { useRouter, type Href } from "expo-router";
+import type { DashboardPending } from "@preztiaos/contracts";
 import { Card, ErrorState, formatMoney, Row, Skeleton, Stack, Text, useTheme } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
@@ -9,9 +11,11 @@ import { BarChart } from "../components/bar-chart";
 import { DonutChart } from "../components/donut-chart";
 import { KpiCard } from "../components/kpi-card";
 import { dashboardPalette } from "../components/palette";
+import { PendingList, type PendingItem } from "../components/pending-list";
 import { PeriodToggle, type PeriodOption } from "../components/period-toggle";
 import { SectionHeader } from "../components/section-header";
 import { StageTimeline } from "../components/stage-timeline";
+import { TodaySection } from "../components/today-section";
 
 // Ventanas de calendario acumuladas para la trazabilidad de tiempos (clave del DTO del backend).
 type TimePeriod = "today" | "week" | "month" | "year";
@@ -22,8 +26,9 @@ type TimePeriod = "today" | "week" | "month" | "year";
  * datos (hook) y los reparte a tarjetas/gráficos puros; el estilo se apoya en los tokens del tema.
  */
 export function DashboardScreen() {
-  const { t, tf } = useT();
+  const { t, tf, locale } = useT();
   const { colors } = useTheme();
+  const router = useRouter();
   const query = useDashboardKpis();
   const kpis = query.data;
 
@@ -45,6 +50,16 @@ export function DashboardScreen() {
   const border = colors.border;
 
   const money = (amountMinor: number) => formatMoney(amountMinor, kpis?.currency ?? "COP");
+  const cardColors = { textColor, mutedColor: muted, surfaceColor: surface, borderColor: border };
+
+  // Bandejas que esperan una decisión, cada una con su destino. El componente oculta las vacías.
+  const pendingItems = (pending: DashboardPending): PendingItem[] => [
+    { key: "applications", label: t("home.pending.applications"), count: pending.applicationsToApprove, onPress: () => router.push("/applications" as Href) },
+    { key: "expenses", label: t("home.pending.expenses"), count: pending.expensesToApprove, onPress: () => router.push("/cash?tab=resumen" as Href) },
+    { key: "remittances", label: t("home.pending.remittances"), count: pending.remittancesToReceive, onPress: () => router.push("/cash?tab=rendiciones" as Href) },
+    { key: "deposits", label: t("home.pending.deposits"), count: pending.depositsToVerify, onPress: () => router.push("/cash?tab=consignaciones" as Href) },
+    { key: "payments", label: t("home.pending.payments"), count: pending.paymentsToConfirm, onPress: () => router.push("/cuentas?tab=pagos" as Href) },
+  ];
 
   return (
     <Screen>
@@ -56,9 +71,6 @@ export function DashboardScreen() {
           </Text>
           <Text variant="title" style={{ color: textColor }}>
             {t("home.title")}
-          </Text>
-          <Text variant="caption" style={{ color: muted }}>
-            {today()}
           </Text>
         </Stack>
 
@@ -74,6 +86,38 @@ export function DashboardScreen() {
 
         {kpis ? (
           <Stack gap="lg">
+            {/* ── Hoy: cómo va el negocio en el día de la empresa ───────────── */}
+            <TodaySection
+              today={kpis.today}
+              currency={kpis.currency}
+              labels={{
+                title: `${t("home.today.title")} · ${businessDate(kpis.today.date, locale)}`,
+                subtitle:
+                  kpis.today.overdueDueMinor > 0
+                    ? tf("home.today.overdueDue", { amount: money(kpis.today.overdueDueMinor) })
+                    : undefined,
+                collected: t("home.today.collected"),
+                expected: t("home.today.expected"),
+                collectedPct: collectedRate(kpis.today.expectedTodayMinor, kpis.today.collectedMinor, tf),
+                lent: t("home.today.lent"),
+                expenses: t("home.today.expenses"),
+                cashTitle: t("home.today.cashTitle"),
+                cashOffice: t("home.today.cashOffice"),
+                cashRoute: t("home.today.cashRoute"),
+                bank: t("home.today.bank"),
+              }}
+              {...cardColors}
+            />
+
+            {/* ── Pendientes: lo que espera una decisión ─────────────────────── */}
+            <PendingList
+              title={t("home.pending.title")}
+              subtitle={t("home.pending.subtitle")}
+              items={pendingItems(kpis.pending)}
+              emptyLabel={t("home.pending.empty")}
+              {...cardColors}
+            />
+
             {/* ── Bloque Financiero ─────────────────────────────────────────── */}
             <Stack gap="md">
               <SectionHeader
@@ -327,6 +371,14 @@ export function DashboardScreen() {
 function DashboardSkeleton() {
   return (
     <Stack gap="lg" accessibilityLabel="Cargando" accessibilityRole="progressbar">
+      <Skeleton className="h-6 w-56 rounded-lg" />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+        <Skeleton className="h-24 min-w-[150px] flex-1 rounded-2xl" />
+        <Skeleton className="h-24 min-w-[150px] flex-1 rounded-2xl" />
+        <Skeleton className="h-24 min-w-[150px] flex-1 rounded-2xl" />
+        <Skeleton className="h-24 min-w-[150px] flex-1 rounded-2xl" />
+      </View>
+      <Skeleton className="h-14 w-full rounded-2xl" />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
         <Skeleton className="h-28 min-w-[150px] flex-1 rounded-2xl" />
         <Skeleton className="h-28 min-w-[150px] flex-1 rounded-2xl" />
@@ -345,16 +397,30 @@ function greeting(t: (key: MessageKey) => string): string {
   return t("home.greeting.evening");
 }
 
-function today(): string {
-  return new Date().toLocaleDateString("es-CO", {
+/**
+ * Día de negocio (YYYY-MM-DD, zona horaria de la EMPRESA) en palabras. Se construye como fecha
+ * local para que el nombre del día no se corra por el desfase UTC del dispositivo.
+ */
+function businessDate(isoDate: string, locale: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  if (!year || !month || !day) return isoDate;
+  return new Date(year, month - 1, day).toLocaleDateString(locale, {
     weekday: "long",
     day: "numeric",
     month: "long",
-    year: "numeric",
   });
 }
 
-type Interpolate = (key: "home.overdueRate" | "home.fraudRate", vars: { pct: number }) => string;
+type Interpolate = (
+  key: "home.overdueRate" | "home.fraudRate" | "home.today.collectedPct",
+  vars: { pct: number },
+) => string;
+
+/** Porcentaje de lo esperado hoy que ya se cobró; sin leyenda cuando no se esperaba nada. */
+function collectedRate(expectedMinor: number, collectedMinor: number, tf: Interpolate): string | undefined {
+  if (expectedMinor <= 0) return undefined;
+  return tf("home.today.collectedPct", { pct: Math.round((collectedMinor / expectedMinor) * 100) });
+}
 
 /** Porcentaje de cartera vencida sobre la activa (mora), como leyenda de alerta. */
 function overdueRate(activeMinor: number, overdueMinor: number, tf: Interpolate): string | undefined {
