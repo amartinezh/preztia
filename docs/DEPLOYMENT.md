@@ -192,6 +192,34 @@ junto (API + web + migraciones); el orden importa:
 Verificación rápida tras desplegar: `migrate` termina sin error; un cobrador ve "Mi caja"; un cobro
 en efectivo aparece en su caja de ruta; Dinero → Liquidación muestra el período en curso.
 
+## 9. Release "Fase 0 de usabilidad" + puesta a punto para Brasil (2026-11)
+
+La Fase 0 ([INFORME_USABILIDAD.md](INFORME_USABILIDAD.md) §8, ADR #50) es **solo frontend**: no hay
+migraciones ni cambios en la API. Publicar = exportar la web app desde tu máquina:
+
+```bash
+DEPLOY_HOST=deploy@62.84.181.41 ./deploy/scripts/publish-web.sh   # expo export + subida a deploy/app
+```
+
+**Dejar la empresa lista para una sola ruta en Brasil** (una zona, un coordinador, dos cobradores, una
+caja de oficina, una cuenta bancaria, atención al cliente en portugués). El script hace respaldo, usa un
+ADMIN temporal (no toca la contraseña del administrador real), **purga los datos de prueba** y configura
+todo por la API; solo mueve los canales de WhatsApp/Telegram a la zona nueva por SQL (la API no expone
+"cambiar de zona"). Primero muestra el plan; con `CONFIRM=SI` ejecuta:
+
+```bash
+cd ~/preztia
+SUPER_EMAIL='super@…' SUPER_PASSWORD='…' python3 deploy/scripts/setup-brasil.py              # plan
+SUPER_EMAIL='super@…' SUPER_PASSWORD='…' CONFIRM=SI python3 deploy/scripts/setup-brasil.py   # ejecutar
+```
+
+- Lee `PLATFORM_PURGE_PASSWORD` de `.env.prod`; acepta `ZONE_NAME`, `USERS_DOMAIN`, `KEEP_BANK_ACCOUNT`
+  (por defecto la cuenta cuyo nombre contiene "PicPay"), `COORD_PASSWORD`/`COB1_PASSWORD`/`COB2_PASSWORD`.
+- Imprime **una sola vez** las contraseñas generadas para `coordinador1@`, `cobrador1@` y `cobrador2@`.
+- Deja desactivados (no borrados: trazabilidad) a los demás coordinadores y cobradores y al ADMIN temporal.
+- Si una zona vieja no se puede borrar (409), el script la reporta y sigue; se elimina luego desde Ajustes → Zonas.
+- Los otros tenants (`Créditos Antioquia (demo)`, `Financiera Norte (suspendida)`) no se tocan.
+
 ## Notas de seguridad
 - Ningún servicio de datos expone puertos al host: solo Caddy. El aislamiento entre empresas lo
   garantiza además RLS en Postgres.
