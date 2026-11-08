@@ -23,14 +23,22 @@ import {
   PurgeTenantDataHandler,
   UpdateTenantAdminHandler,
 } from "./tenants";
-import { CreateUserHandler } from "./users";
+import {
+  ChangeOwnPasswordHandler,
+  CreateUserHandler,
+  UpdateUserHandler,
+} from "./users";
 import { CreateZoneHandler } from "./zones";
 import {
   AssignCollectorClientsHandler,
   UpdateCollectorClientsHandler,
 } from "./collectors";
 
-const hasher: PasswordHasher = { hash: async (p) => `hash:${p}` };
+// Doble determinista: el hash es reconocible y `verify` invierte la misma regla.
+const hasher: PasswordHasher = {
+  hash: async (p) => `hash:${p}`,
+  verify: async (p, h) => h === `hash:${p}`,
+};
 
 function adminActor(over: Partial<ActorContext> = {}): ActorContext {
   return {
@@ -58,9 +66,13 @@ class FakeUserStore implements UserStore {
     userId: string;
     zonePaths?: readonly string[];
     active?: boolean;
+    displayName?: string | null;
     passwordHash?: string;
   }> = [];
-  constructor(private readonly byId: Record<string, UserRecord> = {}) {}
+  constructor(
+    private readonly byId: Record<string, UserRecord> = {},
+    private readonly hashById: Record<string, string> = {},
+  ) {}
   async create(user: NewUser): Promise<void> {
     if (this.created.some((u) => u.email === user.email)) {
       throw new ConflictError("email duplicado");
@@ -72,15 +84,22 @@ class FakeUserStore implements UserStore {
     userId: string;
     zonePaths?: readonly string[];
     active?: boolean;
+    displayName?: string | null;
     passwordHash?: string;
   }): Promise<UserRecord | null> {
     this.updates.push(input);
     const existing = this.byId[input.userId];
     if (!existing) return null;
+    if (input.passwordHash !== undefined) {
+      this.hashById[input.userId] = input.passwordHash;
+    }
     return {
       ...existing,
       ...(input.active !== undefined ? { active: input.active } : {}),
       ...(input.zonePaths !== undefined ? { zonePaths: input.zonePaths } : {}),
+      ...(input.displayName !== undefined
+        ? { displayName: input.displayName }
+        : {}),
     };
   }
   async findById(input: {
@@ -88,6 +107,12 @@ class FakeUserStore implements UserStore {
     userId: string;
   }): Promise<UserRecord | null> {
     return this.byId[input.userId] ?? null;
+  }
+  async findCredentials(input: { tenantId: string; userId: string }) {
+    const user = this.byId[input.userId];
+    const passwordHash = this.hashById[input.userId];
+    if (!user || passwordHash === undefined) return null;
+    return { passwordHash, active: user.active };
   }
 }
 
@@ -198,6 +223,7 @@ describe("UpdateTenantAdminHandler", () => {
     id: "u1",
     tenantId: "t1",
     email: "admin@acme.test",
+    displayName: null,
     role: "ADMIN",
     zonePaths: [],
     active: true,
@@ -373,6 +399,173 @@ describe("CreateUserHandler", () => {
   });
 });
 
+describe("CreateUserHandler (nombre visible)", () => {
+  it("propaga el nombre visible y lo deja en null cuando no se indica", async () => {
+    const users = new FakeUserStore();
+    const handler = new CreateUserHandler(users, hasher);
+    await handler.execute({
+      actor: adminActor(),
+      email: "ana@acme.test",
+      password: "changeme-123",
+      role: "COLLECTOR",
+      zonePaths: [],
+      displayName: "Ana Souza",
+    });
+    await handler.execute({
+      actor: adminActor(),
+      email: "sin@acme.test",
+      password: "changeme-123",
+      role: "COLLECTOR",
+      zonePaths: [],
+    });
+    expect(users.created[0]?.displayName).toBe("Ana Souza");
+    expect(users.created[1]?.displayName).toBeNull();
+  });
+});
+
+describe("UpdateUserHandler", () => {
+  const collector: UserRecord = {
+    id: "cob-1",
+    tenantId: "t1",
+    email: "cob@acme.test",
+    displayName: null,
+    role: "COLLECTOR",
+    zonePaths: ["co.antioquia.medellin"],
+    active: true,
+  };
+
+  it("ADMIN restablece la contraseña: se persiste HASHEADA, nunca en claro", async () => {
+    const users = new FakeUserStore({ "cob-1": collector });
+    await new UpdateUserHandler(users, hasher).execute({
+      actor: adminActor(),
+      userId: "cob-1",
+      password: "nueva-clave-9",
+    });
+    expect(users.updates[0]?.passwordHash).toBe("hash:nueva-clave-9");
+    // Al almacén solo llega el hash: la clave en claro no viaja bajo ninguna llave.
+    expect(users.updates[0]).not.toHaveProperty("password");
+  });
+
+  it("sin contraseña no toca el hash; actualiza nombre visible (y null lo borra)", async () => {
+    const users = new FakeUserStore({ "cob-1": collector });
+    const handler = new UpdateUserHandler(users, hasher);
+    const renamed = await handler.execute({
+      actor: adminActor(),
+      userId: "cob-1",
+      displayName: "Carlos Cobrador",
+    });
+    expect(renamed.displayName).toBe("Carlos Cobrador");
+    expect(users.updates[0]?.passwordHash).toBeUndefined();
+    await handler.execute({ actor: adminActor(), userId: "cob-1", displayName: null });
+    expect(users.updates[1]?.displayName).toBeNull();
+  });
+
+  it("COORDINATOR restablece la clave de un cobrador DENTRO de su subárbol", async () => {
+    const users = new FakeUserStore({ "cob-1": collector });
+    await new UpdateUserHandler(users, hasher).execute({
+      actor: coordinatorActor(),
+      userId: "cob-1",
+      password: "nueva-clave-9",
+    });
+    expect(users.updates[0]?.passwordHash).toBe("hash:nueva-clave-9");
+  });
+
+  it("COORDINATOR no gobierna a un cobrador de otra zona ni a un ADMIN", async () => {
+    const users = new FakeUserStore({
+      "cob-1": { ...collector, zonePaths: ["co.valle.cali"] },
+      "adm-1": { ...collector, id: "adm-1", role: "ADMIN", zonePaths: [] },
+    });
+    const handler = new UpdateUserHandler(users, hasher);
+    await expect(
+      handler.execute({ actor: coordinatorActor(), userId: "cob-1", password: "nueva-clave-9" }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(
+      handler.execute({ actor: coordinatorActor(), userId: "adm-1", active: false }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(users.updates).toHaveLength(0);
+  });
+
+  it("falla con 404 si el usuario no existe en el tenant", async () => {
+    await expect(
+      new UpdateUserHandler(new FakeUserStore(), hasher).execute({
+        actor: adminActor(),
+        userId: "nadie",
+        active: false,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("ChangeOwnPasswordHandler", () => {
+  const me: UserRecord = {
+    id: "cob-1",
+    tenantId: "t1",
+    email: "cob@acme.test",
+    displayName: "Ana",
+    role: "COLLECTOR",
+    zonePaths: ["co.antioquia"],
+    active: true,
+  };
+  const actor: ActorContext = {
+    userId: "cob-1",
+    role: "COLLECTOR",
+    tenantId: "t1",
+    zonePaths: ["co.antioquia"],
+  };
+
+  it("con la contraseña actual correcta guarda la nueva HASHEADA", async () => {
+    const users = new FakeUserStore({ "cob-1": me }, { "cob-1": "hash:vieja-123" });
+    await new ChangeOwnPasswordHandler(users, hasher).execute({
+      actor,
+      currentPassword: "vieja-123",
+      newPassword: "nueva-clave-9",
+    });
+    expect(users.updates).toHaveLength(1);
+    expect(users.updates[0]).toMatchObject({ userId: "cob-1", passwordHash: "hash:nueva-clave-9" });
+    expect(await users.findCredentials({ tenantId: "t1", userId: "cob-1" })).toEqual({
+      passwordHash: "hash:nueva-clave-9",
+      active: true,
+    });
+  });
+
+  it("rechaza la contraseña actual incorrecta SIN tocar el hash", async () => {
+    const users = new FakeUserStore({ "cob-1": me }, { "cob-1": "hash:vieja-123" });
+    await expect(
+      new ChangeOwnPasswordHandler(users, hasher).execute({
+        actor,
+        currentPassword: "adivinanza",
+        newPassword: "nueva-clave-9",
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(users.updates).toHaveLength(0);
+  });
+
+  it("una cuenta desactivada no cambia su contraseña", async () => {
+    const users = new FakeUserStore(
+      { "cob-1": { ...me, active: false } },
+      { "cob-1": "hash:vieja-123" },
+    );
+    await expect(
+      new ChangeOwnPasswordHandler(users, hasher).execute({
+        actor,
+        currentPassword: "vieja-123",
+        newPassword: "nueva-clave-9",
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(users.updates).toHaveLength(0);
+  });
+
+  it("falla con 404 si el usuario de la sesión ya no existe", async () => {
+    await expect(
+      new ChangeOwnPasswordHandler(new FakeUserStore(), hasher).execute({
+        actor,
+        currentPassword: "vieja-123",
+        newPassword: "nueva-clave-9",
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
 describe("CreateZoneHandler", () => {
   function zoneStore(parent: ZoneRecord | null): ZoneStore {
     return {
@@ -426,6 +619,7 @@ describe("AssignCollectorClientsHandler", () => {
     id: "cob-1",
     tenantId: "t1",
     email: "cob@acme.test",
+    displayName: null,
     role: "COLLECTOR",
     zonePaths: ["co.antioquia"],
     active: true,
@@ -481,6 +675,7 @@ describe("UpdateCollectorClientsHandler", () => {
     id: "cob-1",
     tenantId: "t1",
     email: "cob@acme.test",
+    displayName: null,
     role: "COLLECTOR",
     zonePaths: ["co.antioquia"],
     active: true,

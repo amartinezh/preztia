@@ -6,17 +6,20 @@ import {
   Banner,
   Button,
   Field,
-  Input,
   Modal,
+  MoneyInput,
+  MoneyText,
   Row,
   Stack,
   Text,
-  majorToMinor,
-  minorToMajor,
+  formatDateTime,
   type BadgeTone,
 } from "@preztiaos/ui";
 
+import { moneyInputText } from "@/components/money-input-text";
 import { useT } from "@/core/i18n";
+import { useTenantCurrency } from "@/features/cash/api/boxes-queries";
+import { useOperationalSettings } from "@/features/settings/api/queries";
 import { isOfferAwaitingClient } from "./review-status";
 
 // Presentación del sub-estado de la oferta (espejo del enum del contrato).
@@ -59,19 +62,23 @@ export function PlanOfferPanel({
   requestedAmountMinor,
   onOffer,
 }: Props) {
-  const { t } = useT();
+  const { t, locale } = useT();
+  const currency = useTenantCurrency();
+  const settings = useOperationalSettings();
   // Capital prellenado con el monto que el cliente declaró por WhatsApp (editable por el coordinador).
-  const requestedMajor = requestedAmountMinor != null ? String(minorToMajor(requestedAmountMinor)) : "";
+  // Texto tecleado + lectura en unidades menores (`null` = vacío o ilegible): nunca se convierte en silencio.
+  const requestedText = requestedAmountMinor != null ? moneyInputText(requestedAmountMinor) : "";
   const [modalOpen, setModalOpen] = useState(false);
-  const [principal, setPrincipal] = useState(requestedMajor);
+  const [principal, setPrincipal] = useState(requestedText);
+  const [principalMinor, setPrincipalMinor] = useState<number | null>(requestedAmountMinor);
+  const principalValid = principalMinor !== null && principalMinor > 0;
 
   const offered = planOffer.status !== "NOT_OFFERED";
 
   const submit = async () => {
-    const minor = majorToMinor(Number(principal) || 0);
-    if (minor <= 0) return;
+    if (principalMinor === null || principalMinor <= 0) return;
     try {
-      await onOffer(minor);
+      await onOffer(principalMinor);
       setModalOpen(false);
     } catch {
       // El error se muestra vía `offerError`; el modal permanece abierto para reintentar.
@@ -80,7 +87,8 @@ export function PlanOfferPanel({
 
   // Abre el modal reponiendo el monto solicitado por el cliente (prellenado editable).
   const openModal = () => {
-    setPrincipal(requestedMajor);
+    setPrincipal(requestedText);
+    setPrincipalMinor(requestedAmountMinor);
     setModalOpen(true);
   };
 
@@ -113,13 +121,13 @@ export function PlanOfferPanel({
           {planOffer.offeredPrincipalMinor != null ? (
             <Row className="justify-between">
               <Text tone="muted">{t("offer.principal")}</Text>
-              <Text variant="label">{minorToMajor(planOffer.offeredPrincipalMinor)}</Text>
+              <MoneyText variant="label" amountMinor={planOffer.offeredPrincipalMinor} currency={currency} />
             </Row>
           ) : null}
           {planOffer.offerExpiresAt ? (
             <Row className="justify-between">
               <Text tone="muted">{t("offer.expires")}</Text>
-              <Text variant="label">{new Date(planOffer.offerExpiresAt).toLocaleString()}</Text>
+              <Text variant="label">{formatDateTime(planOffer.offerExpiresAt, locale, settings.data?.timeZone)}</Text>
             </Row>
           ) : null}
         </Stack>
@@ -142,13 +150,19 @@ export function PlanOfferPanel({
             <Text variant="caption" tone="muted">
               {t("offer.modalHint")}
             </Text>
-            <Field label={t("credit.new.principal")} hint="Monto en unidades mayores" required>
-              <Input keyboardType="numeric" value={principal} onChangeText={setPrincipal} />
+            <Field label={t("credit.new.principal")} hint={t("money.hint")} required>
+              <MoneyInput
+                value={principal}
+                onChangeText={setPrincipal}
+                onChangeAmount={setPrincipalMinor}
+                currency={currency}
+                invalidLabel={t("money.invalid")}
+              />
             </Field>
             <Button
               label={t("offer.send")}
               loading={offering}
-              disabled={!principal.trim()}
+              disabled={!principalValid}
               block
               onPress={submit}
             />

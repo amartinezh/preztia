@@ -91,6 +91,8 @@ export interface SettlementZoneRef {
 export interface SettlementCollectorRef {
   readonly collectorId: string;
   readonly email: string | null;
+  /** Nombre visible del cobrador (null si no lo tiene configurado): la UI prefiere nombre y cae al correo. */
+  readonly name: string | null;
   /** Zona de su caja de ruta: define su comisión y a qué zona se le causa. */
   readonly zoneId: string | null;
   readonly zonePath: string | null;
@@ -202,6 +204,7 @@ export interface SettlementZoneLine {
 export interface SettlementCollectorLine {
   readonly collectorId: string;
   readonly email: string | null;
+  readonly name: string | null;
   /** Zona de su caja de ruta (a la que se le causa y atribuye su comisión). */
   readonly zoneId: string | null;
   readonly zonePath: string | null;
@@ -491,6 +494,7 @@ function collectorLine(
   return {
     collectorId: ref.collectorId,
     email: ref.email,
+    name: ref.name,
     zoneId: ref.zoneId,
     zonePath: ref.zonePath,
     collectedMinor: concepts.COLLECTED,

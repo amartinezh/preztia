@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PaymentPlanView, PlanFrequency } from "@preztiaos/contracts";
+import { updatePaymentPlanInput, type PaymentPlanView, type PlanFrequency } from "@preztiaos/contracts";
 import {
   Badge,
   Banner,
@@ -8,6 +8,7 @@ import {
   ConfirmModal,
   Field,
   Input,
+  Modal,
   Row,
   Select,
   Spinner,
@@ -62,6 +63,7 @@ export function PaymentPlansScreen() {
   const remove = useDeletePaymentPlan();
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PaymentPlanView | null>(null);
+  const [editing, setEditing] = useState<PaymentPlanView | null>(null);
 
   const onError = (err: unknown) =>
     setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown"));
@@ -114,12 +116,17 @@ export function PaymentPlansScreen() {
                 setError(null);
                 setPendingDelete(plan);
               }}
+              onEdit={() => {
+                setError(null);
+                setEditing(plan);
+              }}
             />
           ))}
         </Stack>
 
         <NewPlanForm onError={onError} clearError={() => setError(null)} />
       </Stack>
+      {editing ? <EditPlanModal plan={editing} onClose={() => setEditing(null)} /> : null}
       <ConfirmModal
         visible={pendingDelete !== null}
         title={t("plans.delete.confirmTitle")}
@@ -136,13 +143,14 @@ export function PaymentPlansScreen() {
   );
 }
 
-/** Una fila/tarjeta de plan: interruptor activo, marca por defecto y eliminar. */
+/** Una fila/tarjeta de plan: interruptor activo, editar, marca por defecto y eliminar. */
 function PlanCard(props: {
   plan: PaymentPlanView;
   busy: boolean;
   onToggleActive: (active: boolean) => void;
   onSetDefault: () => void;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const { t } = useT();
   const { plan } = props;
@@ -165,6 +173,7 @@ function PlanCard(props: {
         />
 
         <Row className="justify-end gap-2">
+          <Button label={t("common.edit")} variant="ghost" size="sm" disabled={props.busy} onPress={props.onEdit} />
           {!plan.isDefault ? (
             <Button
               label={t("plans.setDefault")}
@@ -186,6 +195,107 @@ function PlanCard(props: {
         </Row>
       </Stack>
     </Card>
+  );
+}
+
+/** Entero tecleado por la persona; NaN (y no 0) si no es un número, para que zod lo rechace. */
+function parseInteger(text: string): number {
+  return Number.parseInt(text.trim(), 10);
+}
+
+/** Interés tecleado en % (acepta coma) → base-mil del contrato; NaN si no es un número. */
+function parseInterestPercent(text: string): number {
+  const percent = Number(text.trim().replace(",", "."));
+  return Number.isFinite(percent) && text.trim() !== "" ? toBaseThousand(percent) : Number.NaN;
+}
+
+/**
+ * Edición de un plan existente: nombre, cuotas, periodicidad e interés. Valida con el contrato
+ * (`updatePaymentPlanInput`) y muestra cada error junto a su campo; nunca convierte un texto
+ * inválido en 0 en silencio. Los créditos ya otorgados conservan sus condiciones (el plan es una
+ * plantilla), por eso editarlo no necesita confirmación.
+ */
+function EditPlanModal({ plan, onClose }: { plan: PaymentPlanView; onClose: () => void }) {
+  const { t } = useT();
+  const toast = useToast();
+  const update = useUpdatePaymentPlan();
+  const [name, setName] = useState(plan.name);
+  const [installments, setInstallments] = useState(String(plan.installmentsCount));
+  const [frequency, setFrequency] = useState<PlanFrequency>(plan.frequency);
+  const [interestPercent, setInterestPercent] = useState(String(toPercent(plan.interestPct)));
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    setError(null);
+    const parsed = updatePaymentPlanInput.safeParse({
+      name: name.trim(),
+      installmentsCount: parseInteger(installments),
+      frequency,
+      interestPct: parseInterestPercent(interestPercent),
+    });
+    if (!parsed.success) {
+      const next: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const key = String(issue.path[0] ?? "");
+        if (key && !next[key]) next[key] = issue.message;
+      }
+      setErrors(next);
+      return;
+    }
+    setErrors({});
+    update.mutate(
+      { id: plan.id, patch: parsed.data },
+      {
+        onSuccess: () => {
+          toast.show({ tone: "success", title: t("plans.updated") });
+          onClose();
+        },
+        onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+      },
+    );
+  };
+
+  return (
+    <Modal visible onClose={onClose} title={t("plans.edit.title")} closeLabel={t("common.close")}>
+      <Stack gap="sm" className="p-4">
+        {error ? <Banner tone="danger" title={error} /> : null}
+        <Field label={t("plans.field.name")} error={errors.name} required>
+          <Input value={name} onChangeText={setName} invalid={!!errors.name} />
+        </Field>
+        <Field label={t("plans.field.installments")} error={errors.installmentsCount} required>
+          <Input
+            keyboardType="numeric"
+            value={installments}
+            onChangeText={setInstallments}
+            invalid={!!errors.installmentsCount}
+          />
+        </Field>
+        <Field label={t("plans.field.frequency")} required>
+          <Select
+            value={frequency}
+            options={FREQUENCY_OPTIONS}
+            onChange={setFrequency}
+            title={t("plans.field.frequency")}
+          />
+        </Field>
+        <Field label={t("plans.field.interest")} error={errors.interestPct} required>
+          <Input
+            keyboardType="numeric"
+            value={interestPercent}
+            onChangeText={setInterestPercent}
+            invalid={!!errors.interestPct}
+          />
+        </Field>
+        <Button
+          label={t("plans.saveChanges")}
+          loading={update.isPending}
+          disabled={!name.trim()}
+          block
+          onPress={submit}
+        />
+      </Stack>
+    </Modal>
   );
 }
 

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  DEFAULT_SCHEDULE_FREQUENCY,
   Money,
   NotFoundError,
   assertCanReceiveCredit,
@@ -78,6 +79,11 @@ export interface GrantCreditCommand {
   grantedBy: string;
   /** Rol de quien otorga (del JWT): decide si puede usar un interés personalizado. */
   grantedByRole: Role;
+  /**
+   * Día de negocio de hoy (YYYY-MM-DD) en la zona horaria de la EMPRESA (ADR #46): fecha de inicio
+   * del crédito y base del cronograma. Lo resuelve la frontera; sin él se cae al día UTC.
+   */
+  startDate?: string;
 }
 
 export class GrantCreditHandler {
@@ -99,8 +105,8 @@ export class GrantCreditHandler {
     await this.assertWithinCreditPolicy(cmd);
     const principal = Money.of(cmd.principalMinor, cmd.currency);
     const schedule = buildSchedule(principal, cmd.interestPct, cmd.installmentsCount);
-    const frequency = cmd.frequency ?? "DAILY";
-    const startDate = new Date().toISOString().slice(0, 10);
+    const frequency = cmd.frequency ?? DEFAULT_SCHEDULE_FREQUENCY;
+    const startDate = cmd.startDate ?? new Date().toISOString().slice(0, 10);
     const dueDates = scheduleDueDates(startDate, frequency, cmd.installmentsCount);
     const scheduled: ScheduledInstallment[] = schedule.map((installment, idx) => ({
       ...installment,

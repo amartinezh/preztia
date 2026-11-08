@@ -1,8 +1,9 @@
+import { useState } from "react";
 import type {
   ConversationOrder,
   ConversationSort,
 } from "@preztiaos/contracts";
-import { Button, Field, Input, Row, Select, Stack, Switch, type SelectOption } from "@preztiaos/ui";
+import { Button, DateField, Field, Input, Row, Select, Stack, Switch, type SelectOption } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
 import { useZonesList } from "@/features/zones/api/queries";
@@ -57,6 +58,8 @@ export function ConversationFiltersPanel({
 }: Props) {
   const { t } = useT();
   const zones = useZonesList();
+  // "Limpiar" remonta los campos de fecha: así también se descarta un texto a medio teclear.
+  const [resetKey, setResetKey] = useState(0);
 
   const patch = (partial: Partial<FiltersDraft>) => onChange({ ...draft, ...partial });
 
@@ -89,21 +92,25 @@ export function ConversationFiltersPanel({
       <Row gap="sm">
         <Stack className="flex-1">
           <Field label={t("inbox.filters.from")}>
-            <Input
-              value={draft.from}
-              onChangeText={(from) => patch({ from })}
-              placeholder={t("inbox.filters.datePlaceholder")}
-              autoCapitalize="none"
+            <DateField
+              key={`from-${resetKey}`}
+              value={draft.from || null}
+              onChange={(from) => patch({ from: from ?? "" })}
+              quickOptions={[]}
+              invalidLabel={t("date.invalid")}
+              accessibilityLabel={t("inbox.filters.from")}
             />
           </Field>
         </Stack>
         <Stack className="flex-1">
           <Field label={t("inbox.filters.to")}>
-            <Input
-              value={draft.to}
-              onChangeText={(to) => patch({ to })}
-              placeholder={t("inbox.filters.datePlaceholder")}
-              autoCapitalize="none"
+            <DateField
+              key={`to-${resetKey}`}
+              value={draft.to || null}
+              onChange={(to) => patch({ to: to ?? "" })}
+              quickOptions={[]}
+              invalidLabel={t("date.invalid")}
+              accessibilityLabel={t("inbox.filters.to")}
             />
           </Field>
         </Stack>
@@ -149,7 +156,10 @@ export function ConversationFiltersPanel({
         label={t("inbox.filters.clear")}
         variant="ghost"
         size="sm"
-        onPress={() => onChange(EMPTY_DRAFT)}
+        onPress={() => {
+          setResetKey((k) => k + 1);
+          onChange(EMPTY_DRAFT);
+        }}
       />
     </Stack>
   );

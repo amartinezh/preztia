@@ -1,8 +1,12 @@
 import { useLocalSearchParams } from "expo-router";
 
-import { CreditPortfolioScreen } from "@/features/credit/screens/credit-portfolio-screen";
+import { AccountDetailScreen } from "@/features/accounts/screens/account-detail-screen";
 
+/**
+ * Un solo detalle de crédito: la misma pantalla que `/account/[creditId]`. `granted=1` llega al
+ * venir de otorgar/aprobar y dispara el aviso "Crédito otorgado · cuota $X".
+ */
 export default function CreditDetailRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  return <CreditPortfolioScreen creditId={id} />;
+  const { id, granted } = useLocalSearchParams<{ id: string; granted?: string }>();
+  return <AccountDetailScreen creditId={id} justGranted={granted === "1"} />;
 }

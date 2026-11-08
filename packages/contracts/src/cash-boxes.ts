@@ -283,6 +283,7 @@ export const dashboardBox = z.object({
   assignedTo: z.string().uuid().nullable(),
   /** Email del cobrador asignado, para mostrarlo en la grilla; null si no aplica (Nivel 2). */
   assignedToEmail: z.string().nullable(),
+  assignedToName: z.string().nullable(),
   /** Caja de ruta que carga efectivo y no se ha arqueado hoy: requiere cierre urgente (Nivel 2). */
   needsClose: z.boolean(),
   /** Resultado de la última sincronización bancaria; null si nunca se sincronizó (Req 7). */

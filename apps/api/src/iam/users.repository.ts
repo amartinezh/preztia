@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
-import type { NewUser, UserRecord, UserStore } from '@preztiaos/application';
+import type {
+  NewUser,
+  UserCredentials,
+  UserRecord,
+  UserStore,
+} from '@preztiaos/application';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { mapUniqueViolation } from '../shared/persistence-errors';
 
@@ -17,6 +22,7 @@ export class UserDrizzleRepository implements UserStore {
             id: user.id,
             tenantId: user.tenantId,
             email: user.email,
+            displayName: user.displayName ?? null,
             passwordHash: user.passwordHash,
             role: user.role,
             zonePaths: [...user.zonePaths],
@@ -31,6 +37,8 @@ export class UserDrizzleRepository implements UserStore {
     userId: string;
     zonePaths?: readonly string[];
     active?: boolean;
+    displayName?: string | null;
+    passwordHash?: string;
   }): Promise<UserRecord | null> {
     return withTenantTxFor(input.tenantId, async (tx) => {
       const [row] = await tx
@@ -40,6 +48,12 @@ export class UserDrizzleRepository implements UserStore {
             ? { zonePaths: [...input.zonePaths] }
             : {}),
           ...(input.active !== undefined ? { active: input.active } : {}),
+          ...(input.displayName !== undefined
+            ? { displayName: input.displayName }
+            : {}),
+          ...(input.passwordHash !== undefined
+            ? { passwordHash: input.passwordHash }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(schema.appUser.id, input.userId))
@@ -61,6 +75,24 @@ export class UserDrizzleRepository implements UserStore {
       return row ? toRecord(row) : null;
     });
   }
+
+  /** Solo el hash y el estado: el registro completo (`UserRecord`) nunca expone la contraseña. */
+  async findCredentials(input: {
+    tenantId: string;
+    userId: string;
+  }): Promise<UserCredentials | null> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const [row] = await tx
+        .select({
+          passwordHash: schema.appUser.passwordHash,
+          active: schema.appUser.active,
+        })
+        .from(schema.appUser)
+        .where(eq(schema.appUser.id, input.userId))
+        .limit(1);
+      return row ?? null;
+    });
+  }
 }
 
 function toRecord(row: typeof schema.appUser.$inferSelect): UserRecord {
@@ -68,6 +100,7 @@ function toRecord(row: typeof schema.appUser.$inferSelect): UserRecord {
     id: row.id,
     tenantId: row.tenantId,
     email: row.email,
+    displayName: row.displayName,
     role: row.role,
     zonePaths: row.zonePaths,
     active: row.active,

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatMoney, majorToMinor, minorToMajor, parseMoneyInput } from "./money";
+import {
+  formatMoney,
+  getDefaultMoneyLocale,
+  majorToMinor,
+  minorToMajor,
+  parseMoneyInput,
+  setDefaultMoneyLocale,
+} from "./money";
 
 // Invariante de presentación: el dinero entra y sale en unidades menores enteras;
 // el formateo nunca debe reintroducir errores de coma flotante en la conversión.
@@ -25,6 +32,23 @@ describe("money formatting", () => {
   it("formatea con símbolo de moneda y degrada elegantemente con moneda inválida", () => {
     expect(formatMoney(500_000, "COP", "es-CO")).toContain("5.000");
     expect(formatMoney(100, "XXX", "es-CO")).toContain("1");
+  });
+
+  it("usa el locale por defecto fijado por la app cuando la pantalla no pasa uno", () => {
+    const initial = getDefaultMoneyLocale();
+    try {
+      setDefaultMoneyLocale("pt-BR");
+      expect(getDefaultMoneyLocale()).toBe("pt-BR");
+      // pt-BR: "R$ 1.234,56"; en es-CO el símbolo de BRL sería "R$" pero el espacio y el orden cambian
+      // según el locale, así que se verifica la convención de separadores (punto de miles, coma decimal).
+      expect(formatMoney(123_456, "BRL")).toMatch(/1\.234,56/);
+      expect(formatMoney(123_456, "BRL")).toBe(formatMoney(123_456, "BRL", "pt-BR"));
+      // Un locale explícito siempre gana sobre el por defecto.
+      expect(formatMoney(500_000, "COP", "es-CO")).toContain("5.000");
+    } finally {
+      setDefaultMoneyLocale(initial);
+    }
+    expect(formatMoney(123_456, "BRL")).toBe(formatMoney(123_456, "BRL", "es-CO"));
   });
 });
 

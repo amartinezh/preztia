@@ -5,9 +5,11 @@ import type { Role, TenantStatus } from "@preztiaos/domain";
 // de admins) bajo la conexión BYPASSRLS; el plano de datos (usuarios, zonas, cobradores)
 // bajo el rol `app` + RLS. Aquí solo se DECLARAN; el dominio no conoce I/O.
 
-/** Hashing de contraseñas (impl en infraestructura con node:crypto scrypt). */
+/** Hashing y verificación de contraseñas (impl en infraestructura con node:crypto scrypt). */
 export interface PasswordHasher {
   hash(plain: string): Promise<string>;
+  /** ¿`plain` corresponde al `hash` almacenado? Comparación en tiempo constante en la infraestructura. */
+  verify(plain: string, hash: string): Promise<boolean>;
 }
 
 /** Identidad del actor que ejecuta la operación, derivada del JWT verificado. */
@@ -77,6 +79,8 @@ export interface NewUser {
   /** SIEMPRE presente para roles de tenant; el control-plane lo fija al tenant destino. */
   readonly tenantId: string;
   readonly email: string;
+  /** Nombre visible de la persona ("Ana Souza"); ausente/null en cuentas sin nombre. */
+  readonly displayName?: string | null;
   readonly passwordHash: string;
   readonly role: Role;
   readonly zonePaths: readonly string[];
@@ -86,26 +90,42 @@ export interface UserRecord {
   readonly id: string;
   readonly tenantId: string | null;
   readonly email: string;
+  readonly displayName: string | null;
   readonly role: Role;
   readonly zonePaths: readonly string[];
+  readonly active: boolean;
+}
+
+/** Credenciales vigentes de un usuario: lo mínimo para verificar su contraseña actual. */
+export interface UserCredentials {
+  readonly passwordHash: string;
   readonly active: boolean;
 }
 
 export interface UserStore {
   /** Inserta el usuario; lanza `ConflictError` si el email (único GLOBAL) ya existe. */
   create(user: NewUser): Promise<void>;
-  /** Actualiza zonas/estado/contraseña; `null` si el usuario no existe en el tenant. */
+  /**
+   * Actualiza zonas/estado/nombre/contraseña; `null` si el usuario no existe en el tenant.
+   * `displayName`: `undefined` conserva el actual; `null` lo borra.
+   */
   update(input: {
     tenantId: string;
     userId: string;
     zonePaths?: readonly string[];
     active?: boolean;
+    displayName?: string | null;
     passwordHash?: string;
   }): Promise<UserRecord | null>;
   findById(input: {
     tenantId: string;
     userId: string;
   }): Promise<UserRecord | null>;
+  /** Hash de contraseña y estado del usuario del tenant; `null` si no existe. NUNCA sale de la aplicación. */
+  findCredentials(input: {
+    tenantId: string;
+    userId: string;
+  }): Promise<UserCredentials | null>;
 }
 
 // ---------------------------------------------------------------------------

@@ -60,6 +60,8 @@ export class ApplicationReviewQueryRepository {
           applicantPhone: schema.creditApplication.applicantPhone,
           status: schema.creditApplication.status,
           createdAt: schema.creditApplication.createdAt,
+          requestedAmountMinor: schema.creditApplication.requestedAmountMinor,
+          zonePath: schema.creditApplication.zonePath,
         })
         .from(schema.creditApplication)
         .where(where)
@@ -70,6 +72,7 @@ export class ApplicationReviewQueryRepository {
       const appIds = apps.map((a) => a.id);
       const latestVerdict = await this.latestVerdictByApplication(tx, appIds);
       const docStats = await this.documentStatsByApplication(tx, appIds);
+      const applicantNames = await this.applicantNameByApplication(tx, appIds);
 
       const items: ApplicationReviewSummary[] = apps.map((a) => {
         const verdict = latestVerdict.get(a.id) ?? null;
@@ -83,6 +86,9 @@ export class ApplicationReviewQueryRepository {
           documentsTotal: stats.total,
           documentsFlagged: stats.flagged,
           createdAt: a.createdAt.toISOString(),
+          applicantName: applicantNames.get(a.id) ?? null,
+          requestedAmountMinor: a.requestedAmountMinor ?? null,
+          zonePath: a.zonePath ?? null,
         };
       });
       return { items, total: Number(totalRow?.value ?? 0) };
@@ -444,6 +450,40 @@ export class ApplicationReviewQueryRepository {
       });
     }
     return map;
+  }
+
+  /**
+   * Nombre del solicitante según la extracción MÁS RECIENTE de su documento de identidad (OCR),
+   * normalizado con `mapIdentityFields` como en el detalle. Una consulta para toda la página
+   * (`DISTINCT ON` por solicitud); la solicitud no enlaza al cliente, así que no hay otra fuente.
+   */
+  private async applicantNameByApplication(
+    tx: Parameters<Parameters<typeof withTenantTxFor>[1]>[0],
+    appIds: string[],
+  ): Promise<Map<string, string | null>> {
+    if (appIds.length === 0) return new Map();
+    const rows = await tx
+      .selectDistinctOn([schema.documentExtraction.applicationId], {
+        applicationId: schema.documentExtraction.applicationId,
+        fields: schema.documentExtraction.fields,
+      })
+      .from(schema.documentExtraction)
+      .where(
+        and(
+          inArray(schema.documentExtraction.applicationId, appIds),
+          eq(schema.documentExtraction.documentType, 'IDENTITY_DOCUMENT'),
+        ),
+      )
+      .orderBy(
+        schema.documentExtraction.applicationId,
+        desc(schema.documentExtraction.createdAt),
+      );
+    return new Map(
+      rows.map((row) => [
+        row.applicationId,
+        row.fields ? mapIdentityFields(row.fields).nombre : null,
+      ]),
+    );
   }
 
   private async latestExtractionByType(

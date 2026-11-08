@@ -11,12 +11,14 @@ import {
   Modal,
   MoneyInput,
   MoneyText,
+  Row,
   Spinner,
   Stack,
   Text,
 } from "@preztiaos/ui";
 
 import { moneyInputText } from "@/components/money-input-text";
+import { ReceiptThumbnail } from "@/features/cash/components/receipt-thumbnail";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { useDepositBankMatches, useVerifyDeposit } from "../api/queries";
@@ -64,6 +66,55 @@ export function VerifyDepositModal({ order, onClose }: { order: DepositOrder; on
     <Modal visible onClose={onClose} title={t("deposit.verify.title")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
+        {/* Comparativa a la vista: lo ordenado, lo reportado y lo que se va a verificar. */}
+        <Stack gap="xs" className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+          <Row className="items-center justify-between">
+            <Text tone="muted">{t("deposit.verify.ordered")}</Text>
+            <MoneyText variant="label" amountMinor={order.amountMinor} currency={order.currency} />
+          </Row>
+          <Row className="items-center justify-between">
+            <Text tone="muted">{t("deposit.verify.reportedAmount")}</Text>
+            {order.reportedAmountMinor !== null ? (
+              <MoneyText variant="label" amountMinor={order.reportedAmountMinor} currency={order.currency} />
+            ) : (
+              <Text variant="label" tone="muted">
+                —
+              </Text>
+            )}
+          </Row>
+          <Row className="items-center justify-between">
+            <Text tone="muted">{t("deposit.verify.toVerify")}</Text>
+            {amountMinor !== null ? (
+              <MoneyText variant="label" amountMinor={amountMinor} currency={order.currency} />
+            ) : (
+              <Text variant="label" tone="danger">
+                {t("money.invalid")}
+              </Text>
+            )}
+          </Row>
+          {amountMinor !== null && amountMinor !== order.amountMinor ? (
+            <Row className="items-center justify-between">
+              <Text tone="danger">{t("deposit.verify.difference")}</Text>
+              <MoneyText
+                variant="label"
+                tone="danger"
+                amountMinor={amountMinor - order.amountMinor}
+                currency={order.currency}
+              />
+            </Row>
+          ) : amountMinor !== null ? (
+            <Text variant="caption" tone="success">
+              {t("deposit.verify.noDifference")}
+            </Text>
+          ) : null}
+        </Stack>
+        {order.hasReceipt ? (
+          <ReceiptThumbnail path={`/deposit-orders/${order.id}/receipt`} title={t("cash.expenses.receipt")} />
+        ) : (
+          <Text variant="caption" tone="muted">
+            {t("receipt.none")}
+          </Text>
+        )}
         <Field label={t("deposit.verify.amount")} hint={t("money.hint")} required>
           <MoneyInput
             value={amountText}

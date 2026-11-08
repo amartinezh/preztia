@@ -61,6 +61,8 @@ export const reviewerStop = z.object({
   status: stopStatus,
   collectorId: z.string().uuid(),
   collectorEmail: z.string().nullable(),
+  /** Nombre visible del cobrador (null si no lo tiene configurado): la UI prefiere nombre y cae al correo. */
+  collectorName: z.string().nullable(),
   clientName: z.string(),
   address: z.string().nullable(),
   amountToCollectMinor: z.number().int(),

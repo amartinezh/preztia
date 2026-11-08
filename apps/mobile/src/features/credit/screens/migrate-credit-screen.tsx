@@ -5,6 +5,7 @@ import {
   Banner,
   Button,
   Card,
+  DateField,
   Field,
   Input,
   MoneyInput,
@@ -13,6 +14,7 @@ import {
   Stack,
   Text,
   formatMoney,
+  todayIso,
   type SelectOption,
 } from "@preztiaos/ui";
 
@@ -32,7 +34,8 @@ const FREQUENCIES: PlanFrequency[] = ["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY"];
 
 interface PaymentRow {
   key: number;
-  paidOn: string;
+  /** Fecha `YYYY-MM-DD`, o `null` si está vacía o no es una fecha válida. */
+  paidOn: string | null;
   /** Texto tecleado y su lectura en unidades menores (`null` = vacío o no es un monto). */
   amount: string;
   amountMinor: number | null;
@@ -58,7 +61,9 @@ export function MigrateCreditScreen() {
   const [interest, setInterest] = useState("");
   const [installments, setInstallments] = useState("");
   const [frequency, setFrequency] = useState<PlanFrequency>("DAILY");
-  const [startDate, setStartDate] = useState("");
+  const [startDate, setStartDate] = useState<string | null>(null);
+  // Un crédito migrado ya existe: ni su inicio ni sus abonos pueden ser futuros.
+  const today = todayIso();
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [nextKey, setNextKey] = useState(1);
   const [error, setError] = useState<string | null>(null);
@@ -70,9 +75,10 @@ export function MigrateCreditScreen() {
   const paidTotalMinor = payments.reduce((acc, p) => acc + (p.amountMinor ?? 0), 0);
   // Mientras algún monto no sea legible no se envía: nunca se convierte en silencio a 0.
   const amountsReadable = principalMinor !== null && payments.every((p) => p.amountMinor !== null);
+  const datesReadable = startDate !== null && payments.every((p) => p.paidOn !== null);
 
   const addPayment = () => {
-    setPayments((rows) => [...rows, { key: nextKey, paidOn: "", amount: "", amountMinor: null }]);
+    setPayments((rows) => [...rows, { key: nextKey, paidOn: null, amount: "", amountMinor: null }]);
     setNextKey((k) => k + 1);
   };
   const updatePayment = (key: number, patch: Partial<PaymentRow>) =>
@@ -92,9 +98,9 @@ export function MigrateCreditScreen() {
       interestPct: Math.round((Number(interest.replace(",", ".")) || 0) * PERCENT_TO_BASE_THOUSAND),
       installmentsCount: Math.trunc(Number(installments)),
       frequency,
-      startDate: startDate.trim(),
+      startDate: startDate ?? "",
       ...(legacyReference.trim() ? { legacyReference: legacyReference.trim() } : {}),
-      payments: payments.map((p) => ({ paidOn: p.paidOn.trim(), amountMinor: p.amountMinor ?? 0 })),
+      payments: payments.map((p) => ({ paidOn: p.paidOn ?? "", amountMinor: p.amountMinor ?? 0 })),
     });
     if (!parsed.success) {
       setError(t("migrate.invalid"));
@@ -153,7 +159,14 @@ export function MigrateCreditScreen() {
           </Stack>
         </Row>
         <Field label={t("migrate.startDate")} hint={t("migrate.startDateHint")} required>
-          <Input value={startDate} placeholder={t("common.dateFormatHint")} onChangeText={setStartDate} />
+          <DateField
+            value={startDate}
+            onChange={setStartDate}
+            max={today}
+            quickOptions={[]}
+            invalidLabel={t("date.invalid")}
+            accessibilityLabel={t("migrate.startDate")}
+          />
         </Field>
 
         <Card>
@@ -161,12 +174,14 @@ export function MigrateCreditScreen() {
             <Text variant="heading">{t("migrate.payments")}</Text>
             <Text variant="caption" tone="muted">{t("migrate.paymentsHint")}</Text>
             {payments.map((p) => (
-              <Row key={p.key} gap="sm" className="items-center">
+              <Row key={p.key} gap="sm" className="items-start">
                 <Stack className="flex-1">
-                  <Input
+                  <DateField
                     value={p.paidOn}
-                    placeholder={t("common.dateFormatHint")}
-                    onChangeText={(v) => updatePayment(p.key, { paidOn: v })}
+                    onChange={(paidOn) => updatePayment(p.key, { paidOn })}
+                    max={today}
+                    quickOptions={[]}
+                    invalidLabel={t("date.invalid")}
                   />
                 </Stack>
                 <Stack className="flex-1">
@@ -193,7 +208,7 @@ export function MigrateCreditScreen() {
         <Button
           label={t("migrate.submit")}
           loading={migrate.isPending}
-          disabled={!borrower || !zoneId || !amountsReadable}
+          disabled={!borrower || !zoneId || !amountsReadable || !datesReadable}
           block
           onPress={submit}
         />

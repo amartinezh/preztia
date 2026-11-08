@@ -29,6 +29,7 @@ interface BoardSqlRow {
   cash_box_name: string;
   collector_id: string;
   collector_email: string | null;
+  collector_name: string | null;
   zone_id: string | null;
   zone_name: string | null;
   opening: string | number;
@@ -108,7 +109,8 @@ export class RemittanceQueryRepository {
       const rows = (await tx.execute(sql`
         WITH boxes AS (
           SELECT b.id AS cash_box_id, b.name AS cash_box_name, b.assigned_to AS collector_id,
-                 u.email AS collector_email, b.zone_id, zone.name AS zone_name,
+                 u.email AS collector_email, u.display_name AS collector_name,
+                 b.zone_id, zone.name AS zone_name,
                  COALESCE(lc.closing_balance_minor, 0) AS opening,
                  COALESCE(bal.balance, 0) AS balance,
                  COALESCE(aft.debt_closed, 0) AS debt_closed,
@@ -164,6 +166,7 @@ export class RemittanceQueryRepository {
         return {
           collectorId: r.collector_id,
           collectorEmail: r.collector_email,
+          collectorName: r.collector_name,
           cashBoxId: r.cash_box_id,
           cashBoxName: r.cash_box_name,
           zoneId: r.zone_id,

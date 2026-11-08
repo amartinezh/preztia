@@ -72,7 +72,7 @@ function ProposalBuilder({ zoneId }: { zoneId: string }) {
     { value: SKIP, label: t("route.skip") },
     ...(collectors.data?.pages.flatMap((p) => p.items) ?? [])
       .filter((u) => u.active)
-      .map((u) => ({ value: u.id, label: u.email })),
+      .map((u) => ({ value: u.id, label: u.displayName ?? u.email })),
   ];
   const stops = (proposal.data?.items ?? []).filter((s) => !s.alreadyDispatched);
   const chosen = stops.filter((s) => assigned[s.creditId]);

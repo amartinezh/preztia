@@ -64,7 +64,7 @@ export function IssueDepositModal({ row, onClose }: { row: RemittanceBoardRow; o
     <Modal visible onClose={onClose} title={t("deposit.issue.title")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
-        <Text variant="label">{row.collectorEmail ?? row.cashBoxName}</Text>
+        <Text variant="label">{row.collectorName ?? row.collectorEmail ?? row.cashBoxName}</Text>
         <Row className="items-center justify-between">
           <Text tone="muted">{t("remittance.cashInHand")}</Text>
           <MoneyText variant="label" amountMinor={row.cashInHandMinor} currency={row.currency} />

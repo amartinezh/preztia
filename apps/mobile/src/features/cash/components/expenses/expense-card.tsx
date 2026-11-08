@@ -44,7 +44,7 @@ export function ExpenseCard({
         </Row>
         {showRequester ? (
           <Text variant="caption" tone="muted">
-            {expense.requesterEmail ?? expense.requestedBy}
+            {expense.requesterName ?? expense.requesterEmail ?? expense.requestedBy}
             {expense.zoneName ? ` · ${expense.zoneName}` : ` · ${t("cash.boxes.zone.tenant")}`}
           </Text>
         ) : null}

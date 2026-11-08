@@ -179,9 +179,9 @@ function BoxCard({
                 {box.accountNumberMasked ? `${box.bankName} · ${box.accountNumberMasked}` : box.bankName}
               </Text>
             ) : null}
-            {box.assignedToEmail ? (
+            {box.assignedToName ?? box.assignedToEmail ? (
               <Text variant="caption" tone="muted">
-                {t("cash.boxes.collector")}: {box.assignedToEmail}
+                {t("cash.boxes.collector")}: {box.assignedToName ?? box.assignedToEmail}
               </Text>
             ) : null}
           </Stack>

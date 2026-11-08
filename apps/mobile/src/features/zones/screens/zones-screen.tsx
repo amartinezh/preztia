@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FlatList, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { ZoneNode } from "@preztiaos/contracts";
-import { createZoneInput } from "@preztiaos/contracts";
+import { createZoneInput, updateZoneInput } from "@preztiaos/contracts";
 import {
   Banner,
   Button,
@@ -22,7 +22,7 @@ import {
 
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
-import { useCreateZone, useDeleteZone, useZonesList } from "../api/queries";
+import { useCreateZone, useDeleteZone, useUpdateZone, useZonesList } from "../api/queries";
 import { ZoneWhatsappEditor } from "./zone-whatsapp-editor";
 
 /** CRUD del árbol de zonas (ADMIN). La indentación refleja la profundidad del path ltree. */
@@ -34,6 +34,7 @@ export function ZonesScreen() {
   const [creating, setCreating] = useState(false);
   const [whatsappZone, setWhatsappZone] = useState<ZoneNode | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ZoneNode | null>(null);
+  const [renaming, setRenaming] = useState<ZoneNode | null>(null);
 
   // Eliminar solo tras confirmar; el error se avisa fuera del modal para que quede visible.
   const confirmDelete = () => {
@@ -75,6 +76,12 @@ export function ZonesScreen() {
                 trailing={
                   <Row className="items-center gap-1">
                     <Button
+                      label={t("zones.action.rename")}
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => setRenaming(item)}
+                    />
+                    <Button
                       label={t("zones.action.whatsapp")}
                       variant="ghost"
                       size="sm"
@@ -94,6 +101,7 @@ export function ZonesScreen() {
         }}
       />
       <CreateZoneModal visible={creating} onClose={() => setCreating(false)} zones={zones} />
+      <RenameZoneModal zone={renaming} onClose={() => setRenaming(null)} />
       <ZoneWhatsappEditor
         visible={whatsappZone !== null}
         onClose={() => setWhatsappZone(null)}
@@ -112,6 +120,61 @@ export function ZonesScreen() {
         onCancel={() => setPendingDelete(null)}
       />
     </SafeAreaView>
+  );
+}
+
+/** Renombrar una zona: cambia solo el nombre visible; el path (código ltree) es estable. */
+function RenameZoneModal({ zone, onClose }: { zone: ZoneNode | null; onClose: () => void }) {
+  const { t } = useT();
+  return (
+    <Modal visible={zone !== null} onClose={onClose} title={t("zones.rename.title")} closeLabel={t("common.close")}>
+      {zone ? <RenameZoneForm key={zone.id} zone={zone} onClose={onClose} /> : null}
+    </Modal>
+  );
+}
+
+function RenameZoneForm({ zone, onClose }: { zone: ZoneNode; onClose: () => void }) {
+  const { t, tf } = useT();
+  const toast = useToast();
+  const update = useUpdateZone();
+  const [name, setName] = useState(zone.name);
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = name.trim();
+
+  const submit = () => {
+    setError(null);
+    // Solo viaja el nombre: sin `supportPhone` el servidor conserva el teléfono actual.
+    const parsed = updateZoneInput.safeParse({ name: trimmed });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? t("errors.validation"));
+      return;
+    }
+    update.mutate(
+      { id: zone.id, name: parsed.data.name },
+      {
+        onSuccess: () => {
+          toast.show({ tone: "success", title: t("zones.renamed") });
+          onClose();
+        },
+        onError: (err) => setError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
+      },
+    );
+  };
+
+  return (
+    <Stack gap="md" className="p-4">
+      {error ? <Banner tone="danger" title={error} /> : null}
+      <Field label={t("zones.new.name")} hint={tf("zones.rename.hint", { path: zone.path })} required>
+        <Input value={name} onChangeText={setName} autoFocus accessibilityLabel={t("zones.new.name")} />
+      </Field>
+      <Button
+        label={t("common.save")}
+        loading={update.isPending}
+        disabled={trimmed.length === 0 || trimmed === zone.name}
+        block
+        onPress={submit}
+      />
+    </Stack>
   );
 }
 

@@ -5,6 +5,9 @@ export interface Installment { seq: number; amountDueMinor: number; }
 /** Periodicidad de cobro de las cuotas (espejo del enum `frequency` de BD). */
 export type ScheduleFrequency = "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY";
 
+/** Periodicidad cuando no se indica: el gota a gota cobra a diario. Única fuente para otorgar y cotizar. */
+export const DEFAULT_SCHEDULE_FREQUENCY: ScheduleFrequency = "DAILY";
+
 export function buildSchedule(principal: Money, interestPctBaseThousand: number, n: number): Installment[] {
   const total = principal.applyInterest(interestPctBaseThousand);
   const base = Math.floor(total.amountMinor / n);

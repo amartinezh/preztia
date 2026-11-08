@@ -4,8 +4,9 @@ import {
   Badge,
   Banner,
   Button,
+  DateField,
   Field,
-  Input,
+  formatDateTime,
   ListItem,
   MoneyText,
   Row,
@@ -41,8 +42,8 @@ const KINDS: readonly Kind[] = [
 // Una fecha local YYYY-MM-DD se convierte al datetime ISO del contrato: el "desde" abarca el
 // inicio del día y el "hasta", el fin, para un rango inclusivo. Cadenas inválidas se ignoran.
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-function dayToIso(day: string, endOfDay: boolean): string | undefined {
-  if (!DATE_PATTERN.test(day)) return undefined;
+function dayToIso(day: string | null, endOfDay: boolean): string | undefined {
+  if (!day || !DATE_PATTERN.test(day)) return undefined;
   const iso = `${day}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`;
   return Number.isNaN(Date.parse(iso)) ? undefined : iso;
 }
@@ -55,8 +56,8 @@ export function CashMovementsScreen() {
   const [boxId, setBoxId] = useState("");
   const [kind, setKind] = useState("");
   const [collectorId, setCollectorId] = useState("");
-  const [fromDay, setFromDay] = useState("");
-  const [toDay, setToDay] = useState("");
+  const [fromDay, setFromDay] = useState<string | null>(null);
+  const [toDay, setToDay] = useState<string | null>(null);
 
   const from = dayToIso(fromDay, false);
   const to = dayToIso(toDay, true);
@@ -84,7 +85,7 @@ export function CashMovementsScreen() {
     { value: "", label: t("cash.movements.allCollectors") },
     ...(collectors.data?.pages.flatMap((p) => p.items) ?? []).map((u) => ({
       value: u.id,
-      label: u.email,
+      label: u.displayName ?? u.email,
     })),
   ];
 
@@ -108,21 +109,23 @@ export function CashMovementsScreen() {
           <Row className="gap-2">
             <Stack gap="xs" className="flex-1">
               <Field label={t("cash.movements.from")}>
-                <Input
+                <DateField
                   value={fromDay}
-                  onChangeText={setFromDay}
-                  placeholder={t("cash.movements.datePlaceholder")}
-                  autoCapitalize="none"
+                  onChange={setFromDay}
+                  quickOptions={[]}
+                  invalidLabel={t("date.invalid")}
+                  accessibilityLabel={t("cash.movements.from")}
                 />
               </Field>
             </Stack>
             <Stack gap="xs" className="flex-1">
               <Field label={t("cash.movements.to")}>
-                <Input
+                <DateField
                   value={toDay}
-                  onChangeText={setToDay}
-                  placeholder={t("cash.movements.datePlaceholder")}
-                  autoCapitalize="none"
+                  onChange={setToDay}
+                  quickOptions={[]}
+                  invalidLabel={t("date.invalid")}
+                  accessibilityLabel={t("cash.movements.to")}
                 />
               </Field>
             </Stack>
@@ -158,7 +161,7 @@ export function CashMovementsScreen() {
 }
 
 function MovementRow({ tx }: { tx: CashTransactionRow }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   return (
     <ListItem
       title={tx.boxName}
@@ -171,7 +174,7 @@ function MovementRow({ tx }: { tx: CashTransactionRow }) {
             amountMinor={tx.amountMinor}
             currency={tx.currency}
           />
-          <Badge label={new Date(tx.createdAt).toLocaleDateString()} tone="neutral" />
+          <Badge label={formatDateTime(tx.createdAt, locale)} tone="neutral" />
         </Stack>
       }
     />

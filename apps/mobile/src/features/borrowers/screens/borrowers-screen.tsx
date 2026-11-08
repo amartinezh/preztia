@@ -25,6 +25,8 @@ import {
   type SelectOption,
 } from "@preztiaos/ui";
 
+import { can } from "@/core/auth/authorization";
+import { useSession } from "@/core/auth/session";
 import { isApiError } from "@/core/errors";
 import { useDebouncedValue } from "@/core/hooks/use-debounced-value";
 import { t, useT } from "@/core/i18n";
@@ -55,6 +57,7 @@ const COLOR_TONE: Record<BorrowerColor, BadgeTone> = {
 export function BorrowersScreen() {
   const { t, tf } = useT();
   const router = useRouter();
+  const { role } = useSession();
   const [search, setSearch] = useState("");
   const q = useDebouncedValue(search.trim());
   const [withoutCredits, setWithoutCredits] = useState(false);
@@ -122,6 +125,18 @@ export function BorrowersScreen() {
               <Row className="items-center gap-2">
                 {item.color !== "NONE" ? (
                   <Badge label={t(`borrowers.color.${item.color}` as MessageKey)} tone={COLOR_TONE[item.color]} />
+                ) : null}
+                {can(role, "credit:create") ? (
+                  <Button
+                    label={t("borrowers.action.newCredit")}
+                    variant="secondary"
+                    size="sm"
+                    onPress={() =>
+                      router.push(
+                        `/credit/new?borrowerId=${item.id}&nationalId=${encodeURIComponent(item.nationalId)}` as Href,
+                      )
+                    }
+                  />
                 ) : null}
                 <Button
                   label={t("reports.summary")}

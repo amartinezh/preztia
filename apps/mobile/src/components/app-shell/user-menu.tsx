@@ -3,25 +3,29 @@ import { Pressable, View } from "react-native";
 import { Modal, Row, Stack, Text } from "@preztiaos/ui";
 
 import { useSession } from "@/core/auth/session";
-import { useT } from "@/core/i18n";
+import { type MessageKey, SUPPORTED_LOCALES, setLocale, useT } from "@/core/i18n";
+import { ChangePasswordModal } from "@/features/users/components/change-password-modal";
 
-const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  ADMIN: "Administrador",
-  COORDINATOR: "Coordinador",
-  COLLECTOR: "Cobrador",
+const ROLE_KEY: Record<string, MessageKey> = {
+  SUPER_ADMIN: "users.role.superAdmin",
+  ADMIN: "users.role.admin",
+  COORDINATOR: "users.role.coordinator",
+  COLLECTOR: "users.role.collector",
 };
 
 /**
  * Identidad del usuario logueado en la barra del shell. Al tocar abre un menú con el perfil
- * (rol/tenant/zonas, derivados del JWT), "Cambiar clave" (aún no desarrollado) y "Cerrar sesión".
+ * (rol/tenant/zonas, derivados del JWT), el idioma de la interfaz (Español / Português), "Cambiar
+ * contraseña" y "Cerrar sesión".
  */
 export function UserMenu({ compact = false }: { compact?: boolean }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const { claims, role, signOut } = useSession();
   const [open, setOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
-  const roleLabel = role ? ROLE_LABEL[role] ?? role : "—";
+  const roleKey = role ? ROLE_KEY[role] : undefined;
+  const roleLabel = roleKey ? t(roleKey) : role ?? "—";
   const initials = roleLabel.slice(0, 1).toUpperCase();
 
   return (
@@ -44,7 +48,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         )}
       </Pressable>
 
-      <Modal visible={open} onClose={() => setOpen(false)} title={t("user.menu.title")}>
+      <Modal visible={open} onClose={() => setOpen(false)} title={t("user.menu.title")} closeLabel={t("common.close")}>
         <Stack gap="lg" className="p-4">
           <Stack gap="sm">
             <Row className="justify-between">
@@ -61,14 +65,42 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
             </Row>
           </Stack>
 
+          {/* Idioma de la interfaz del operador: cambia al instante y se recuerda en el dispositivo. */}
+          <Stack gap="xs" className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            <Text tone="muted">{t("user.menu.language")}</Text>
+            <Row gap="sm">
+              {SUPPORTED_LOCALES.map((option) => {
+                const selected = option === locale;
+                return (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => setLocale(option)}
+                    className={`min-h-[40px] justify-center rounded-full border px-4 ${
+                      selected ? "border-brand-600 bg-brand-50 dark:bg-zinc-800" : "border-zinc-200 dark:border-zinc-700"
+                    }`}
+                  >
+                    <Text variant="label" tone={selected ? "primary" : "muted"}>
+                      {t(`language.${option}`)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </Row>
+          </Stack>
+
           <View className="gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            {/* Cambiar clave: deshabilitado a propósito (pendiente de desarrollo). */}
-            <View className="min-h-[48px] flex-row items-center justify-between rounded-xl px-3 opacity-50">
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setOpen(false);
+                setChangingPassword(true);
+              }}
+              className="min-h-[48px] flex-row items-center rounded-xl px-3 active:bg-zinc-100 dark:active:bg-zinc-800"
+            >
               <Text variant="label">{t("user.menu.changePassword")}</Text>
-              <Text variant="caption" tone="muted">
-                {t("user.menu.soon")}
-              </Text>
-            </View>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               onPress={() => {
@@ -84,6 +116,8 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           </View>
         </Stack>
       </Modal>
+
+      <ChangePasswordModal visible={changingPassword} onClose={() => setChangingPassword(false)} />
     </>
   );
 }

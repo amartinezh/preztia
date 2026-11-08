@@ -3,6 +3,7 @@
 
 export * from "./tokens";
 export * from "./format/money";
+export * from "./format/date";
 
 // Hooks de tema/layout
 export { useColorScheme } from "./hooks/use-color-scheme";
@@ -32,6 +33,7 @@ export { ListItem, type ListItemProps } from "./components/list-item";
 export { MoneyText, type MoneyTextProps } from "./components/money-text";
 export { MoneyInput, type MoneyInputProps } from "./components/money-input";
 export { ConfirmModal, type ConfirmModalProps } from "./components/confirm-modal";
+export { DateField, type DateFieldProps, type DateQuickOption } from "./components/date-field";
 
 // Feedback
 export { ErrorBoundary } from "./feedback/error-boundary";

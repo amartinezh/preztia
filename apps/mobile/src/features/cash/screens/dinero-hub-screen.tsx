@@ -11,7 +11,7 @@ import { RemittancesBoardScreen } from "@/features/remittances/screens/remittanc
 import { DepositOrdersScreen } from "@/features/deposit-orders/screens/deposit-orders-screen";
 import { SettlementsScreen } from "@/features/settlements/screens/settlements-screen";
 
-type Segment = { key: string; label: string; render: () => ReactNode };
+type Segment = { key: string; label: string; hint: string; render: () => ReactNode };
 
 /**
  * Hub de "Dinero" (#2): aglutina TODO lo financiero bajo una sola pestaña con un control
@@ -29,11 +29,13 @@ export function DineroHubScreen() {
     {
       key: "liquidacion",
       label: t("dinero.segment.settlement"),
+      hint: t("dinero.segment.settlement.hint"),
       render: () => <SettlementsScreen />,
     },
     {
       key: "resumen",
       label: t("dinero.segment.summary"),
+      hint: t("dinero.segment.summary.hint"),
       render: () => (
         <CashScreen embedded onOpenBoxes={() => router.setParams({ tab: "cajas" })} />
       ),
@@ -41,21 +43,25 @@ export function DineroHubScreen() {
     {
       key: "cajas",
       label: t("dinero.segment.boxes"),
+      hint: t("dinero.segment.boxes.hint"),
       render: () => <CashBoxesScreen embedded />,
     },
     {
       key: "movimientos",
       label: t("dinero.segment.movements"),
+      hint: t("dinero.segment.movements.hint"),
       render: () => <CashMovementsScreen />,
     },
     {
       key: "rendiciones",
       label: t("dinero.segment.remittances"),
+      hint: t("dinero.segment.remittances.hint"),
       render: () => <RemittancesBoardScreen />,
     },
     {
       key: "consignaciones",
       label: t("dinero.segment.deposits"),
+      hint: t("dinero.segment.deposits.hint"),
       render: () => <DepositOrdersScreen />,
     },
   ];
@@ -92,6 +98,12 @@ export function DineroHubScreen() {
             })}
           </Row>
         </ScrollView>
+        {/* Qué hay en el segmento activo: el nombre llano no siempre alcanza para orientarse. */}
+        {current ? (
+          <Text variant="caption" tone="muted" className="pt-2">
+            {current.hint}
+          </Text>
+        ) : null}
       </View>
       <View className="flex-1">{current?.render()}</View>
     </View>

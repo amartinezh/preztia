@@ -7,7 +7,6 @@ import {
   Badge,
   Banner,
   Button,
-  ConfirmModal,
   Field,
   Input,
   ListItem,
@@ -23,55 +22,54 @@ import {
 
 import { useSession } from "@/core/auth/session";
 import { isApiError } from "@/core/errors";
-import { useT, type MessageKey } from "@/core/i18n";
-import { useCreateUser, useUpdateUser, useUsersList } from "../api/queries";
-
-// Nombre del rol para el operador (el enum del contrato obliga a nombrar todo rol nuevo).
-const ROLE_KEY: Record<UserSummary["role"], MessageKey> = {
-  SUPER_ADMIN: "users.role.superAdmin",
-  ADMIN: "users.role.admin",
-  COORDINATOR: "users.role.coordinator",
-  COLLECTOR: "users.role.collector",
-};
+import { useT } from "@/core/i18n";
+import { useZonesList } from "@/features/zones/api/queries";
+import { useCreateUser, useUsersList } from "../api/queries";
+import { UserDetailModal } from "../components/user-detail-modal";
+import { ROLE_KEY, userLabel } from "../components/user-presentation";
+import { ZoneChecklist } from "../components/zone-checklist";
 
 /**
- * CRUD de usuarios del tenant. El ADMIN crea coordinadores/cobradores; el COORDINATOR solo
- * crea cobradores (el backend impone la jerarquía y el alcance de zonas → 403 si se excede).
+ * Usuarios del tenant. El ADMIN crea coordinadores/cobradores; el COORDINATOR solo cobradores (el
+ * backend impone la jerarquía y el alcance de zonas → 403 si se excede). Cada fila muestra el nombre
+ * (o el correo) y el rol; tocarla abre el detalle: estado, nombre, zonas y restablecer contraseña.
  */
 export function UsersScreen() {
-  const { t, tf } = useT();
-  const toast = useToast();
+  const { t } = useT();
   const { role } = useSession();
   const query = useUsersList();
-  const update = useUpdateUser();
+  const zones = useZonesList();
   const [creating, setCreating] = useState(false);
-  // Usuario cuya (des)activación espera confirmación.
-  const [pendingToggle, setPendingToggle] = useState<UserSummary | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const items = useMemo<UserSummary[]>(
     () => query.data?.pages.flatMap((p) => p.items) ?? [],
     [query.data],
   );
-
-  // Cambiar el estado solo tras confirmar; el error se avisa fuera del modal para que quede visible.
-  const confirmToggle = () => {
-    if (!pendingToggle) return;
-    update.mutate(
-      { id: pendingToggle.id, active: !pendingToggle.active },
-      {
-        onSettled: () => setPendingToggle(null),
-        onError: (err) =>
-          toast.show({
-            tone: "danger",
-            title: isApiError(err) ? t(err.messageKey) : t("errors.unknown"),
-          }),
-      },
-    );
-  };
+  // Nombre de cada zona por su path: la fila habla de zonas, no de códigos ltree.
+  const zoneNameByPath = useMemo(
+    () => new Map((zones.data?.items ?? []).map((z) => [z.path, z.name])),
+    [zones.data],
+  );
+  // El detalle se lee de la lista cargada (no de una copia): tras cada guardado refleja lo nuevo.
+  const selected = items.find((u) => u.id === selectedId) ?? null;
 
   if (query.isPending) return <Spinner label={t("common.loading")} />;
-  const canEdit = role === "ADMIN";
-  const deactivating = pendingToggle?.active === true;
+
+  // El ADMIN administra a todos; el coordinador, solo a los cobradores (lo mismo que impone el backend).
+  const canOpen = (user: UserSummary) =>
+    role === "ADMIN" || (role === "COORDINATOR" && user.role === "COLLECTOR");
+
+  const subtitle = (user: UserSummary) => {
+    const zoneNames = user.zonePaths.map((p) => zoneNameByPath.get(p) ?? p);
+    return [
+      t(ROLE_KEY[user.role]),
+      user.displayName ? user.email : null,
+      zoneNames.length ? zoneNames.join(", ") : null,
+    ]
+      .filter((part): part is string => part !== null)
+      .join(" · ");
+  };
 
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-white dark:bg-zinc-950">
@@ -91,9 +89,9 @@ export function UsersScreen() {
         onEndReached={() => query.hasNextPage && query.fetchNextPage()}
         renderItem={({ item }) => (
           <ListItem
-            title={item.email}
-            subtitle={`${t(ROLE_KEY[item.role])}${item.zonePaths.length ? ` · ${item.zonePaths.join(", ")}` : ""}`}
-            onPress={canEdit ? () => setPendingToggle(item) : undefined}
+            title={userLabel(item)}
+            subtitle={subtitle(item)}
+            onPress={canOpen(item) ? () => setSelectedId(item.id) : undefined}
             trailing={
               <Badge
                 tone={item.active ? "success" : "neutral"}
@@ -104,35 +102,26 @@ export function UsersScreen() {
         )}
       />
       <CreateUserModal visible={creating} onClose={() => setCreating(false)} />
-      <ConfirmModal
-        visible={pendingToggle !== null}
-        title={deactivating ? t("users.toggle.deactivateTitle") : t("users.toggle.activateTitle")}
-        description={tf(deactivating ? "users.toggle.deactivateBody" : "users.toggle.activateBody", {
-          email: pendingToggle?.email ?? "",
-        })}
-        confirmLabel={t("common.confirm")}
-        cancelLabel={t("common.cancel")}
-        closeLabel={t("common.close")}
-        tone={deactivating ? "danger" : "primary"}
-        loading={update.isPending}
-        onConfirm={confirmToggle}
-        onCancel={() => setPendingToggle(null)}
-      />
+      <UserDetailModal user={selected} onClose={() => setSelectedId(null)} />
     </SafeAreaView>
   );
 }
 
+/** Alta de usuario con nombre visible y zonas por casillas (nunca paths ltree a mano). */
 export function CreateUserModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useT();
+  const toast = useToast();
   const { role } = useSession();
   const create = useCreateUser();
+  const zones = useZonesList();
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   // El coordinador solo crea cobradores; el admin elige rol.
   const [userRole, setUserRole] = useState<CreatableRole>(
     role === "COORDINATOR" ? "COLLECTOR" : "COORDINATOR",
   );
-  const [zones, setZones] = useState("");
+  const [zonePaths, setZonePaths] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -144,17 +133,22 @@ export function CreateUserModal({ visible, onClose }: { visible: boolean; onClos
           { value: "COLLECTOR", label: t("users.role.collector") },
         ];
 
+  const reset = () => {
+    setDisplayName("");
+    setEmail("");
+    setPassword("");
+    setZonePaths([]);
+    setErrors({});
+  };
+
   const submit = () => {
     setSubmitError(null);
-    const zonePaths = zones
-      .split(",")
-      .map((z) => z.trim())
-      .filter((z) => z.length > 0);
     const parsed = createUserInput.safeParse({
       email: email.trim().toLowerCase(),
       password,
       role: userRole,
       zonePaths,
+      ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
     });
     if (!parsed.success) {
       const next: Record<string, string> = {};
@@ -168,9 +162,8 @@ export function CreateUserModal({ visible, onClose }: { visible: boolean; onClos
     setErrors({});
     create.mutate(parsed.data, {
       onSuccess: () => {
-        setEmail("");
-        setPassword("");
-        setZones("");
+        toast.show({ tone: "success", title: t("users.created") });
+        reset();
         onClose();
       },
       onError: (err) => setSubmitError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
@@ -181,17 +174,25 @@ export function CreateUserModal({ visible, onClose }: { visible: boolean; onClos
     <Modal visible={visible} onClose={onClose} title={t("users.new.title")} closeLabel={t("common.close")}>
       <Stack gap="md" className="p-4">
         {submitError ? <Banner tone="danger" title={submitError} /> : null}
+        <Field label={t("users.new.displayName")} error={errors.displayName} hint={t("users.new.displayNameHint")}>
+          <Input autoCapitalize="words" value={displayName} onChangeText={setDisplayName} invalid={!!errors.displayName} />
+        </Field>
         <Field label={t("users.new.email")} error={errors.email} required>
           <Input autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} invalid={!!errors.email} />
         </Field>
-        <Field label={t("users.new.password")} error={errors.password} required>
-          <Input secureTextEntry value={password} onChangeText={setPassword} invalid={!!errors.password} />
+        <Field label={t("users.new.password")} error={errors.password} hint={t("password.newHint")} required>
+          <Input secureTextEntry autoComplete="new-password" value={password} onChangeText={setPassword} invalid={!!errors.password} />
         </Field>
         <Field label={t("users.new.role")} required>
           <Select value={userRole} options={roleOptions} onChange={setUserRole} title={t("users.new.role")} />
         </Field>
-        <Field label={t("users.new.zones")} error={errors.zonePaths} hint="co.antioquia, co.antioquia.medellin">
-          <Input autoCapitalize="none" value={zones} onChangeText={setZones} invalid={!!errors.zonePaths} />
+        <Field label={t("users.new.zonesPick")} error={errors.zonePaths} hint={t("users.new.zonesHint")}>
+          <ZoneChecklist
+            zones={zones.data?.items ?? []}
+            selectedPaths={zonePaths}
+            onChange={setZonePaths}
+            emptyLabel={zones.isPending ? t("common.loading") : t("users.new.zonesEmpty")}
+          />
         </Field>
         <Button label={t("users.new.submit")} loading={create.isPending} block onPress={submit} />
       </Stack>

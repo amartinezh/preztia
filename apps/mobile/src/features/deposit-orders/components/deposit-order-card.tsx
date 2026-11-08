@@ -56,7 +56,7 @@ export function DepositOrderCard({
         </Row>
         {showCollector ? (
           <Text variant="caption" tone="muted">
-            {order.collectorEmail ?? order.collectorId}
+            {order.collectorName ?? order.collectorEmail ?? order.collectorId}
             {order.zoneName ? ` · ${order.zoneName}` : ""}
           </Text>
         ) : null}

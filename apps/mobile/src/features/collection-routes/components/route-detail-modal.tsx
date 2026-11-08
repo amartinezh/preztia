@@ -43,7 +43,7 @@ function StopRow({ stop }: { stop: ReviewerStop }) {
         />
       </Row>
       <Text variant="caption" tone="muted">
-        {stop.collectorEmail ?? stop.collectorId}
+        {stop.collectorName ?? stop.collectorEmail ?? stop.collectorId}
         {stop.seenAt ? ` · ${t("route.detail.seen")} ${new Date(stop.seenAt).toLocaleString()}` : ""}
       </Text>
       <Row className="items-center justify-between">

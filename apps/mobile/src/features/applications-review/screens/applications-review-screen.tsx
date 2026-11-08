@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import type { ApplicationReviewSummary, CreditApplicationStatus } from "@preztiaos/contracts";
-import { Badge, Button, EmptyState, ErrorState, ListItem, Row, Spinner, Stack, Text } from "@preztiaos/ui";
+import { Badge, Button, EmptyState, ErrorState, ListItem, MoneyText, Row, Spinner, Stack, Text, formatDate, todayIso } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
+import { useTenantCurrency } from "@/features/cash/api/boxes-queries";
 import { useApplicationsList } from "../api/queries";
 import { applicationStatusBadge, verdictBadge } from "../components/review-status";
+import { relativeTime, zoneLeafName } from "../components/review-row";
 
 // Las dos operaciones del flujo (#6): "En proceso" = chat de WhatsApp en curso, faltan documentos;
 // "Por aprobar" = expediente completo esperando decisión. "Todas" muestra ambas.
@@ -23,8 +25,9 @@ const FILTERS: { value: StatusFilter; key: "review.filter.all" | "review.section
  * conversación de WhatsApp del canal. Paginado (§3.7); al tocar una fila se abre el detalle.
  */
 export function ApplicationsReviewScreen() {
-  const { t } = useT();
+  const { t, tf, locale } = useT();
   const router = useRouter();
+  const currency = useTenantCurrency();
   const [filter, setFilter] = useState<StatusFilter>("ALL");
   const query = useApplicationsList(filter === "ALL" ? undefined : filter);
 
@@ -33,6 +36,28 @@ export function ApplicationsReviewScreen() {
     [query.data],
   );
   const activeHint = FILTERS.find((f) => f.value === filter)?.hint;
+
+  // Antigüedad legible de cada solicitud ("hace 2 h", "ayer", "hace 3 días") para priorizar.
+  const now = new Date();
+  const ageLabel = (iso: string): string => {
+    const age = relativeTime(iso, now);
+    switch (age.kind) {
+      case "now":
+        return t("time.justNow");
+      case "minutes":
+        return tf("time.minutesAgo", { n: age.n });
+      case "hours":
+        return tf("time.hoursAgo", { n: age.n });
+      case "yesterday":
+        return t("time.yesterday");
+      case "days":
+        return tf("time.daysAgo", { n: age.n });
+      case "date":
+        return formatDate(todayIso(age.at), locale);
+      case "unreadable":
+        return age.text;
+    }
+  };
 
   if (query.isError) {
     return <ErrorState title={t("review.list.title")} description={t("errors.network")} onRetry={() => query.refetch()} />;
@@ -103,13 +128,23 @@ export function ApplicationsReviewScreen() {
         renderItem={({ item }) => {
           const status = applicationStatusBadge(item.status);
           const verdict = verdictBadge(item.latestVerdictStatus);
+          const subtitle = [
+            tf("review.row.docs", { n: item.documentsTotal, m: item.documentsFlagged }),
+            zoneLeafName(item.zonePath),
+            ageLabel(item.createdAt),
+          ]
+            .filter(Boolean)
+            .join(" · ");
           return (
             <ListItem
-              title={item.applicantPhoneMasked}
-              subtitle={`${item.documentsTotal} doc · ${item.documentsFlagged} marcados`}
+              title={item.applicantName ?? item.applicantPhoneMasked}
+              subtitle={subtitle}
               onPress={() => router.push(`/applications/${item.id}` as Href)}
               trailing={
                 <Stack gap="xs" className="items-end">
+                  {item.requestedAmountMinor != null ? (
+                    <MoneyText variant="label" amountMinor={item.requestedAmountMinor} currency={currency} />
+                  ) : null}
                   <Badge
                     tone={verdict.tone}
                     label={item.latestVerdictScore != null ? `${verdict.label} ${item.latestVerdictScore}` : verdict.label}

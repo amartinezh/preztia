@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import {
   approveApplicationInput,
+  quoteCreditInput,
   rejectApplicationInput,
   type ApproveApplicationInput,
   type ExtractedIdentityView,
@@ -25,7 +26,9 @@ import {
 import { useT } from "@/core/i18n";
 import { useFundingBoxes, useTenantCurrency } from "@/features/cash/api/boxes-queries";
 import { FundingBoxPicker, isFundingInsufficient } from "@/features/cash/components/funding-box-picker";
+import { CreditQuoteCard } from "@/features/credit/components/credit-quote-card";
 import { useInterestRules } from "@/features/credit/hooks/use-interest-rules";
+import { useZonesList } from "@/features/zones/api/queries";
 import { BorrowerPicker } from "./borrower-picker";
 
 // El dominio interpreta interestPct como base-mil (200 = 20%); la UI captura % y convierte.
@@ -95,7 +98,8 @@ export function DecisionModal({
   onApprove,
   onReject,
 }: Props) {
-  const { t } = useT();
+  const { t, tf } = useT();
+  const zones = useZonesList();
 
   const [borrower, setBorrower] = useState<{ id: string; label: string } | null>(null);
   // Capital tecleado (sin oferta negociada) y su lectura en unidades menores (`null` = ilegible).
@@ -154,6 +158,24 @@ export function DecisionModal({
   const principalValid = fromPlan !== null || (typedPrincipalMinor !== null && typedPrincipalMinor > 0);
   // El servidor también valida el saldo (fail-fast), pero lo avisamos antes de enviar.
   const fundsInsufficient = isFundingInsufficient(selectedBox, principalMinor);
+
+  // Nombre de la zona (resuelta desde la línea de WhatsApp); el UUID solo si no está en el alcance.
+  const zoneName = zoneId ? ((zones.data?.items ?? []).find((z) => z.id === zoneId)?.name ?? null) : null;
+
+  // Vista previa del cronograma con los términos vigentes (plan negociado o capturados a mano).
+  const quoteFrequency = fromPlan
+    ? rules.activePlans.find((p) => p.name === fromPlan.name)?.frequency
+    : selectedPlan?.frequency;
+  const quoteCandidate = quoteCreditInput.safeParse({
+    principalMinor,
+    interestPct: fromPlan ? fromPlan.interestPct : Number(typedInterest) * PERCENT_TO_BASE_THOUSAND,
+    installmentsCount: fromPlan ? fromPlan.installmentsCount : Math.trunc(Number(typedInstallments)),
+    ...(quoteFrequency ? { frequency: quoteFrequency } : {}),
+  });
+  const quoteInput =
+    mode === "approve" && quoteCandidate.success && (fromPlan !== null || typedInterest.trim() !== "")
+      ? quoteCandidate.data
+      : null;
 
   // El motivo es obligatorio (min 3 según el contrato): gatea el envío para no aprobar sin justificar.
   const reasonValid = reason.trim().length >= MIN_REASON_LENGTH;
@@ -221,13 +243,13 @@ export function DecisionModal({
           {mode === "approve" ? (
             <>
               <Text variant="caption" tone="muted">
-                Generarás el crédito para {applicantPhone}.
+                {tf("review.approve.forPhone", { phone: applicantPhone })}
               </Text>
 
               {/* Zona: asignada automáticamente desde la línea de WhatsApp (no editable). */}
               <Field label={t("review.approve.zone")}>
                 {zoneId ? (
-                  <Text variant="code">{zoneId}</Text>
+                  <Text variant="label">{zoneName ?? (zones.isPending ? "…" : zoneId)}</Text>
                 ) : (
                   <Banner tone="warning" title={t("review.approve.zoneMissing")} />
                 )}
@@ -310,6 +332,8 @@ export function DecisionModal({
                   </Field>
                 </>
               )}
+
+              <CreditQuoteCard input={quoteInput} />
 
               {/* Caja/cuenta de la que sale el dinero: el otorgamiento la debita (DISBURSEMENT). */}
               <FundingBoxPicker

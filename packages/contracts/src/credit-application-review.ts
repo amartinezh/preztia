@@ -58,6 +58,12 @@ export const applicationReviewSummary = z.object({
   // Documentos con sospecha de fraude (score > 0) o en revisión manual.
   documentsFlagged: z.number().int(),
   createdAt: z.string(),
+  /** Nombre del solicitante leído de sus documentos (OCR) o del cliente ya vinculado; null si aún no se conoce. */
+  applicantName: z.string().nullable(),
+  /** Monto solicitado o acordado en la oferta de plan; null si aún no hay cifra. */
+  requestedAmountMinor: z.number().int().nullable(),
+  /** Zona (path ltree) del canal por el que entró la solicitud. */
+  zonePath: z.string().nullable(),
 });
 export type ApplicationReviewSummary = z.infer<typeof applicationReviewSummary>;
 

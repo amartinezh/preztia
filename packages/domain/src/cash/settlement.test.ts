@@ -63,7 +63,7 @@ const snapshot = buildSettlement({
   boxes,
   flows,
   zones: [NORTE, SUR],
-  collectors: [{ collectorId: "ana", email: "ana@t.test", zoneId: "z-norte", zonePath: "norte" }],
+  collectors: [{ collectorId: "ana", email: "ana@t.test", name: null, zoneId: "z-norte", zonePath: "norte" }],
   portfolio,
 });
 
@@ -178,7 +178,7 @@ describe("collectorPerformance", () => {
 
 // ── Comisión del cobrador: causada en la foto, restada de la utilidad de su zona ────────────────
 describe("buildSettlement — comisión del cobrador", () => {
-  const ANA = { collectorId: "ana", email: "ana@t.test", zoneId: "z-norte", zonePath: "norte" };
+  const ANA = { collectorId: "ana", email: "ana@t.test", name: null, zoneId: "z-norte", zonePath: "norte" };
   // Ana: cobró 300.000, entregó 250.000 (sin base recibida), capital recuperado 240.000.
   const build = (
     policy: { ratePerMille: number; base: "COLLECTED" | "REMITTED" | "PRINCIPAL_RECOVERED" },

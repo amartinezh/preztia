@@ -1,5 +1,7 @@
 import { Linking } from "react-native";
-import { Button, Card, Row, Stack, Text } from "@preztiaos/ui";
+import { Button, Card, Row, Stack, Text, formatDateTime } from "@preztiaos/ui";
+
+import { useT } from "@/core/i18n";
 
 import { CollectionMap } from "../../collections/components/collection-map";
 
@@ -16,6 +18,7 @@ type Location = {
  * el mapa externo (Google Maps con el pin) vía `Linking`, útil para navegar hasta el punto.
  */
 export function LocationCard({ location }: { location: Location }) {
+  const { tf, locale } = useT();
   const { latitude, longitude } = location;
   const coords = `${latitude},${longitude}`;
   // Mapa externo con marcador (abre app de mapas en nativo / pestaña nueva en web).
@@ -44,7 +47,7 @@ export function LocationCard({ location }: { location: Location }) {
             {latitude.toFixed(5)}, {longitude.toFixed(5)}
           </Text>
           <Text variant="caption" tone="muted">
-            Compartida: {new Date(location.sharedAt).toLocaleDateString()}
+            {tf("review.location.sharedAt", { date: formatDateTime(location.sharedAt, locale) })}
           </Text>
         </Row>
         <Button label="Ver en el mapa" variant="secondary" block onPress={openMap} />

@@ -30,6 +30,7 @@ import {
   useUpdateClientLanguage,
   useUpdateOperationalSettings,
 } from "../api/queries";
+import { useSettingsDirty } from "../components/settings-dirty-context";
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Administrador",
@@ -101,6 +102,8 @@ function OperationalConfigCard({ canEdit }: { canEdit: boolean }) {
   const [draft, setDraft] = useState<OperationalSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Hay borrador mientras se editó algo y no se guardó: Ajustes avisa antes de cambiar de pestaña.
+  useSettingsDirty("general.operational", draft !== null && !saved);
 
   const form = draft ?? query.data ?? null;
   if (query.isPending || !form) return <Spinner label={t("common.loading")} />;

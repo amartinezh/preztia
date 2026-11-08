@@ -112,6 +112,7 @@ export const settlementSnapshot = z.object({
     z.object({
       collectorId: z.string().uuid(),
       email: z.string().nullable(),
+      name: z.string().nullable(),
       zonePath: z.string().nullable(),
       collectedMinor: money,
       expensesMinor: money,

@@ -240,13 +240,17 @@ interface LiquidationContext {
   firstActivityDate: string | null;
 }
 
-/** La foto del dominio (listas de solo lectura) a la forma del contrato. */
+/**
+ * La foto del dominio (listas de solo lectura) a la forma del contrato. Las fotos SELLADAS antes
+ * de existir el nombre visible del cobrador no lo traen: se completa con null (nunca se reescribe
+ * una liquidación cerrada).
+ */
 function toView(s: SettlementSnapshot): SettlementSnapshotView {
   return {
     ...s,
     boxes: [...s.boxes],
     zones: [...s.zones],
-    collectors: [...s.collectors],
+    collectors: s.collectors.map((c) => ({ ...c, name: c.name ?? null })),
   };
 }
 

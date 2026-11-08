@@ -32,6 +32,7 @@ export class UsersQueryRepository {
       const items: UserSummary[] = rows.map((row) => ({
         id: row.id,
         email: row.email,
+        displayName: row.displayName,
         role: row.role,
         zonePaths: row.zonePaths,
         active: row.active,

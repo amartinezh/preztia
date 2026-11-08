@@ -2,14 +2,14 @@ import { useMemo } from "react";
 import { FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { RejectionSummary } from "@preztiaos/contracts";
-import { ListItem, Row, Spinner, Text } from "@preztiaos/ui";
+import { ListItem, Row, Spinner, Text, formatDateTime } from "@preztiaos/ui";
 
 import { useT } from "@/core/i18n";
 import { useRejections } from "../api/queries";
 
 /** Histórico de rechazos de solicitudes (motivo + cuándo), scopeado por zona. */
 export function RejectionsScreen() {
-  const { t } = useT();
+  const { t, locale } = useT();
   const query = useRejections();
   const items = useMemo<RejectionSummary[]>(
     () => query.data?.pages.flatMap((p) => p.items) ?? [],
@@ -36,7 +36,7 @@ export function RejectionsScreen() {
         renderItem={({ item }) => (
           <ListItem
             title={item.applicantPhoneMasked}
-            subtitle={`${item.reason} · ${new Date(item.createdAt).toLocaleDateString()}`}
+            subtitle={`${item.reason} · ${formatDateTime(item.createdAt, locale)}`}
           />
         )}
       />

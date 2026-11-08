@@ -106,6 +106,7 @@ export type ReceiveRemittanceInput = z.infer<typeof receiveRemittanceInput>;
 export const remittanceBoardRow = z.object({
   collectorId: z.string().uuid(),
   collectorEmail: z.string().nullable(),
+  collectorName: z.string().nullable(),
   cashBoxId: z.string().uuid(),
   cashBoxName: z.string(),
   zoneId: z.string().uuid().nullable(),

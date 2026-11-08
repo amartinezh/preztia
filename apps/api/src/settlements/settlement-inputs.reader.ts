@@ -184,7 +184,8 @@ async function readZones(tx: Tx): Promise<SettlementZoneRef[]> {
 /** Cobradores con caja de ruta (la zona de la caja es la del cobrador para el recorte). */
 async function readCollectors(tx: Tx): Promise<SettlementCollectorRef[]> {
   const rows = (await tx.execute(sql`
-    SELECT DISTINCT ON (b.assigned_to) b.assigned_to AS collector_id, u.email, b.zone_id, z.path::text AS zone_path
+    SELECT DISTINCT ON (b.assigned_to) b.assigned_to AS collector_id, u.email, u.display_name,
+           b.zone_id, z.path::text AS zone_path
     FROM cash_box b
     LEFT JOIN app_user u ON u.id = b.assigned_to
     LEFT JOIN zone z ON z.id = b.zone_id
@@ -194,6 +195,7 @@ async function readCollectors(tx: Tx): Promise<SettlementCollectorRef[]> {
   return rows.map((r) => ({
     collectorId: String(r.collector_id),
     email: str(r.email),
+    name: str(r.display_name),
     zoneId: str(r.zone_id),
     zonePath: str(r.zone_path),
   }));

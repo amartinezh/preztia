@@ -1,4 +1,4 @@
-import { Button, Field, Input, Row, Text } from "@preztiaos/ui";
+import { DateField, Field, Text, addDaysIso, todayIso } from "@preztiaos/ui";
 
 import { useSession } from "@/core/auth/session";
 import { useT } from "@/core/i18n";
@@ -36,12 +36,26 @@ function ReviewerPaymentDateField({
     : maxDaysBack != null
       ? `${t("payments.paidOnHint")} ${maxDaysBack}`
       : t("payments.paidOnHint");
+  // `null` = hoy (el servidor usa la hora de captura); solo OTRO día viaja como fecha explícita.
+  const today = todayIso();
+  // Nunca una fecha futura; con ventana de días hacia atrás, tampoco antes de ella (el servidor revalida).
+  const min = !relaxed && maxDaysBack != null ? addDaysIso(today, -maxDaysBack) : undefined;
+  const quickOptions = [
+    { label: t("payments.paidOnToday"), value: today },
+    { label: t("common.yesterday"), value: addDaysIso(today, -1) },
+  ];
   return (
     <Field label={t("payments.paidOn")} hint={hint}>
-      <Row gap="sm" className="items-center">
-        <Input value={value ?? ""} placeholder={t("payments.paidOnToday")} onChangeText={(v) => onChange(v.trim() || null)} />
-        {value ? <Button label={t("config.settlement.today")} variant="secondary" size="sm" onPress={() => onChange(null)} /> : null}
-      </Row>
+      <DateField
+        value={value}
+        onChange={(v) => onChange(v !== null && v !== today ? v : null)}
+        min={min}
+        max={today}
+        quickOptions={quickOptions}
+        placeholder={t("payments.paidOnToday")}
+        invalidLabel={t("date.invalid")}
+        accessibilityLabel={t("payments.paidOn")}
+      />
       {value ? (
         <Text variant="caption" tone="muted">
           {t("payments.paidOnAudited")}

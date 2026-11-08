@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Pressable } from "react-native";
 import type { SettlementSummary } from "@preztiaos/contracts";
-import { Banner, Button, ConfirmModal, ErrorState, formatMoney, Row, Spinner, Stack, Text } from "@preztiaos/ui";
+import { Badge, Banner, Button, Card, ConfirmModal, ErrorState, formatMoney, Row, Spinner, Stack, Text } from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { DataTable, type DataRow } from "@/components/data-table";
 import { useSession } from "@/core/auth/session";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
-import { useCloseSettlement, useCurrentSettlement, useSettlement, useSettlements, HISTORY_PERIODS } from "../api/queries";
+import { formatDayMonth, formatPeriodRange } from "@/core/locale/dates";
+import { useCloseSettlement, useCurrentSettlement, useSettlement, useSettlements } from "../api/queries";
 import { SettlementView, perMille } from "../components/settlement-view";
 import { TrendChart } from "../components/trend-chart";
 
@@ -116,12 +117,14 @@ function CurrentSettlement() {
 }
 
 function SettlementHistory() {
-  const { t } = useT();
+  const { t, tf, locale } = useT();
   const list = useSettlements();
   const [openId, setOpenId] = useState<string | null>(null);
   const opened = useSettlement(openId);
-  // Los últimos N períodos, del más antiguo al más reciente (lectura de izquierda a derecha).
-  const periods = [...(list.data?.pages[0]?.items ?? [])].slice(0, HISTORY_PERIODS).reverse();
+  // Todos los períodos cargados, del más antiguo al más reciente (lectura de izquierda a derecha);
+  // "Cargar más" trae la página siguiente y la tabla crece hacia la izquierda.
+  const periods = (list.data?.pages.flatMap((page) => page.items) ?? []).slice().reverse();
+  const total = list.data?.pages[0]?.total ?? periods.length;
 
   if (openId) {
     return (
@@ -137,7 +140,9 @@ function SettlementHistory() {
 
   const currency = periods[0]!.currency;
   const money = (v: number) => formatMoney(v, currency);
-  const label = (p: SettlementSummary) => p.periodStart.slice(5);
+  const range = (p: SettlementSummary) => formatPeriodRange(p.periodStart, p.periodEnd, locale);
+  const columnLabel = (p: SettlementSummary) => `${range(p)}${p.retroactive ? " *" : ""}`;
+  const hasRetroactive = periods.some((p) => p.retroactive);
   const row = (key: string, text: string, pick: (p: SettlementSummary) => string, strong = false): DataRow => ({
     key,
     label: text,
@@ -150,7 +155,7 @@ function SettlementHistory() {
       <Text variant="heading">{t("settlement.trend")}</Text>
       <TrendChart
         currency={currency}
-        periods={periods.map(label)}
+        periods={periods.map((p) => formatDayMonth(p.periodStart, locale))}
         series={[
           { key: "collected", label: t("settlement.concept.COLLECTED"), values: periods.map((p) => p.totals.concepts.COLLECTED ?? 0) },
           { key: "disbursed", label: t("settlement.concept.DISBURSED"), values: periods.map((p) => p.totals.concepts.DISBURSED ?? 0) },
@@ -162,7 +167,7 @@ function SettlementHistory() {
         {t("settlement.comparisonHint")}
       </Text>
       <DataTable
-        columns={periods.map((p) => ({ key: p.id, label: `${label(p)}${p.retroactive ? " *" : ""}`, onPress: () => setOpenId(p.id) }))}
+        columns={periods.map((p) => ({ key: p.id, label: columnLabel(p), onPress: () => setOpenId(p.id) }))}
         rows={[
           row("opening", t("settlement.opening"), (p) => money(p.totals.openingMinor)),
           row("in", t("settlement.in"), (p) => money(p.totals.inMinor)),
@@ -179,6 +184,41 @@ function SettlementHistory() {
           row("overdue", t("settlement.result.overdue"), (p) => money(p.result.overdueAtCutMinor)),
         ]}
       />
+      {hasRetroactive ? (
+        <Text variant="caption" tone="muted">
+          {t("settlement.retroactiveMark")}
+        </Text>
+      ) : null}
+
+      <Text variant="heading">{t("settlement.periods")}</Text>
+      <Text variant="caption" tone="muted">
+        {t("settlement.periodsHint")}
+      </Text>
+      <Stack gap="sm">
+        {/* Del más reciente al más antiguo: lo último cerrado es lo que dirección busca primero. */}
+        {[...periods].reverse().map((p) => (
+          <Card key={p.id}>
+            <Row className="flex-wrap items-center justify-between gap-2">
+              <Stack gap="xs" className="flex-1">
+                <Row className="flex-wrap items-center gap-2">
+                  <Text variant="label">{range(p)}</Text>
+                  {p.retroactive ? <Badge label={t("settlement.retroactive")} tone="warning" /> : null}
+                </Row>
+                <Text variant="caption" tone="muted">
+                  {t("settlement.result.utility")} {money(p.result.utilityMinor)} · {t("settlement.closing")} {money(p.totals.closingMinor)}
+                </Text>
+              </Stack>
+              <Button label={t("settlement.view")} variant="secondary" size="sm" onPress={() => setOpenId(p.id)} />
+            </Row>
+          </Card>
+        ))}
+      </Stack>
+      <Text variant="caption" tone="muted">
+        {tf("settlement.showing", { n: periods.length, total })}
+      </Text>
+      {list.hasNextPage ? (
+        <Button label={t("common.loadMore")} variant="ghost" loading={list.isFetchingNextPage} onPress={() => void list.fetchNextPage()} />
+      ) : null}
     </Stack>
   );
 }

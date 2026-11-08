@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Pressable } from "react-native";
-import { useRouter, type Href } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import {
   createBorrowerInput,
   grantCreditInput,
+  quoteCreditInput,
   type BorrowerSummary,
   type GrantCreditInput,
   type PlanFrequency,
+  type QuoteCreditInput,
 } from "@preztiaos/contracts";
 import {
   Banner,
@@ -30,6 +32,8 @@ import { useT } from "@/core/i18n";
 import { newIdempotencyKey } from "@/core/ids";
 import { useBorrowersInfinite, useCreateBorrower } from "@/features/borrowers/api/queries";
 import { useInterestRules } from "../hooks/use-interest-rules";
+import { usePrefilledBorrower } from "../hooks/use-prefilled-borrower";
+import { CreditQuoteCard } from "../components/credit-quote-card";
 import { useZonesList } from "@/features/zones/api/queries";
 import { useFundingBoxes, useTenantCurrency } from "@/features/cash/api/boxes-queries";
 import { FundingBoxPicker, isFundingInsufficient } from "@/features/cash/components/funding-box-picker";
@@ -71,7 +75,11 @@ export function GrantCreditScreen() {
   const rules = useInterestRules();
   const currency = useTenantCurrency();
 
-  const [borrower, setBorrower] = useState<SelectedBorrower | null>(null);
+  // Prellenado desde Clientes ("Nuevo crédito"): el id manda; la cédula solo sirve para localizarlo.
+  const params = useLocalSearchParams<{ borrowerId?: string; nationalId?: string }>();
+  const prefilled = usePrefilledBorrower(params.borrowerId, params.nationalId);
+  const [borrowerChoice, setBorrowerChoice] = useState<SelectedBorrower | null>(null);
+  const borrower: SelectedBorrower | null = borrowerChoice ?? prefilled.data ?? null;
   const [zoneId, setZoneId] = useState("");
   // `null` significa "aún no elegí": cae al plan por defecto del tenant hasta que el usuario elija.
   const [planChoice, setPlanChoice] = useState<string | null>(null);
@@ -143,6 +151,16 @@ export function GrantCreditScreen() {
     (fundingBoxes.data?.items ?? []).find((b) => b.id === fundingCashBoxId) ?? null;
   const fundsInsufficient = isFundingInsufficient(selectedFundingBox, principalMinorOrZero);
 
+  // Vista previa del cronograma: solo con términos válidos según el mismo contrato que usa el servidor.
+  const quoteCandidate = quoteCreditInput.safeParse({
+    principalMinor: principalMinorOrZero,
+    interestPct: Number(interest) * PERCENT_TO_BASE_THOUSAND,
+    installmentsCount: Math.trunc(Number(installments)),
+    frequency,
+  });
+  const quoteInput: QuoteCreditInput | null =
+    quoteCandidate.success && interest.trim() !== "" ? quoteCandidate.data : null;
+
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
     if (!borrower) next.borrowerId = t("credit.new.borrower.required");
@@ -199,7 +217,7 @@ export function GrantCreditScreen() {
       {
         onSuccess: (res) => {
           setIdempotencyKey(newIdempotencyKey());
-          router.replace(`/credit/${res.id}` as Href);
+          router.replace(`/credit/${res.id}?granted=1` as Href);
         },
         onError: (err) => setSubmitError(describeError(err)),
       },
@@ -217,11 +235,19 @@ export function GrantCreditScreen() {
           selected={borrower}
           error={errors.borrowerId}
           onSelect={(b) => {
-            setBorrower(b);
+            setBorrowerChoice(b);
             setErrors((e) => ({ ...e, borrowerId: undefined }));
           }}
         />
         {blocked ? <Banner tone="danger" title={t("credit.new.borrower.blocked")} /> : null}
+        {params.borrowerId && prefilled.isPending ? (
+          <Text variant="caption" tone="muted">
+            {t("credit.new.borrower.prefilling")}
+          </Text>
+        ) : null}
+        {params.borrowerId && prefilled.isSuccess && prefilled.data === null && borrowerChoice === null ? (
+          <Banner tone="warning" title={t("credit.new.borrower.prefillMissing")} />
+        ) : null}
 
         <Field label={t("credit.new.zone")} error={errors.zoneId} required>
           <Select
@@ -314,6 +340,8 @@ export function GrantCreditScreen() {
             {errors.fundingCashBoxId}
           </Text>
         ) : null}
+
+        <CreditQuoteCard input={quoteInput} />
 
         <Button
           label={t("credit.new.submit")}

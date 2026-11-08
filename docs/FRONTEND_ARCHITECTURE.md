@@ -2,7 +2,7 @@
 
 > **Estado:** documento vivo. Complementa [ARCHITECTURE.md](ARCHITECTURE.md) (fuente de verdad del sistema).
 > **Ámbito:** la app cliente `apps/mobile` (Expo SDK 56 + Expo Router + NativeWind v4) y el design system `@preztiaos/ui`.
-> **Última actualización:** 2026-11-08 (Fases 0 y 1 de usabilidad, ADR #50 y #51: `MoneyInput`, `ConfirmModal`, `ToastProvider`, mapa de errores de zod, cola offline con fallidas visibles, sesión con refresco, "Mis cobros de hoy", búsqueda unificada `q`).
+> **Última actualización:** 2026-11-08 (Fases 0, 1 y 2 de usabilidad, ADR #50, #51 y #52: `MoneyInput`, `ConfirmModal`, `ToastProvider`, mapa de errores de zod, cola offline con fallidas visibles, sesión con refresco, "Mis cobros de hoy", búsqueda unificada `q`).
 
 Esta guía define **cómo se escribe el frontend** para cumplir —y demostrar— los atributos de
 calidad vinculantes de [§3](ARCHITECTURE.md#3-atributos-de-calidad-y-estándares-de-código) y
@@ -133,7 +133,7 @@ Nacen del informe [INFORME_USABILIDAD.md](INFORME_USABILIDAD.md). Son obligatori
 | **Sin señal no se pierde ni se repite.** | La cola offline (`core/offline/queue.ts`) notifica pendientes (`subscribePending`) y cada barrido devuelve `processed`/`dropped`; `useOfflineSync` corre al montar, al volver la red (web) y al volver la app al frente (`AppState`), y el layout lo cuenta con toasts. |
 | **Nunca datos de ejemplo como si fueran reales.** | Sin `placeholderData` con mocks; mientras carga se usan `Skeleton` con la silueta de la pantalla. |
 | **Errores en el idioma de la persona.** | `installZodErrorMap()` en la raíz traduce los mensajes de zod; los `DomainError` siguen mapeados en `core/errors`. Un error de carga se muestra con `ErrorState` + `retryLabel={t("common.retry")}`, nunca como lista vacía. |
-| **Un solo idioma por sesión.** | El operador ve la app en `es` (`detectLocale()` fijo) hasta completar pt-BR; el idioma al cliente es del tenant (ADR #47). Las primitivas de `@preztiaos/ui` reciben sus textos por prop (`closeLabel`, `retryLabel`, `invalidLabel`). `tf(key, vars)` interpola `{n}`. |
+| **Un solo idioma por sesión, elegido por la persona.** | El operador elige Español o Português en el menú de usuario (`useLocale`/`setLocale`, persistido); por defecto `es`. El idioma al cliente es del tenant (ADR #47). Las primitivas de `@preztiaos/ui` reciben sus textos por prop (`closeLabel`, `retryLabel`, `invalidLabel`). `tf(key, vars)` interpola `{n}`. El diccionario pt-BR cubre el 100 % de las claves (prueba `dictionary.test.ts`). |
 | **Cada pantalla apilada tiene salida.** | Todas las rutas de `app/(app)/_layout.tsx` (también las modales) declaran `detail(título, ancla)` para el botón atrás con fallback en web. |
 
 ## 8. Sesión, cola offline y lista operativa del cobrador (Fase 1, ADR #51)
@@ -145,3 +145,15 @@ Nacen del informe [INFORME_USABILIDAD.md](INFORME_USABILIDAD.md). Son obligatori
 | **Mis cobros de hoy** | `features/collections/api/today-queries.ts`, `features/collections/screens/collection-today-screen.tsx` (hub Clientes del cobrador e Inicio) | Todos los clientes asignados (no solo los en mora) con cuota, lo que debe hoy, saldo y estado (semáforo); búsqueda `q` con `useDebouncedValue`; botón **Cobrar** → abono; tocar la fila → detalle del cobro (bitácora, llamar). Al registrar el abono se invalidan `collectionTodayKeys.all` y las visitas. El servidor hace el resto del gesto (parada de ruta liquidada + visita). |
 | **Búsqueda en servidor** | `features/accounts/api/queries.ts`, `features/borrowers/api/queries.ts#useBorrowersInfinite` | Un solo campo "nombre, cédula o teléfono" que envía `q`; filtros de estado al servidor (`status`, `onlyOverdue`); nunca filtrar las páginas ya cargadas. Los pickers muestran "Mostrando N de M". |
 | **Asignación por deltas** | `features/collectors/api/queries.ts#useUpdateCollectorClients`, `assign-clients-screen.tsx` | Guardar envía solo `{ add, remove }` calculados frente a `assigned`; nunca reemplaza la cartera con lo cargado. |
+
+## 9. Fechas, idioma y pantallas de decisión (Fase 2, ADR #52)
+
+| Regla | Cómo se cumple |
+|---|---|
+| **Fechas siempre legibles.** | `formatDate` ("8 nov 2026"), `formatShortDate` ("8 nov"), `formatDateTime` ("8 nov, 14:05", con la zona horaria de la empresa cuando se conoce) de `@preztiaos/ui`. Prohibido mostrar ISO crudo o `dueDate.slice(5)`. Toda captura de fecha usa `DateField` (web: selector nativo; nativo: máscara AAAA-MM-DD + chips). |
+| **Decidir viendo el cronograma.** | `useCreditQuote` + `CreditQuoteCard` en otorgar y en el modal de aprobación: cuota, total, interés, primera y última fecha, en vivo con debounce; nunca bloquea el envío. |
+| **Un solo detalle por entidad.** | `/credit/:id` y `/account/:creditId` renderizan `AccountDetailScreen`; el título de ruta es "Detalle del crédito"; al llegar tras otorgar se muestra un toast con la cuota real. |
+| **Nombre antes que correo.** | Donde el contrato traiga `collectorName`/`actorName`/`requesterName`/`assignedToName`/`name`, la UI muestra `nombre ?? correo`. Al crear usuarios se pide `displayName` y las zonas se eligen con casillas (`ZoneChecklist`). |
+| **Idioma conmutable.** | `core/i18n` expone un store reactivo (`useLocale`, `setLocale` persistido); el selector vive en el menú de usuario; cambiar idioma también ajusta `setDefaultMoneyLocale`. El diccionario pt-BR debe cubrir el 100 % de las claves (comprobar con el diff de claves antes de mergear). |
+| **Nada se pierde al cambiar de pestaña.** | `SettingsDirtyContext`: cada tab registra `isDirty`; el layout confirma antes de cambiar y avisa en web con `beforeunload`. |
+| **Empezar sin adivinar.** | `OnboardingChecklist` en Inicio (ADMIN/COORDINATOR) lista los prerequisitos para operar con su acceso directo; se oculta cuando todo está completo. |

@@ -13,11 +13,13 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import {
+  ChangeOwnPasswordHandler,
   CreateUserHandler,
   DeactivateUserHandler,
   UpdateUserHandler,
 } from '@preztiaos/application';
 import {
+  changeMyPasswordInput,
   createUserInput,
   updateUserInput,
   userRole as userRoleSchema,
@@ -32,12 +34,14 @@ import { ScryptPasswordHasher } from '../auth/password-hasher';
 
 const uuid = z.string().uuid();
 
-// Roles que pueden administrar usuarios: ADMIN (todo el tenant) y COORDINATOR (crea
-// cobradores en su alcance). La jerarquía fina la valida el caso de uso.
+// Roles que pueden administrar usuarios: ADMIN (todo el tenant) y COORDINATOR (sus cobradores:
+// los crea, les restablece la contraseña y les edita nombre/zonas/estado). Que el COORDINATOR
+// solo alcance a cobradores de su subárbol lo impone el caso de uso (defensa en profundidad).
 const USER_MANAGER_ROLES = ['ADMIN', 'COORDINATOR'] as const;
-// Editar/desactivar usuarios arbitrarios es exclusivo del ADMIN (evita que un coordinador
-// modifique a otros usuarios); el coordinador solo CREA cobradores y les asigna clientes.
+// Desactivar usuarios arbitrarios es exclusivo del ADMIN.
 const ADMIN_ONLY = ['ADMIN'] as const;
+// Cualquier rol del tenant cambia su PROPIA contraseña (el SUPER_ADMIN no tiene tenant).
+const TENANT_ROLES = ['ADMIN', 'COORDINATOR', 'COLLECTOR'] as const;
 
 /**
  * Frontera HTTP del CRUD de usuarios del tenant. Protegido por JWT (tenant del header =
@@ -50,6 +54,7 @@ export class UsersController {
   private readonly createHandler: CreateUserHandler;
   private readonly updateHandler: UpdateUserHandler;
   private readonly deactivateHandler: DeactivateUserHandler;
+  private readonly changeOwnPasswordHandler: ChangeOwnPasswordHandler;
 
   constructor(
     private readonly users: UserDrizzleRepository,
@@ -57,8 +62,33 @@ export class UsersController {
     private readonly hasher: ScryptPasswordHasher,
   ) {
     this.createHandler = new CreateUserHandler(this.users, this.hasher);
-    this.updateHandler = new UpdateUserHandler(this.users);
+    this.updateHandler = new UpdateUserHandler(this.users, this.hasher);
     this.deactivateHandler = new DeactivateUserHandler(this.users);
+    this.changeOwnPasswordHandler = new ChangeOwnPasswordHandler(
+      this.users,
+      this.hasher,
+    );
+  }
+
+  /**
+   * Cambio de la PROPIA contraseña (exige la actual). La contraseña nunca se registra: el
+   * `AuditInterceptor` enmascara todo campo cuyo nombre contenga "password" antes de auditar.
+   */
+  @Post('me/password')
+  @HttpCode(204)
+  async changeMyPassword(
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
+  ): Promise<void> {
+    requireTenant(tenantId);
+    const session = requireRole(authorization, TENANT_ROLES);
+    const dto = changeMyPasswordInput.parse(body);
+    await this.changeOwnPasswordHandler.execute({
+      actor: actorFrom(session),
+      currentPassword: dto.currentPassword,
+      newPassword: dto.newPassword,
+    });
   }
 
   @Get('users')
@@ -101,7 +131,7 @@ export class UsersController {
     @Body() body: unknown,
   ) {
     requireTenant(tenantId);
-    const session = requireRole(authorization, ADMIN_ONLY);
+    const session = requireRole(authorization, USER_MANAGER_ROLES);
     const dto = updateUserInput.parse(body);
     return this.updateHandler.execute({
       actor: actorFrom(session),

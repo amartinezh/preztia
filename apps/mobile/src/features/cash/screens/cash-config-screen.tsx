@@ -614,7 +614,7 @@ function CashBoxesSection() {
   }));
   const collectorOptions: SelectOption<string>[] = (
     collectors.data?.pages.flatMap((p) => p.items) ?? []
-  ).map((u) => ({ value: u.id, label: u.email }));
+  ).map((u) => ({ value: u.id, label: u.displayName ?? u.email }));
   const collectorLabel = (id: string | null) =>
     id ? collectorOptions.find((c) => c.value === id)?.label ?? id : null;
   const zones = useZonesList();

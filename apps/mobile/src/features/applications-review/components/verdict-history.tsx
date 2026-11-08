@@ -1,7 +1,8 @@
-import { Badge, Card, EmptyState, Row, Stack, Text } from "@preztiaos/ui";
+import { Badge, Card, EmptyState, Row, Stack, Text, formatDateTime } from "@preztiaos/ui";
 import type { ValidationRunView } from "@preztiaos/contracts";
 
 import { useT } from "@/core/i18n";
+import { useOperationalSettings } from "@/features/settings/api/queries";
 import { documentLabel, severityTone, verdictBadge } from "./review-status";
 
 type Props = { history: ValidationRunView[] };
@@ -13,7 +14,8 @@ type Props = { history: ValidationRunView[] };
  * trazabilidad que el coordinador revisa antes de decidir.
  */
 export function VerdictHistory({ history }: Props) {
-  const { t } = useT();
+  const { t, locale } = useT();
+  const settings = useOperationalSettings();
   if (history.length === 0) {
     return <EmptyState title={t("review.detail.noHistory")} />;
   }
@@ -27,10 +29,10 @@ export function VerdictHistory({ history }: Props) {
               <Row gap="sm">
                 <Badge tone={badge.tone} label={badge.label} />
                 <Badge tone={run.score > 0 ? "warning" : "success"} label={`${t("review.detail.score")} ${run.score}`} />
-                {index === 0 ? <Badge tone="info" label="Vigente" /> : null}
+                {index === 0 ? <Badge tone="info" label={t("review.verdict.current")} /> : null}
               </Row>
               <Text variant="caption" tone="muted">
-                {new Date(run.createdAt).toLocaleString()}
+                {formatDateTime(run.createdAt, locale, settings.data?.timeZone)}
               </Text>
             </Row>
 

@@ -75,6 +75,7 @@ export class CashQueryRepository {
           expense: schema.expense,
           zoneName: schema.zone.name,
           requesterEmail: schema.appUser.email,
+          requesterName: schema.appUser.displayName,
         })
         .from(schema.expense)
         .leftJoin(schema.zone, eq(schema.zone.id, schema.expense.zoneId))
@@ -91,10 +92,11 @@ export class CashQueryRepository {
         ...new Set(rows.map((r) => r.expense.requestedBy)),
       ]);
       const items: Expense[] = rows.map(
-        ({ expense: row, zoneName, requesterEmail }) => ({
+        ({ expense: row, zoneName, requesterEmail, requesterName }) => ({
           id: row.id,
           requestedBy: row.requestedBy,
           requesterEmail: requesterEmail ?? null,
+          requesterName: requesterName ?? null,
           description: row.description,
           amountMinor: row.amountMinor,
           status: row.status,
@@ -131,6 +133,7 @@ export class CashQueryRepository {
           accountNumber: schema.tenantBankAccount.accountNumber,
           assignedTo: schema.cashBox.assignedTo,
           assignedToEmail: schema.appUser.email,
+          assignedToName: schema.appUser.displayName,
           balanceMinor: signedSum,
         })
         .from(schema.cashBox)
@@ -152,6 +155,7 @@ export class CashQueryRepository {
           schema.tenantBankAccount.bankName,
           schema.tenantBankAccount.accountNumber,
           schema.appUser.email,
+          schema.appUser.displayName,
         );
 
       // Última conciliación por caja (la más reciente): para resaltar descuadres (Req 7).
@@ -214,6 +218,7 @@ export class CashQueryRepository {
           accountNumberMasked: maskAccountNumber(row.accountNumber),
           assignedTo: row.assignedTo,
           assignedToEmail: row.assignedToEmail ?? null,
+          assignedToName: row.assignedToName ?? null,
           needsClose,
           lastReconciliation: lastByBox.get(row.id) ?? null,
         };

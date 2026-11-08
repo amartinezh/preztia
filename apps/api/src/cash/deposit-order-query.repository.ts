@@ -67,7 +67,7 @@ export class DepositOrderQueryRepository {
     });
   }
 
-  /** Bitácora completa, en orden cronológico, con el email del actor. */
+  /** Bitácora completa, en orden cronológico, con el email y el nombre del actor. */
   async events(input: {
     tenantId: string;
     orderId: string;
@@ -79,6 +79,7 @@ export class DepositOrderQueryRepository {
         .select({
           event: schema.fieldOrderEvent,
           actorEmail: schema.appUser.email,
+          actorName: schema.appUser.displayName,
         })
         .from(schema.fieldOrderEvent)
         .leftJoin(
@@ -87,11 +88,12 @@ export class DepositOrderQueryRepository {
         )
         .where(eq(schema.fieldOrderEvent.orderId, input.orderId))
         .orderBy(asc(schema.fieldOrderEvent.createdAt));
-      return rows.map(({ event, actorEmail }) => ({
+      return rows.map(({ event, actorEmail, actorName }) => ({
         id: event.id,
         type: event.type,
         actorId: event.actorId,
         actorEmail: actorEmail ?? null,
+        actorName: actorName ?? null,
         message: event.message,
         payload: (event.payload as Record<string, unknown> | null) ?? null,
         createdAt: event.createdAt.toISOString(),
@@ -197,6 +199,7 @@ function selectOrders(tx: Tx) {
     .select({
       order: schema.fieldOrder,
       collectorEmail: schema.appUser.email,
+      collectorName: schema.appUser.displayName,
       zoneName: schema.zone.name,
       destinationName: destinationBox.name,
       bankCreditId: schema.incomingCredit.id,
@@ -229,6 +232,7 @@ function toView(r: OrderSelection, currency: string): DepositOrder {
     status: o.status,
     collectorId: o.collectorId,
     collectorEmail: r.collectorEmail ?? null,
+    collectorName: r.collectorName ?? null,
     zoneId: o.zoneId,
     zoneName: r.zoneName ?? null,
     routeCashBoxId: o.routeCashBoxId,

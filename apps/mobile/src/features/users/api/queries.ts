@@ -40,17 +40,29 @@ export function useCreateUser() {
   });
 }
 
+/** Campos editables de un usuario; solo viajan los presentes (el contrato exige al menos uno). */
+export interface UserPatch {
+  active?: boolean;
+  zonePaths?: string[];
+  /** null borra el nombre visible. */
+  displayName?: string | null;
+  /** Restablece la contraseña de un usuario del alcance (ADMIN/COORDINATOR). */
+  password?: string;
+}
+
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; active?: boolean; zonePaths?: string[] }) =>
+    mutationFn: async ({ id, ...patch }: { id: string } & UserPatch) =>
       unwrap(
         await api.updateUser({
           headers: tenantHeader(),
-          params: { id: input.id },
+          params: { id },
           body: {
-            ...(input.active !== undefined ? { active: input.active } : {}),
-            ...(input.zonePaths !== undefined ? { zonePaths: input.zonePaths } : {}),
+            ...(patch.active !== undefined ? { active: patch.active } : {}),
+            ...(patch.zonePaths !== undefined ? { zonePaths: patch.zonePaths } : {}),
+            ...(patch.displayName !== undefined ? { displayName: patch.displayName } : {}),
+            ...(patch.password !== undefined ? { password: patch.password } : {}),
           },
         }),
       ),

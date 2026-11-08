@@ -7,6 +7,7 @@ import {
   Banner,
   Button,
   Card,
+  DateField,
   EmptyState,
   Field,
   Input,
@@ -77,6 +78,8 @@ export function PaymentsHubScreen() {
   const [filter, setFilter] = useState<AttemptFilter>("ALL");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [draft, setDraft] = useState<AdvancedDraft>(EMPTY_DRAFT);
+  // "Limpiar" remonta los campos de fecha: así también se descarta un texto a medio teclear.
+  const [resetKey, setResetKey] = useState(0);
   // Filtros avanzados YA aplicados (lo que consume la consulta).
   const [advanced, setAdvanced] = useState<PaymentAttemptsParams>({});
   const [filterError, setFilterError] = useState<string | null>(null);
@@ -114,6 +117,7 @@ export function PaymentsHubScreen() {
 
   const clearAdvanced = () => {
     setDraft(EMPTY_DRAFT);
+    setResetKey((k) => k + 1);
     setAdvanced({});
     setFilterError(null);
   };
@@ -215,23 +219,25 @@ export function PaymentsHubScreen() {
 
                 <Row gap="sm">
                   <View className="flex-1">
-                    <Field label={t("payment.filter.fromDate")} hint={t("payment.filter.dateHint")}>
-                      <Input
-                        autoCapitalize="none"
-                        value={draft.fromDate}
-                        onChangeText={(fromDate) => setDraft((d) => ({ ...d, fromDate }))}
-                        placeholder="AAAA-MM-DD"
+                    <Field label={t("payment.filter.fromDate")}>
+                      <DateField
+                        key={`from-${resetKey}`}
+                        value={draft.fromDate || null}
+                        onChange={(fromDate) => setDraft((d) => ({ ...d, fromDate: fromDate ?? "" }))}
+                        quickOptions={[]}
+                        invalidLabel={t("date.invalid")}
                         accessibilityLabel={t("payment.filter.fromDate")}
                       />
                     </Field>
                   </View>
                   <View className="flex-1">
-                    <Field label={t("payment.filter.toDate")} hint={t("payment.filter.dateHint")}>
-                      <Input
-                        autoCapitalize="none"
-                        value={draft.toDate}
-                        onChangeText={(toDate) => setDraft((d) => ({ ...d, toDate }))}
-                        placeholder="AAAA-MM-DD"
+                    <Field label={t("payment.filter.toDate")}>
+                      <DateField
+                        key={`to-${resetKey}`}
+                        value={draft.toDate || null}
+                        onChange={(toDate) => setDraft((d) => ({ ...d, toDate: toDate ?? "" }))}
+                        quickOptions={[]}
+                        invalidLabel={t("date.invalid")}
                         accessibilityLabel={t("payment.filter.toDate")}
                       />
                     </Field>

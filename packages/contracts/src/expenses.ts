@@ -16,6 +16,7 @@ export const expense = z.object({
   requestedBy: z.string().uuid(),
   /** Email de quien lo pidió (para la bandeja del coordinador); null si ya no existe. */
   requesterEmail: z.string().nullable(),
+  requesterName: z.string().nullable(),
   description: z.string(),
   amountMinor: z.number().int(),
   status: expenseStatus,

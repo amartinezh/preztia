@@ -7,7 +7,7 @@ import { env } from "@/core/env";
 import { normalizeHttpError } from "@/core/errors";
 import { cashBoxKeys, transactionQuery, type TransactionFilters } from "@/features/cash/api/boxes-queries";
 
-// Períodos del histórico que se comparan en la tabla y la gráfica de tendencia.
+// Períodos del histórico por página: la tabla y la tendencia comparan los cargados ("Cargar más" trae otra página).
 export const HISTORY_PERIODS = 12;
 
 export const settlementKeys = {

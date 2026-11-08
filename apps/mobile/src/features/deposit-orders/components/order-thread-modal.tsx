@@ -40,7 +40,7 @@ export function OrderThreadModal({ orderId, onClose }: { orderId: string | null;
           <Stack key={e.id} gap="xs" className="border-b border-zinc-100 pb-2 dark:border-zinc-800">
             <Text variant="label">{t(`deposit.event.${e.type}`)}</Text>
             <Text variant="caption" tone="muted">
-              {e.actorEmail ?? e.actorId} · {new Date(e.createdAt).toLocaleString()}
+              {e.actorName ?? e.actorEmail ?? e.actorId} · {new Date(e.createdAt).toLocaleString()}
             </Text>
             {e.message ? <Text variant="body">{e.message}</Text> : null}
           </Stack>

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { DebtClosureType, RemittanceBoardRow } from "@preztiaos/contracts";
+import { Pressable } from "react-native";
+import type { DebtClosureType, RemittanceBoardRow, RemittanceObligationStatus } from "@preztiaos/contracts";
 import {
   Banner,
   Button,
@@ -15,7 +16,6 @@ import {
   Select,
   Spinner,
   Stack,
-  Switch,
   Text,
   type SelectOption,
 } from "@preztiaos/ui";
@@ -24,7 +24,7 @@ import { moneyInputText } from "@/components/money-input-text";
 import { Screen } from "@/components/screen";
 import { useSession } from "@/core/auth/session";
 import { isApiError } from "@/core/errors";
-import { useT } from "@/core/i18n";
+import { useT, type MessageKey } from "@/core/i18n";
 import { useCashBoxes, useCashDashboard } from "@/features/cash/api/boxes-queries";
 import {
   useCloseDebt,
@@ -35,32 +35,122 @@ import {
 import { ObligationBadge, RemittanceHistoryItem } from "../components/remittance-parts";
 import { IssueDepositModal } from "@/features/deposit-orders/components/issue-deposit-modal";
 
+// Chips del tablero: se clasifica en cliente con los campos que ya trae cada fila.
+type BoardFilter = "all" | "awaiting" | "late" | "upToDate" | "withDebt";
+const BOARD_FILTERS: readonly BoardFilter[] = ["all", "awaiting", "late", "upToDate", "withDebt"];
+const FILTER_LABEL: Record<BoardFilter, MessageKey> = {
+  all: "remittance.board.filter.all",
+  awaiting: "remittance.board.filter.awaiting",
+  late: "remittance.board.filter.late",
+  upToDate: "remittance.board.filter.upToDate",
+  withDebt: "remittance.board.filter.withDebt",
+};
+// Orden del tablero: primero lo que espera al coordinador (recibir), luego los atrasos.
+const STATUS_RANK: Record<RemittanceObligationStatus, number> = {
+  AWAITING_RECEPTION: 0,
+  LATE: 1,
+  PENDING: 2,
+  UP_TO_DATE: 3,
+};
+
+function matchesFilter(row: RemittanceBoardRow, filter: BoardFilter): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "awaiting":
+      return row.status === "AWAITING_RECEPTION";
+    case "late":
+      return row.status === "LATE";
+    case "upToDate":
+      // Sin atraso ni entrega por recibir: PENDING todavía está dentro de su hora límite.
+      return row.status === "UP_TO_DATE" || row.status === "PENDING";
+    case "withDebt":
+      return row.carriedDebtMinor > 0;
+  }
+}
+
+/** Nombre visible del cobrador: su nombre; si no, el correo; si no, el nombre de su caja. */
+function collectorLabel(row: RemittanceBoardRow): string {
+  return row.collectorName ?? row.collectorEmail ?? row.cashBoxName;
+}
+
 /**
- * Tablero de RENDICIONES (ADMIN/COORDINATOR, acotado por zonas en el servidor): quién no ha
- * rendido y cuánto atraso lleva, el efectivo en la calle, las rendiciones por recibir (con conteo)
- * y la deuda arrastrada de cada cobrador. Solo el ADMIN cierra deuda (nómina o condonación).
+ * Tablero de ENTREGAS de cobradores (ADMIN/COORDINATOR, acotado por zonas en el servidor): quién
+ * no ha entregado y cuánto atraso lleva, el efectivo en la calle, las entregas por recibir (con
+ * conteo) y la deuda arrastrada de cada cobrador. Los totales y los chips se calculan sobre lo
+ * cargado (paginado) y lo dicen; los "por recibir" van primero. Solo el ADMIN cierra deuda.
  */
 export function RemittancesBoardScreen() {
-  const { t } = useT();
+  const { t, tf } = useT();
   const { role } = useSession();
-  const [withDebt, setWithDebt] = useState(false);
+  const [filter, setFilter] = useState<BoardFilter>("all");
   const [receiving, setReceiving] = useState<RemittanceBoardRow | null>(null);
   const [closing, setClosing] = useState<RemittanceBoardRow | null>(null);
   const [ordering, setOrdering] = useState<RemittanceBoardRow | null>(null);
-  const board = useRemittanceBoard(withDebt);
-  const rows = board.data?.pages.flatMap((p) => p.items) ?? [];
+  const board = useRemittanceBoard(false);
+  const loaded = board.data?.pages.flatMap((p) => p.items) ?? [];
+  const rows = [...loaded]
+    .sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status])
+    .filter((row) => matchesFilter(row, filter));
   // Moneda del tenant (la del libro) y nombres de cobrador para encabezar el historial.
-  const currency = useCashDashboard().data?.currency ?? rows[0]?.currency ?? "";
-  const collectorNames = new Map(rows.map((r) => [r.collectorId, r.collectorEmail ?? r.cashBoxName]));
+  const currency = useCashDashboard().data?.currency ?? loaded[0]?.currency ?? "";
+  const collectorNames = new Map(loaded.map((r) => [r.collectorId, collectorLabel(r)]));
+  const cashTotalMinor = loaded.reduce((sum, r) => sum + r.cashInHandMinor, 0);
+  const debtTotalMinor = loaded.reduce((sum, r) => sum + r.carriedDebtMinor, 0);
 
   return (
     <Screen>
       <Stack gap="lg">
-        <Switch value={withDebt} onValueChange={setWithDebt} label={t("remittance.board.withDebt")} />
+        {loaded.length > 0 ? (
+          <Card>
+            <Stack gap="xs">
+              <Row className="items-center justify-between">
+                <Text tone="muted">{t("remittance.board.totals.cash")}</Text>
+                <MoneyText variant="label" amountMinor={cashTotalMinor} currency={currency} />
+              </Row>
+              <Row className="items-center justify-between">
+                <Text tone={debtTotalMinor > 0 ? "danger" : "muted"}>{t("remittance.board.totals.debt")}</Text>
+                <MoneyText
+                  variant="label"
+                  tone={debtTotalMinor > 0 ? "danger" : "default"}
+                  amountMinor={debtTotalMinor}
+                  currency={currency}
+                />
+              </Row>
+              <Text variant="caption" tone="muted">
+                {tf("remittance.board.totals.of", { n: loaded.length })}
+              </Text>
+            </Stack>
+          </Card>
+        ) : null}
+
+        <Row gap="sm" className="flex-wrap">
+          {BOARD_FILTERS.map((f) => {
+            const active = f === filter;
+            return (
+              <Pressable
+                key={f}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                onPress={() => setFilter(f)}
+                className={`min-h-[36px] justify-center rounded-full border px-3 ${
+                  active ? "border-brand-600 bg-brand-50 dark:bg-zinc-800" : "border-zinc-200 dark:border-zinc-700"
+                }`}
+              >
+                <Text variant="caption" tone={active ? "primary" : "muted"}>
+                  {t(FILTER_LABEL[f])}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </Row>
 
         {board.isPending ? <Spinner label={t("common.loading")} /> : null}
-        {!board.isPending && rows.length === 0 ? (
+        {!board.isPending && loaded.length === 0 ? (
           <Text tone="muted">{t("remittance.board.empty")}</Text>
+        ) : null}
+        {!board.isPending && loaded.length > 0 && rows.length === 0 ? (
+          <Text tone="muted">{t("remittance.board.filterEmpty")}</Text>
         ) : null}
         {rows.map((row) => (
           <BoardCard
@@ -112,7 +202,7 @@ function BoardCard({
       <Stack gap="xs">
         <Row className="items-center justify-between">
           <Stack gap="xs" className="flex-1 pr-2">
-            <Text variant="label">{row.collectorEmail ?? row.cashBoxName}</Text>
+            <Text variant="label">{collectorLabel(row)}</Text>
             <Text variant="caption" tone="muted">
               {row.cashBoxName}
               {row.zoneName ? ` · ${row.zoneName}` : ""}

@@ -10,6 +10,7 @@ import { useDashboardKpis } from "../api/queries";
 import { BarChart } from "../components/bar-chart";
 import { DonutChart } from "../components/donut-chart";
 import { KpiCard } from "../components/kpi-card";
+import { OnboardingChecklist } from "../components/onboarding-checklist";
 import { dashboardPalette } from "../components/palette";
 import { PendingList, type PendingItem } from "../components/pending-list";
 import { PeriodToggle, type PeriodOption } from "../components/period-toggle";
@@ -73,6 +74,9 @@ export function DashboardScreen() {
             {t("home.title")}
           </Text>
         </Stack>
+
+        {/* ── Puesta en marcha: solo mientras falte algo por configurar ─────── */}
+        <OnboardingChecklist />
 
         {query.isError && !kpis ? (
           <ErrorState

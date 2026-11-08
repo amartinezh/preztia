@@ -13,12 +13,15 @@ import { z } from 'zod';
 import {
   GrantCreditHandler,
   RegisterMigratedCreditHandler,
+  quoteCredit,
 } from '@preztiaos/application';
 import {
   grantCreditInput,
+  quoteCreditInput,
   registerMigratedCreditInput,
   listAccountsQuery,
   paginationQuery,
+  type CreditQuoteOutput,
 } from '@preztiaos/contracts';
 import { CreditDrizzleRepository } from './credit.repository';
 import { CreditQueryRepository } from './credit-query.repository';
@@ -32,7 +35,9 @@ import { requireRole } from '../auth/require-role';
 import { requireReviewer } from '../auth/require-reviewer';
 import { Idempotent } from '../observability/idempotent.decorator';
 import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
+import { tenantToday } from '../tenant-config/tenant-timezone';
 import { TenantConfigRepository } from '../tenant-config/tenant-config.repository';
+import { withTenantTxFor } from '../tenancy/unit-of-work';
 import { PaymentPlanRepository } from './plans/payment-plan.repository';
 
 const uuid = z.string().uuid();
@@ -81,6 +86,34 @@ export class CreditController {
     return { items, page, pageSize, total };
   }
 
+  /**
+   * Cotiza el cronograma SIN persistir nada: la misma regla pura que otorga (`quoteCredit`), con la
+   * moneda del tenant y, si no viene fecha, el "hoy" de la EMPRESA (ADR #46). No es idempotente
+   * porque no muta estado.
+   */
+  @Post('credits/quote')
+  async quote(
+    @Body() body: unknown,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ): Promise<CreditQuoteOutput> {
+    const tenant = requireTenant(tenantId);
+    // Mismo listón que otorgar: quien no puede desembolsar tampoco negocia términos.
+    requireReviewer(authorization);
+    const dto = quoteCreditInput.parse(body);
+    const startDate =
+      dto.startDate ??
+      (await withTenantTxFor(tenant, (tx) => tenantToday(tx, tenant)));
+    return quoteCredit({
+      principalMinor: dto.principalMinor,
+      interestPct: dto.interestPct,
+      installmentsCount: dto.installmentsCount,
+      ...(dto.frequency ? { frequency: dto.frequency } : {}),
+      startDate,
+      currency: await resolveTenantCurrency(tenant),
+    });
+  }
+
   @Post('credits')
   @Idempotent()
   async grant(
@@ -100,6 +133,8 @@ export class CreditController {
       currency: await resolveTenantCurrency(tenant),
       grantedBy: reviewer.userId,
       grantedByRole: reviewer.role,
+      // El crédito empieza HOY según la empresa (misma fecha que muestra la cotización).
+      startDate: await withTenantTxFor(tenant, (tx) => tenantToday(tx, tenant)),
     });
   }
 

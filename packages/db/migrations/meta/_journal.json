@@ -505,6 +505,13 @@
       "when": 1791236390878,
       "tag": "0071_fixed_mercury",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1794151485591,
+      "tag": "0072_chilly_malice",
+      "breakpoints": true
     }
   ]
 }

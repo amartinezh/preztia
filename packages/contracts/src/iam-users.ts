@@ -21,6 +21,8 @@ const zonePath = z.string().regex(/^[a-z0-9_]+(?:\.[a-z0-9_]+)*$/);
 export const userSummary = z.object({
   id: z.string().uuid(),
   email: z.string(),
+  /** Nombre visible de la persona (p. ej. "Ana Souza"); null en cuentas sin nombre configurado. */
+  displayName: z.string().nullable(),
   role: userRole,
   zonePaths: z.array(z.string()),
   active: z.boolean(),
@@ -35,11 +37,14 @@ export const listUsersOutput = z.object({
   total: z.number().int(),
 });
 
+const displayName = z.string().trim().min(2).max(80);
+
 export const createUserInput = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   role: creatableRole,
   zonePaths: z.array(zonePath).default([]),
+  displayName: displayName.optional(),
 });
 export type CreateUserInput = z.infer<typeof createUserInput>;
 
@@ -47,16 +52,41 @@ export const updateUserInput = z
   .object({
     zonePaths: z.array(zonePath).optional(),
     active: z.boolean().optional(),
+    displayName: displayName.nullable().optional(),
+    /** Restablece la contraseña de un usuario del alcance (ADMIN/COORDINATOR): quien olvida su clave no pierde su cuenta. */
+    password: z.string().min(8).optional(),
   })
-  .refine((v) => v.zonePaths !== undefined || v.active !== undefined, {
-    message: "Nada que actualizar",
-  });
+  .refine(
+    (v) =>
+      v.zonePaths !== undefined ||
+      v.active !== undefined ||
+      v.displayName !== undefined ||
+      v.password !== undefined,
+    { message: "Nada que actualizar" },
+  );
+
+/** Cambio de la PROPIA contraseña: exige la actual (prueba de posesión) y una nueva distinta. */
+export const changeMyPasswordInput = z
+  .object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(8),
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, { message: "La nueva contraseña debe ser distinta" });
+export type ChangeMyPasswordInput = z.infer<typeof changeMyPasswordInput>;
 
 // El `Authorization: Bearer` lo inyecta el fetcher del cliente; el contrato solo declara
 // el `x-tenant-id` (que el JwtGuard exige que coincida con el claim).
 const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 
 export const iamUsersContract = c.router({
+  changeMyPassword: {
+    method: "POST",
+    path: "/me/password",
+    headers: tenantHeaders,
+    body: changeMyPasswordInput,
+    responses: { 204: z.object({}) },
+    summary: "Cambia la contraseña del usuario autenticado (exige la actual)",
+  },
   listUsers: {
     method: "GET",
     path: "/users",

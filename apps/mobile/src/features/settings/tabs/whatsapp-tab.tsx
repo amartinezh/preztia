@@ -31,6 +31,7 @@ import {
   useUpdateAssistantConfig,
   useUpdateMessagingChannels,
 } from "../api/queries";
+import { useSettingsDirty } from "../components/settings-dirty-context";
 
 /**
  * Tab CANALES / IA (solo ADMIN): canales de mensajería habilitados (WhatsApp y/o Telegram), asistente
@@ -60,6 +61,7 @@ function MessagingChannelsCard() {
   const [draft, setDraft] = useState<MessagingChannelsSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  useSettingsDirty("whatsapp.messaging", draft !== null);
 
   if (query.isPending || !query.data) return <Spinner label={t("common.loading")} />;
   const form = draft ?? query.data;
@@ -142,6 +144,7 @@ function AssistantConfigCard() {
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  useSettingsDirty("whatsapp.assistant", knowledgeBase !== null || provider !== null || apiKey !== "");
 
   if (query.isPending || !query.data) return <Spinner label={t("common.loading")} />;
   const view = query.data;
@@ -263,6 +266,7 @@ function DocumentRequirementsCard() {
   const [drafts, setDrafts] = useState<Record<string, DocDraft> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  useSettingsDirty("whatsapp.documents", drafts !== null);
 
   if (query.isPending || !query.data) return <Spinner label={t("common.loading")} />;
 

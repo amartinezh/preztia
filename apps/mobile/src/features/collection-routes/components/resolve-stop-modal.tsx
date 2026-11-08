@@ -1,7 +1,21 @@
 import { useState } from "react";
 import { Pressable } from "react-native";
 import type { MyRouteStop, StopOutcome } from "@preztiaos/contracts";
-import { Banner, Button, Field, Input, Modal, MoneyInput, Row, Stack, Text } from "@preztiaos/ui";
+import {
+  Banner,
+  Button,
+  DateField,
+  Field,
+  Input,
+  Modal,
+  MoneyInput,
+  Row,
+  Stack,
+  Text,
+  addDaysIso,
+  nextWeekdayIso,
+  todayIso,
+} from "@preztiaos/ui";
 
 import { moneyInputText } from "@/components/money-input-text";
 import { isApiError } from "@/core/errors";
@@ -10,6 +24,8 @@ import { newIdempotencyKey } from "@/core/ids";
 import { useResolveRouteStop } from "../api/queries";
 
 const OUTCOMES: StopOutcome[] = ["PAID", "NOT_PAID", "PROMISE", "NOT_FOUND"];
+// Día de la semana (0 = domingo) del chip "Lunes" en la promesa de pago.
+const MONDAY = 1;
 
 /**
  * Liquidar la visita: pagó (con el monto cobrado en efectivo, que entra a tu caja de ruta), no pagó
@@ -22,15 +38,24 @@ export function ResolveStopModal({ stop, onClose }: { stop: MyRouteStop; onClose
   const [amountText, setAmountText] = useState(moneyInputText(stop.amountToCollectMinor));
   const [amountMinor, setAmountMinor] = useState<number | null>(stop.amountToCollectMinor);
   const [reason, setReason] = useState("");
-  const [promiseDate, setPromiseDate] = useState("");
+  const [promiseDate, setPromiseDate] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   // Clave estable por intento: un reintento manual tras perder la respuesta no abona dos veces.
   const [idempotencyKey, setIdempotencyKey] = useState(() => newIdempotencyKey());
   const paidAmountMissing = outcome === "PAID" && (amountMinor === null || amountMinor <= 0);
+  const promiseDateMissing = outcome === "PROMISE" && promiseDate === null;
+  // Fechas habituales de una promesa de pago (desde hoy; "Lunes" es el próximo).
+  const today = todayIso();
+  const promiseQuickOptions = [
+    { label: t("common.today"), value: today },
+    { label: t("date.tomorrow"), value: addDaysIso(today, 1) },
+    { label: t("date.inTwoDays"), value: addDaysIso(today, 2) },
+    { label: t("date.monday"), value: nextWeekdayIso(today, MONDAY) },
+  ];
 
   const submit = () => {
-    if (paidAmountMissing) return;
+    if (paidAmountMissing || promiseDateMissing) return;
     setError(null);
     resolve.mutate(
       {
@@ -39,7 +64,7 @@ export function ResolveStopModal({ stop, onClose }: { stop: MyRouteStop; onClose
         outcome,
         ...(outcome === "PAID" && amountMinor !== null ? { collectedMinor: amountMinor } : {}),
         ...(outcome === "NOT_PAID" && reason.trim() ? { reason: reason.trim() } : {}),
-        ...(outcome === "PROMISE" && promiseDate.trim() ? { promiseDate: promiseDate.trim() } : {}),
+        ...(outcome === "PROMISE" && promiseDate !== null ? { promiseDate } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
       },
       {
@@ -93,8 +118,15 @@ export function ResolveStopModal({ stop, onClose }: { stop: MyRouteStop; onClose
           </Field>
         ) : null}
         {outcome === "PROMISE" ? (
-          <Field label={t("route.resolve.promiseDate")} hint={t("common.dateFormatHint")} required>
-            <Input value={promiseDate} onChangeText={setPromiseDate} />
+          <Field label={t("route.resolve.promiseDate")} required>
+            <DateField
+              value={promiseDate}
+              onChange={setPromiseDate}
+              min={today}
+              quickOptions={promiseQuickOptions}
+              invalidLabel={t("date.invalid")}
+              accessibilityLabel={t("route.resolve.promiseDate")}
+            />
           </Field>
         ) : null}
         <Field label={t("route.resolve.note")}>
@@ -103,7 +135,7 @@ export function ResolveStopModal({ stop, onClose }: { stop: MyRouteStop; onClose
         <Button
           label={t("route.resolve.submit")}
           loading={resolve.isPending}
-          disabled={paidAmountMissing}
+          disabled={paidAmountMissing || promiseDateMissing}
           block
           onPress={submit}
         />

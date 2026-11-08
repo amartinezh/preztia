@@ -20,6 +20,7 @@ import { useT } from "@/core/i18n";
 import { useCashBoxes, useFundingBoxes } from "../../api/boxes-queries";
 import { useReviewExpense } from "../../api/queries";
 import { PayingBoxPicker, type PayingBoxOption } from "../paying-box-picker";
+import { ReceiptThumbnail } from "../receipt-thumbnail";
 
 /**
  * Opciones de pago del gasto: la caja de ruta de quien lo pidió (se descuenta de su efectivo y entra
@@ -81,12 +82,32 @@ export function ExpenseReviewModal({
     <Modal visible onClose={onClose} title={t("cash.expenses.review")} closeLabel={t("common.close")}>
       <Stack gap="sm" className="p-4">
         {error ? <Banner tone="danger" title={error} /> : null}
-        <Row className="items-center justify-between">
-          <Text variant="label" className="flex-1 pr-2">
-            {expense.description}
+        {/* Lo que se decide, a la vista: concepto, monto y caja pagadora junto al comprobante. */}
+        <Stack gap="xs" className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+          <Row className="items-center justify-between">
+            <Text tone="muted">{t("expenses.review.concept")}</Text>
+            <Text variant="label" className="flex-1 pl-3 text-right">
+              {expense.description}
+            </Text>
+          </Row>
+          <Row className="items-center justify-between">
+            <Text tone="muted">{t("expenses.review.amount")}</Text>
+            <MoneyText variant="label" amountMinor={expense.amountMinor} currency={currency} />
+          </Row>
+          <Row className="items-center justify-between">
+            <Text tone="muted">{t("expenses.review.payingBox")}</Text>
+            <Text variant="label" tone={selected ? "default" : "muted"}>
+              {selected?.name ?? t("expenses.review.payingBoxUnset")}
+            </Text>
+          </Row>
+        </Stack>
+        {expense.hasReceipt ? (
+          <ReceiptThumbnail path={`/expenses/${expense.id}/receipt`} title={t("cash.expenses.receipt")} />
+        ) : (
+          <Text variant="caption" tone="muted">
+            {t("receipt.none")}
           </Text>
-          <MoneyText variant="label" amountMinor={expense.amountMinor} currency={currency} />
-        </Row>
+        )}
 
         <Field label={t("cash.expenses.paidFrom")} hint={t("cash.expenses.paidFromHint")} required>
           {loading ? (

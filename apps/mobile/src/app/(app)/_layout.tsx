@@ -58,12 +58,12 @@ export default function AppLayout() {
         <Stack.Screen name="users" options={detail(t("users.tab"), "/settings?tab=users" as Href)} />
         <Stack.Screen name="credit/new" options={detail(t("credit.new.title"), "/cartera" as Href, "modal")} />
         <Stack.Screen name="credit/migrate" options={detail(t("migrate.title"), "/cartera" as Href, "modal")} />
-        <Stack.Screen name="credit/[id]" options={detail(t("credit.list.title"), "/cartera" as Href)} />
+        <Stack.Screen name="credit/[id]" options={detail(t("credit.detail.title"), "/cartera" as Href)} />
         <Stack.Screen name="payment/[creditId]" options={detail(t("payments.register"), "/" as Href, "modal")} />
         <Stack.Screen name="visit/[creditId]" options={detail(t("visits.detail.title"), "/visitas" as Href)} />
         <Stack.Screen name="collectors/[id]" options={detail(t("collectors.assign.title"), "/cuentas?tab=cobradores" as Href)} />
         <Stack.Screen name="applications/[id]" options={detail(t("review.detail.title"), "/applications" as Href)} />
-        <Stack.Screen name="account/[creditId]" options={detail(t("accounts.detail.title"), "/cartera" as Href)} />
+        <Stack.Screen name="account/[creditId]" options={detail(t("credit.detail.title"), "/cartera" as Href)} />
         <Stack.Screen name="payment-plans" options={detail(t("plans.tab"), "/settings?tab=plans" as Href)} />
         <Stack.Screen name="rejections" options={detail(t("review.rejections"), "/applications" as Href)} />
         <Stack.Screen name="lists" options={detail(t("lists.title"), "/cuentas" as Href)} />

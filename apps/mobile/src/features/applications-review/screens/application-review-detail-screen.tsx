@@ -1,12 +1,28 @@
 import { useState } from "react";
+import { View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import type { ApproveApplicationInput, RejectApplicationInput } from "@preztiaos/contracts";
-import { Badge, Button, Card, ErrorState, Row, Spinner, Stack, Text, minorToMajor } from "@preztiaos/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorState,
+  MoneyText,
+  Row,
+  Spinner,
+  Stack,
+  Text,
+  formatDateTime,
+  useBreakpoint,
+} from "@preztiaos/ui";
 
 import { Screen } from "@/components/screen";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
 import { newIdempotencyKey } from "@/core/ids";
+import { useTenantCurrency } from "@/features/cash/api/boxes-queries";
+import { useOperationalSettings } from "@/features/settings/api/queries";
+import { useZonesList } from "@/features/zones/api/queries";
 import {
   useApplicationReview,
   useApproveApplication,
@@ -15,7 +31,7 @@ import {
   useRejectApplication,
   type DocumentFileRef,
 } from "../api/queries";
-import { applicationStatusBadge } from "../components/review-status";
+import { applicationStatusBadge, verdictBadge } from "../components/review-status";
 import { DocumentsTable } from "../components/documents-table";
 import { LocationCard } from "../components/location-card";
 import { VerdictHistory } from "../components/verdict-history";
@@ -25,14 +41,18 @@ import { DecisionModal, type DecisionMode } from "../components/decision-modal";
 import { PlanOfferPanel } from "../components/plan-offer-panel";
 
 /**
- * Detalle del expediente para el coordinador: toda la información disponible para aprobar.
- * Tabla de documentos (con su estado y acceso al original), historial antifraude completo,
- * panel de conversación con el cliente y, al pie, las decisiones manuales (aprobar y generar
- * crédito / rechazar). Solo orquesta hooks + componentes; sin transporte ni reglas.
+ * Expediente para el coordinador: un RESUMEN arriba (solicitante, monto, zona, veredicto vigente,
+ * estado, antigüedad) con las decisiones a la mano, y debajo los documentos (con acceso al
+ * original) y la conversación / oferta / historial antifraude; en escritorio, en dos columnas.
+ * Las decisiones se repiten al pie para quien leyó todo. Solo orquesta hooks + componentes.
  */
 export function ApplicationReviewDetailScreen({ applicationId }: { applicationId: string }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const router = useRouter();
+  const { isDesktop } = useBreakpoint();
+  const currency = useTenantCurrency();
+  const zones = useZonesList();
+  const settings = useOperationalSettings();
   const query = useApplicationReview(applicationId);
   const approve = useApproveApplication(applicationId);
   const reject = useRejectApplication(applicationId);
@@ -52,12 +72,30 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
 
   if (query.isPending) return <Spinner label={t("common.loading")} />;
   if (query.isError) {
-    return <ErrorState title={t("review.detail.title")} description={t("errors.network")} onRetry={() => query.refetch()} />;
+    return (
+      <ErrorState
+        title={t("review.detail.title")}
+        description={t("errors.network")}
+        retryLabel={t("common.retry")}
+        onRetry={() => query.refetch()}
+      />
+    );
   }
 
   const detail = query.data;
   const status = applicationStatusBadge(detail.status);
+  const currentRun = detail.verdictHistory[0];
+  const verdict = verdictBadge(currentRun?.status ?? null);
   const decided = detail.status === "APPROVED" || detail.status === "REJECTED";
+  const applicantName = detail.extractedIdentity?.fullName ?? null;
+  const zoneName = detail.zoneId
+    ? ((zones.data?.items ?? []).find((z) => z.id === detail.zoneId)?.name ?? null)
+    : null;
+
+  const openDecision = (mode: Exclude<DecisionMode, null>) => {
+    setSubmitError(null);
+    setDecision(mode);
+  };
 
   const onApprove = (input: ApproveApplicationInput) => {
     setSubmitError(null);
@@ -65,7 +103,8 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
       onSuccess: (res) => {
         setIdempotencyKey(newIdempotencyKey());
         setDecision(null);
-        router.replace(`/credit/${res.creditId}` as Href);
+        // El detalle del crédito anuncia "Crédito otorgado · cuota $X" con la cuota real del servidor.
+        router.replace(`/credit/${res.creditId}?granted=1` as Href);
       },
       onError: (err) => setSubmitError(isApiError(err) ? t(err.messageKey) : t("errors.unknown")),
     });
@@ -91,74 +130,126 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
     }
   };
 
-  return (
-    <Screen>
-      <Stack gap="lg">
-        <Row className="justify-between">
-          <Stack gap="xs">
-            <Text variant="subtitle">{t("review.detail.title")}</Text>
-            <Text tone="muted">{detail.applicantPhone}</Text>
+  // Decisiones: arriba (en el resumen) y al pie. Resuelto el expediente, solo se informa.
+  const decisionButtons = !decided ? (
+    <Row gap="sm" className="flex-wrap">
+      <View className="min-w-[160px] flex-1">
+        <Button label={t("review.approve.submit")} block onPress={() => openDecision("approve")} />
+      </View>
+      <View className="min-w-[160px] flex-1">
+        <Button label={t("review.reject.submit")} variant="danger" block onPress={() => openDecision("reject")} />
+      </View>
+    </Row>
+  ) : (
+    <Text tone="muted">{t("review.detail.resolved")}</Text>
+  );
+
+  const summary = (
+    <Card>
+      <Stack gap="sm">
+        <Row className="items-start justify-between">
+          <Stack gap="xs" className="flex-1">
+            <Text variant="subtitle">{applicantName ?? detail.applicantPhone}</Text>
+            {applicantName ? <Text tone="muted">{detail.applicantPhone}</Text> : null}
           </Stack>
           <Badge tone={status.tone} label={status.label} />
         </Row>
-
-        <Button label={t("review.detail.viewConversation")} variant="secondary" onPress={() => setConversationOpen(true)} />
-
-        {/* Precarga: monto solicitado por WhatsApp + datos del cliente extraídos del OCR. */}
-        <Card>
-          <Stack gap="xs">
-            <Text variant="heading">{t("review.detail.applicant")}</Text>
-            <Row className="justify-between">
-              <Text tone="muted">{t("review.detail.requestedAmount")}</Text>
-              <Text variant="label">
-                {detail.requestedAmountMinor != null ? String(minorToMajor(detail.requestedAmountMinor)) : "—"}
-              </Text>
-            </Row>
-            <Row className="justify-between">
-              <Text tone="muted">{t("borrower.nationalId")}</Text>
-              <Text variant="label">{detail.extractedIdentity?.nationalId ?? "—"}</Text>
-            </Row>
-            <Row className="justify-between">
-              <Text tone="muted">{t("borrower.name")}</Text>
-              <Text variant="label">{detail.extractedIdentity?.fullName ?? "—"}</Text>
-            </Row>
-          </Stack>
-        </Card>
-
-        <Stack gap="sm">
-          <Text variant="heading">{t("review.detail.documents")}</Text>
-          <DocumentsTable
-            applicationId={applicationId}
-            documents={detail.documents}
-            onViewOriginal={setViewerFile}
+        <Row className="justify-between">
+          <Text tone="muted">{t("review.detail.requestedAmount")}</Text>
+          {detail.requestedAmountMinor != null ? (
+            <MoneyText variant="label" amountMinor={detail.requestedAmountMinor} currency={currency} />
+          ) : (
+            <Text variant="label">—</Text>
+          )}
+        </Row>
+        <Row className="justify-between">
+          <Text tone="muted">{t("review.detail.zone")}</Text>
+          <Text variant="label">{zoneName ?? "—"}</Text>
+        </Row>
+        <Row className="justify-between">
+          <Text tone="muted">{t("review.detail.verdict")}</Text>
+          <Badge
+            tone={verdict.tone}
+            label={currentRun ? `${verdict.label} ${currentRun.score}` : verdict.label}
           />
+        </Row>
+        <Row className="justify-between">
+          <Text tone="muted">{t("review.detail.received")}</Text>
+          <Text variant="label">{formatDateTime(detail.createdAt, locale, settings.data?.timeZone)}</Text>
+        </Row>
+        {decisionButtons}
+      </Stack>
+    </Card>
+  );
+
+  const documentsColumn = (
+    <Stack gap="lg">
+      <Stack gap="sm">
+        <Text variant="heading">{t("review.detail.documents")}</Text>
+        <DocumentsTable
+          applicationId={applicationId}
+          documents={detail.documents}
+          onViewOriginal={setViewerFile}
+        />
+      </Stack>
+      {detail.location ? <LocationCard location={detail.location} /> : null}
+    </Stack>
+  );
+
+  const historyColumn = (
+    <Stack gap="lg">
+      <Button label={t("review.detail.viewConversation")} variant="secondary" onPress={() => setConversationOpen(true)} />
+
+      {/* Datos del cliente extraídos del OCR (precarga del alta al aprobar). */}
+      <Card>
+        <Stack gap="xs">
+          <Text variant="heading">{t("review.detail.applicant")}</Text>
+          <Row className="justify-between">
+            <Text tone="muted">{t("borrower.nationalId")}</Text>
+            <Text variant="label">{detail.extractedIdentity?.nationalId ?? "—"}</Text>
+          </Row>
+          <Row className="justify-between">
+            <Text tone="muted">{t("borrower.name")}</Text>
+            <Text variant="label">{detail.extractedIdentity?.fullName ?? "—"}</Text>
+          </Row>
         </Stack>
+      </Card>
 
-        {detail.location ? <LocationCard location={detail.location} /> : null}
+      {!decided ? (
+        <PlanOfferPanel
+          planOffer={detail.planOffer}
+          offering={offer.isPending}
+          offerError={offerError}
+          requestedAmountMinor={detail.requestedAmountMinor}
+          onOffer={onOffer}
+        />
+      ) : null}
 
-        <Stack gap="sm">
-          <Text variant="heading">{t("review.detail.history")}</Text>
-          <VerdictHistory history={detail.verdictHistory} />
-        </Stack>
+      <Stack gap="sm">
+        <Text variant="heading">{t("review.detail.history")}</Text>
+        <VerdictHistory history={detail.verdictHistory} />
+      </Stack>
+    </Stack>
+  );
 
-        {!decided ? (
-          <PlanOfferPanel
-            planOffer={detail.planOffer}
-            offering={offer.isPending}
-            offerError={offerError}
-            requestedAmountMinor={detail.requestedAmountMinor}
-            onOffer={onOffer}
-          />
-        ) : null}
+  return (
+    <Screen>
+      <Stack gap="lg">
+        {summary}
 
-        {!decided ? (
-          <Stack gap="sm">
-            <Button label={t("review.approve.submit")} onPress={() => { setSubmitError(null); setDecision("approve"); }} />
-            <Button label={t("review.reject.submit")} variant="danger" onPress={() => { setSubmitError(null); setDecision("reject"); }} />
-          </Stack>
+        {isDesktop ? (
+          <Row gap="lg" className="items-start">
+            <View className="flex-1">{documentsColumn}</View>
+            <View className="flex-1">{historyColumn}</View>
+          </Row>
         ) : (
-          <Text tone="muted">Este expediente ya fue resuelto.</Text>
+          <>
+            {documentsColumn}
+            {historyColumn}
+          </>
         )}
+
+        {decisionButtons}
       </Stack>
 
       <ConversationPanel applicationId={applicationId} visible={conversationOpen} onClose={() => setConversationOpen(false)} />
@@ -171,7 +262,9 @@ export function ApplicationReviewDetailScreen({ applicationId }: { applicationId
         }
         onClose={() => setViewerFile(null)}
       />
+      {/* `key={mode}`: cada decisión arranca limpia (el motivo no se arrastra entre rechazar y aprobar). */}
       <DecisionModal
+        key={decision ?? "idle"}
         mode={decision}
         applicantPhone={detail.applicantPhone}
         planOffer={detail.planOffer}

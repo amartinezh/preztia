@@ -32,6 +32,9 @@ export const appUser = pgTable(
     // El resto de roles SIEMPRE lleva tenant_id (lo valida la capa de aplicación).
     tenantId: uuid("tenant_id"),
     email: text("email").notNull(),
+    // Nombre visible de la persona ("Ana Souza") para listados y tableros: hasta ahora el
+    // cobrador se identificaba solo por su correo. Nullable: cuentas antiguas sin nombre.
+    displayName: text("display_name"),
     passwordHash: text("password_hash").notNull(),
     role: userRole("role").notNull(),
     // Subárbol(es) de zonas asignadas (paths ltree) para authZ de alcance.

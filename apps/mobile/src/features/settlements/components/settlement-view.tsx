@@ -12,6 +12,7 @@ import { DataTable, type DataRow } from "@/components/data-table";
 import { csvDownloadAvailable, downloadCsv } from "@/core/export/download-csv";
 import { isApiError } from "@/core/errors";
 import { useT } from "@/core/i18n";
+import { formatDateTime, formatPeriodRange } from "@/core/locale/dates";
 import { useCashTransactions, type TransactionFilters } from "@/features/cash/api/boxes-queries";
 import { fetchLedgerCsv } from "../api/queries";
 import { CommissionPayModal, type CommissionPayee } from "./commission-pay-modal";
@@ -55,16 +56,14 @@ export function perMille(value: number | null | undefined): string {
  * del período con exportación CSV.
  */
 export function SettlementView({ view }: { view: View }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const s = view.snapshot;
   const money = (v: number) => formatMoney(v, view.currency);
   const withCommissions = hasCommissions(view);
   return (
     <Stack gap="lg">
       <Row className="flex-wrap items-center justify-between gap-2">
-        <Text variant="heading">
-          {view.periodStart} → {view.periodEnd}
-        </Text>
+        <Text variant="heading">{formatPeriodRange(view.periodStart, view.periodEnd, locale)}</Text>
         <Badge
           label={view.isOpen ? t("settlement.open") : view.retroactive ? t("settlement.retroactive") : t("settlement.closed")}
           tone={view.isOpen ? "warning" : "success"}
@@ -72,7 +71,7 @@ export function SettlementView({ view }: { view: View }) {
       </Row>
       {view.closedAt ? (
         <Text variant="caption" tone="muted">
-          {t("settlement.closedAt")} {new Date(view.closedAt).toLocaleString()}
+          {t("settlement.closedAt")} {formatDateTime(view.closedAt, locale)}
           {view.closedBy ? "" : ` · ${t("settlement.closedBySystem")}`}
         </Text>
       ) : null}
@@ -163,10 +162,12 @@ function TreasuryTable({ snapshot, money }: { snapshot: SettlementSnapshot; mone
     ...conceptRows,
     { key: "in", label: t("settlement.in"), cells: [...entities.map((e) => cell(e.inMinor)), cell(totals.inMinor)], strong: true },
     { key: "out", label: t("settlement.out"), cells: [...entities.map((e) => cell(e.outMinor)), cell(totals.outMinor)], strong: true },
-    ...(by === "boxes"
-      ? [{ key: "closing", label: t("settlement.closing"), cells: [...entities.map((e) => cell(e.closing)), cell(totals.closingMinor)], strong: true }]
-      : []),
   ];
+  // El saldo de cierre es el total de la tabla: va al pie, resaltado. Por zonas no hay saldo (solo flujos).
+  const footer: DataRow | undefined =
+    by === "boxes"
+      ? { key: "closing", label: t("settlement.closing"), cells: [...entities.map((e) => cell(e.closing)), cell(totals.closingMinor)], strong: true }
+      : undefined;
 
   return (
     <Stack gap="sm">
@@ -187,7 +188,7 @@ function TreasuryTable({ snapshot, money }: { snapshot: SettlementSnapshot; mone
           </Pressable>
         ))}
       </Row>
-      <DataTable columns={columns} rows={rows} empty={t("settlement.empty")} />
+      <DataTable columns={columns} rows={rows} footer={footer} empty={t("settlement.empty")} />
     </Stack>
   );
 }
@@ -203,7 +204,7 @@ function CollectorsTable({
 }) {
   const { t } = useT();
   const collectors = snapshot.collectors;
-  const columns = collectors.map((c) => ({ key: c.collectorId, label: c.email ?? c.collectorId }));
+  const columns = collectors.map((c) => ({ key: c.collectorId, label: c.name ?? c.email ?? c.collectorId }));
   const row = (key: string, label: string, pick: (c: (typeof collectors)[number]) => string, strong = false): DataRow => ({
     key,
     label,
@@ -257,7 +258,7 @@ function commissionRule(c: CollectorCommission, t: ReturnType<typeof useT>["t"])
  * queda sellada y se paga una vez desde la caja elegida (el pago es un egreso del libro de cajas).
  */
 function CommissionsSection({ view, money }: { view: View; money: (v: number) => string }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const [payee, setPayee] = useState<CommissionPayee | null>(null);
   const paidBy = new Map(view.commissionPayments.map((p) => [p.collectorId, p]));
   return (
@@ -268,7 +269,7 @@ function CommissionsSection({ view, money }: { view: View; money: (v: number) =>
       {view.snapshot.collectors.map((c) => {
         const commission = c.commission;
         const payment = paidBy.get(c.collectorId);
-        const label = c.email ?? c.collectorId;
+        const label = c.name ?? c.email ?? c.collectorId;
         const payable = !view.isOpen && view.id !== null && !payment && (commission?.amountMinor ?? 0) > 0;
         return (
           <Card key={c.collectorId}>
@@ -280,7 +281,7 @@ function CommissionsSection({ view, money }: { view: View; money: (v: number) =>
                 </Text>
                 {payment ? (
                   <Text variant="caption" tone="muted">
-                    {t("settlement.commissions.paidFrom")} {payment.cashBoxName} · {new Date(payment.paidAt).toLocaleString()}
+                    {t("settlement.commissions.paidFrom")} {payment.cashBoxName} · {formatDateTime(payment.paidAt, locale)}
                   </Text>
                 ) : null}
               </Stack>
@@ -309,7 +310,7 @@ function CommissionsSection({ view, money }: { view: View; money: (v: number) =>
 
 /** Movimientos exactos del período [inicio, fin), con filtros y exportación CSV. */
 function PeriodMovements({ view, money }: { view: View; money: (v: number) => string }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const [kind, setKind] = useState<TransactionFilters["kind"]>(undefined);
   const [cashBoxId, setCashBoxId] = useState<string | undefined>(undefined);
   const [zoneId, setZoneId] = useState<string | undefined>(undefined);
@@ -379,7 +380,7 @@ function PeriodMovements({ view, money }: { view: View; money: (v: number) => st
         ]}
         rows={items.map((m) => ({
           key: m.id,
-          label: new Date(m.createdAt).toLocaleString(),
+          label: formatDateTime(m.createdAt, locale),
           cells: [m.boxName, m.zoneName ?? "—", t(`cash.kind.${m.kind}`), `${m.direction === "IN" ? "+" : "−"}${money(m.amountMinor)}`],
         }))}
         empty={list.isPending ? undefined : t("settlement.noMovements")}

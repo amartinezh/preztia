@@ -18,6 +18,7 @@ import {
   useCollectionReminderSettings,
   useUpdateCollectionReminderSettings,
 } from "../api/queries";
+import { useSettingsDirty } from "../components/settings-dirty-context";
 
 /**
  * Tab COBRANZA: cron de recordatorios por WhatsApp (hora local + llave PIX). La hora es la de la
@@ -32,6 +33,7 @@ export function CollectionReminderTab({ canEdit }: { canEdit: boolean }) {
   const [draft, setDraft] = useState<CollectionReminderSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  useSettingsDirty("collection.reminder", draft !== null && !saved);
 
   const form = draft ?? query.data ?? null;
   if (query.isPending || !form) return <Spinner label={t("common.loading")} />;

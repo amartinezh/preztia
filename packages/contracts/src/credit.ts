@@ -53,6 +53,31 @@ export const grantCreditInput = z.object({
 });
 export type GrantCreditInput = z.infer<typeof grantCreditInput>;
 
+// COTIZACIÓN del cronograma: lo que vería el cliente antes de desembolsar. Regla pura del dominio
+// (`buildSchedule`), sin persistir nada; la UI la muestra en vivo mientras se capturan los términos.
+export const quoteCreditInput = z.object({
+  principalMinor: z.number().int().positive(),
+  interestPct: z.number().nonnegative(),
+  installmentsCount: z.number().int().positive(),
+  frequency: planFrequency.optional(),
+  /** Fecha de inicio (YYYY-MM-DD); ausente ⇒ hoy en la zona horaria de la empresa. */
+  startDate: z.string().date().optional(),
+});
+export type QuoteCreditInput = z.infer<typeof quoteCreditInput>;
+
+export const creditQuoteOutput = z.object({
+  currency: z.string(),
+  /** Valor de la cuota representativa (la primera; la última absorbe el redondeo). */
+  installmentValueMinor: z.number().int(),
+  lastInstallmentMinor: z.number().int(),
+  totalDueMinor: z.number().int(),
+  interestMinor: z.number().int(),
+  firstDueDate: z.string(),
+  endDate: z.string(),
+  installments: z.array(z.object({ seq: z.number().int(), dueDate: z.string(), amountDueMinor: z.number().int() })),
+});
+export type CreditQuoteOutput = z.infer<typeof creditQuoteOutput>;
+
 // CARGA DE UN CRÉDITO MIGRADO del sistema anterior (solo ADMIN): deuda que ya existe, con fecha de
 // inicio pasada y sus abonos históricos. No sale dinero de ninguna caja ni entran hoy los abonos.
 export const historicalPaymentInput = z.object({
@@ -89,6 +114,14 @@ export type GrantCreditOutput = z.infer<typeof grantCreditOutput>;
 
 // Contrato ts-rest: misma fuente de verdad para API (NestJS) y clientes (web/mobile).
 export const creditContract = c.router({
+  quoteCredit: {
+    method: "POST",
+    path: "/credits/quote",
+    headers: z.object({ "x-tenant-id": z.string().uuid() }),
+    body: quoteCreditInput,
+    responses: { 200: creditQuoteOutput },
+    summary: "Cotiza el cronograma (cuota, total, fechas) sin otorgar nada",
+  },
   listCredits: {
     method: "GET",
     path: "/credits",

@@ -7,11 +7,25 @@
 // La mayoría de monedas de la región (COP, BRL, USD) usan 2 decimales.
 const DEFAULT_FRACTION_DIGITS = 2;
 
+// Locale de `Intl` cuando la pantalla no pasa uno. Lo fija la app al cambiar el idioma del operador
+// (es → "es-CO", pt-BR → "pt-BR") para que todo el dinero se lea con la convención de la persona.
+const INITIAL_MONEY_LOCALE = "es-CO";
+let defaultMoneyLocale = INITIAL_MONEY_LOCALE;
+
+/** Fija el locale que `formatMoney` usa cuando no recibe uno explícito. */
+export function setDefaultMoneyLocale(locale: string): void {
+  defaultMoneyLocale = locale;
+}
+
+export function getDefaultMoneyLocale(): string {
+  return defaultMoneyLocale;
+}
+
 export function minorToMajor(amountMinor: number, fractionDigits = DEFAULT_FRACTION_DIGITS): number {
   return amountMinor / 10 ** fractionDigits;
 }
 
-export function formatMoney(amountMinor: number, currency: string, locale = "es-CO"): string {
+export function formatMoney(amountMinor: number, currency: string, locale: string = defaultMoneyLocale): string {
   try {
     return new Intl.NumberFormat(locale, { style: "currency", currency }).format(
       minorToMajor(amountMinor),

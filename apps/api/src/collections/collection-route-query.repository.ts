@@ -127,6 +127,7 @@ export class CollectionRouteQueryRepository {
         .select({
           stop: schema.routeStop,
           collectorEmail: schema.appUser.email,
+          collectorName: schema.appUser.displayName,
         })
         .from(schema.routeStop)
         .leftJoin(
@@ -143,7 +144,9 @@ export class CollectionRouteQueryRepository {
           progress.get(input.routeId),
           input.currency,
         ),
-        stops: stops.map((s) => toReviewerStop(s.stop, s.collectorEmail)),
+        stops: stops.map((s) =>
+          toReviewerStop(s.stop, s.collectorEmail, s.collectorName),
+        ),
       };
     });
   }
@@ -158,6 +161,7 @@ export class CollectionRouteQueryRepository {
         .select({
           stop: schema.routeStop,
           collectorEmail: schema.appUser.email,
+          collectorName: schema.appUser.displayName,
         })
         .from(schema.routeStop)
         .leftJoin(
@@ -167,7 +171,7 @@ export class CollectionRouteQueryRepository {
         .where(eq(schema.routeStop.id, input.stopId))
         .limit(1);
       if (!row) throw new NotFoundException('Parada no encontrada');
-      return toReviewerStop(row.stop, row.collectorEmail);
+      return toReviewerStop(row.stop, row.collectorEmail, row.collectorName);
     });
   }
 
@@ -347,6 +351,7 @@ function toProposed(c: RouteCandidate): ProposedStop {
 function toReviewerStop(
   s: StopRow,
   collectorEmail: string | null,
+  collectorName: string | null,
 ): ReviewerStop {
   return {
     id: s.id,
@@ -354,6 +359,7 @@ function toReviewerStop(
     status: s.status,
     collectorId: s.collectorId,
     collectorEmail,
+    collectorName,
     clientName: s.clientName,
     address: s.address,
     amountToCollectMinor: s.amountToCollectMinor,
