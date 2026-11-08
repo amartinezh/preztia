@@ -50,6 +50,9 @@ describe('Tesorería por clase de caja', () => {
     expect(t.totalMinor).toBe(
       t.officeMinor + t.routeMinor + t.bankMinor + t.transitMinor,
     );
+    // Liquidez disponible: lo que se puede usar hoy (la calle y el tránsito no cuentan).
+    expect(t.availableMinor).toBe(t.officeMinor + t.bankMinor);
+    expect(t.availableMinor).toBe(2_500_000);
   });
 
   it('sin cajas, todo es cero (empresa recién creada)', () => {
@@ -58,6 +61,7 @@ describe('Tesorería por clase de caja', () => {
       officeMinor: 0,
       routeMinor: 0,
       bankMinor: 0,
+      availableMinor: 0,
       transitMinor: 0,
     });
   });

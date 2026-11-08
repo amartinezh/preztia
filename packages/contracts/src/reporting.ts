@@ -1,6 +1,8 @@
 import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 
+import { treasuryByClass } from "./cash-boxes";
+
 const c = initContract();
 
 // Contrato de REPORTERÍA (read-models / CQRS): panel del tenant, resumen de cliente y export.
@@ -15,8 +17,10 @@ export const dashboard = z.object({
   portfolioOutstandingMinor: z.number().int(),
   collectedTodayMinor: z.number().int(),
   lentTodayMinor: z.number().int(),
-  /** Liquidez real del libro de cajas (Σ saldo de cajas CASH + BANK activas). */
+  /** Liquidez disponible (= `treasury.availableMinor`: oficina + bancos), misma regla que Inicio y Dinero. */
   cashCurrentMinor: z.number().int(),
+  /** Reparto canónico de la tesorería por clase. */
+  treasury: treasuryByClass,
   pendingExpenses: z.number().int(),
   pendingChangeRequests: z.number().int(),
 });

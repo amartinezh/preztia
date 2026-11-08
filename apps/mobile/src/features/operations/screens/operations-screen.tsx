@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   ListItem,
-  MoneyText,
   Row,
   Spinner,
   Stack,
@@ -15,7 +14,6 @@ import {
 import { Screen } from "@/components/screen";
 import { useT } from "@/core/i18n";
 import { useClientPositions } from "@/features/tracking/api/queries";
-import { useDashboard } from "@/features/reporting/api/queries";
 import { useChangeRequests, useReviewChangeRequest, useRoutes } from "../api/queries";
 
 const STATUS_TONE: Record<ChangeRequest["status"], BadgeTone> = {
@@ -42,8 +40,6 @@ export function OperationsScreen() {
     <Screen>
       <Stack gap="lg">
         <Text variant="subtitle">{t("operations.title")}</Text>
-
-        <DashboardCard />
 
         <Stack gap="sm">
           <Text variant="heading">{t("tracking.positions.title")}</Text>
@@ -114,46 +110,6 @@ export function OperationsScreen() {
         </Stack>
       </Stack>
     </Screen>
-  );
-}
-
-/** Panel del tenant: KPIs de cartera, cobro del día, caja y pendientes. */
-function DashboardCard() {
-  const { t } = useT();
-  const query = useDashboard();
-  if (query.isPending || !query.data) return <Spinner label={t("common.loading")} />;
-  const d = query.data;
-  return (
-    <Card>
-      <Stack gap="xs">
-        <Text variant="heading">{t("dashboard.title")}</Text>
-        <KpiRow label={t("dashboard.borrowers")} value={String(d.totalBorrowers)} />
-        <KpiRow label={t("dashboard.activeCredits")} value={String(d.activeCredits)} />
-        <KpiRow label={t("dashboard.overdue")} value={String(d.overdueAccounts)} />
-        <Row className="justify-between">
-          <Text tone="muted">{t("dashboard.portfolio")}</Text>
-          <MoneyText variant="label" amountMinor={d.portfolioOutstandingMinor} currency={d.currency} />
-        </Row>
-        <Row className="justify-between">
-          <Text tone="muted">{t("dashboard.collectedToday")}</Text>
-          <MoneyText variant="label" amountMinor={d.collectedTodayMinor} currency={d.currency} />
-        </Row>
-        <Row className="justify-between">
-          <Text tone="muted">{t("dashboard.cash")}</Text>
-          <MoneyText variant="label" amountMinor={d.cashCurrentMinor} currency={d.currency} />
-        </Row>
-        <KpiRow label={t("dashboard.pending")} value={`${d.pendingExpenses + d.pendingChangeRequests}`} />
-      </Stack>
-    </Card>
-  );
-}
-
-function KpiRow({ label, value }: { label: string; value: string }) {
-  return (
-    <Row className="justify-between">
-      <Text tone="muted">{label}</Text>
-      <Text variant="label">{value}</Text>
-    </Row>
   );
 }
 

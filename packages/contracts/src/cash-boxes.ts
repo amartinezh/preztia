@@ -290,14 +290,35 @@ export const dashboardBox = z.object({
   lastReconciliation: lastReconciliation.nullable(),
 });
 
+// ── Tesorería por clase: la ÚNICA forma de hablar de "caja" en toda la app ──────────────────
+// Reparte el dinero de la empresa según quién lo tiene. La misma regla pura la usan el panel de
+// Inicio, el Resumen de Dinero y el panel de Operación, así que las cifras cuadran entre pantallas.
+export const treasuryByClass = z.object({
+  /** Todo el dinero de la empresa: oficina + ruta + bancos + tránsito. */
+  totalMinor: z.number().int(),
+  /** Efectivo en cajas de oficina (CASH sin cobrador). */
+  officeMinor: z.number().int(),
+  /** Efectivo en la calle: cajas de ruta de los cobradores (aún no entregado). */
+  routeMinor: z.number().int(),
+  /** Dinero en cuentas bancarias (BANK). */
+  bankMinor: z.number().int(),
+  /** Dinero recibido sin identificar aún (TRANSIT). */
+  transitMinor: z.number().int(),
+  /** Liquidez disponible: lo que la empresa puede usar hoy = oficina + bancos. */
+  availableMinor: z.number().int(),
+});
+export type TreasuryByClass = z.infer<typeof treasuryByClass>;
+
 export const cashDashboardOutput = z.object({
-  /** Σ saldo de todas las cajas activas del tenant (efectivo + bancos + tránsito). */
+  /** Reparto canónico de la tesorería (misma regla que Inicio y Operación). */
+  treasury: treasuryByClass,
+  /** Σ saldo de todas las cajas activas del tenant (= `treasury.totalMinor`). */
   totalMinor: z.number().int(),
   /** Efectivo Total en Custodia: Σ cajas CASH activas (Nivel 1). */
   cashTotalMinor: z.number().int(),
   /** Dinero Bancario Total: Σ cajas BANK activas (Nivel 1). */
   bankTotalMinor: z.number().int(),
-  /** Liquidez Total disponible: efectivo + bancos (excluye tránsito) (Nivel 1). */
+  /** Liquidez disponible = `treasury.availableMinor` (oficina + bancos; el efectivo en ruta y el tránsito no). */
   liquidityTotalMinor: z.number().int(),
   currency: z.string(),
   boxes: z.array(dashboardBox),

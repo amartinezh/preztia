@@ -1,6 +1,8 @@
 import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 
+import { treasuryByClass } from "./cash-boxes";
+
 const c = initContract();
 
 // Contrato del DASHBOARD INICIAL de KPIs: panel de bienvenida que consolida en una sola
@@ -9,9 +11,8 @@ const c = initContract();
 // Dinero siempre en unidades menores (entero).
 
 // Bloque financiero (tesorería + cartera).
-export const dashboardTreasury = z.object({
-  /** Σ saldo de todas las cajas activas del tenant (efectivo disponible). */
-  cashAvailableMinor: z.number().int(),
+// Tesorería = el reparto canónico por clase (misma regla que Dinero y Operación) + la cartera.
+export const dashboardTreasury = treasuryByClass.extend({
   /** Deuda vigente de la cartera activa (Σ cuota pendiente de créditos ACTIVE). */
   portfolioActiveMinor: z.number().int(),
   /** Cartera vencida: Σ cuota pendiente de cuotas en mora (vencidas y no saldadas). */

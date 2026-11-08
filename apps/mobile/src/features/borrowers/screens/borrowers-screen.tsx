@@ -133,7 +133,7 @@ export function BorrowersScreen() {
                     size="sm"
                     onPress={() =>
                       router.push(
-                        `/credit/new?borrowerId=${item.id}&nationalId=${encodeURIComponent(item.nationalId)}` as Href,
+                        `/credit/new?borrowerId=${item.id}` as Href,
                       )
                     }
                   />

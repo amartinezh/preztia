@@ -55,22 +55,23 @@ export class BorrowersQueryRepository {
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize);
 
-      const items: BorrowerSummary[] = rows.map((row) => ({
-        id: row.id,
-        nationalId: row.nationalId,
-        firstName: row.firstName,
-        lastName: row.lastName,
-        business: row.business,
-        address: row.address,
-        phone: row.phone,
-        lat: row.lat,
-        lng: row.lng,
-        color: row.color,
-        creditBlocked: row.creditBlocked,
-        creditLimitMinor: row.creditLimitMinor,
-        createdAt: row.createdAt.toISOString(),
-      }));
+      const items: BorrowerSummary[] = rows.map(toBorrowerSummary);
       return { items, total: Number(totalRow?.value ?? 0) };
+    });
+  }
+
+  /** Ficha de un cliente por id (bajo RLS del tenant); null si no existe. */
+  async findById(input: {
+    tenantId: string;
+    borrowerId: string;
+  }): Promise<BorrowerSummary | null> {
+    return withTenantTxFor(input.tenantId, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(schema.borrower)
+        .where(eq(schema.borrower.id, input.borrowerId))
+        .limit(1);
+      return row ? toBorrowerSummary(row) : null;
     });
   }
 
@@ -103,4 +104,25 @@ export class BorrowersQueryRepository {
       return { items, total: Number(totalRow?.value ?? 0) };
     });
   }
+}
+
+/** Fila de `borrower` → resumen del contrato (un solo mapeo para listado y ficha). */
+function toBorrowerSummary(
+  row: typeof schema.borrower.$inferSelect,
+): BorrowerSummary {
+  return {
+    id: row.id,
+    nationalId: row.nationalId,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    business: row.business,
+    address: row.address,
+    phone: row.phone,
+    lat: row.lat,
+    lng: row.lng,
+    color: row.color,
+    creditBlocked: row.creditBlocked,
+    creditLimitMinor: row.creditLimitMinor,
+    createdAt: row.createdAt.toISOString(),
+  };
 }

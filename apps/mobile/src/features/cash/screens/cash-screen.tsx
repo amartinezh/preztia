@@ -6,7 +6,7 @@ import {
   Button,
   Card,
   ErrorState,
-  minorToMajor,
+  formatMoney,
   MoneyText,
   Row,
   Spinner,
@@ -87,15 +87,23 @@ function TreasurySummaryCard({ onOpenBoxes }: { onOpenBoxes: () => void }) {
         <Stack gap="sm">
           <Stack gap="xs">
             <Text tone="muted">{t("cash.boxes.liquidity")}</Text>
-            <MoneyText variant="heading" amountMinor={d.liquidityTotalMinor} currency={d.currency} />
+            <MoneyText variant="heading" amountMinor={d.treasury.availableMinor} currency={d.currency} />
+            <Text variant="caption" tone="muted">
+              {t("cash.treasury.availableHint")}
+            </Text>
           </Stack>
-          <Line label={t("cash.boxes.cashCustody")} amountMinor={d.cashTotalMinor} currency={d.currency} />
-          <Line label={t("cash.boxes.bankTotal")} amountMinor={d.bankTotalMinor} currency={d.currency} />
-          {d.unidentifiedMinor > 0 ? (
+          <Line label={t("cash.treasury.office")} amountMinor={d.treasury.officeMinor} currency={d.currency} />
+          <Line label={t("cash.treasury.bank")} amountMinor={d.treasury.bankMinor} currency={d.currency} />
+          <Line label={t("cash.treasury.route")} amountMinor={d.treasury.routeMinor} currency={d.currency} />
+          {d.treasury.transitMinor > 0 ? (
+            <Line label={t("cash.treasury.transit")} amountMinor={d.treasury.transitMinor} currency={d.currency} />
+          ) : null}
+          <Line label={t("cash.treasury.total")} amountMinor={d.treasury.totalMinor} currency={d.currency} />
+          {d.treasury.transitMinor > 0 ? (
             <Banner
               tone="warning"
               title={t("cash.boxes.unidentified")}
-              description={`${minorToMajor(d.unidentifiedMinor)} ${d.currency}`}
+              description={formatMoney(d.treasury.transitMinor, d.currency)}
             />
           ) : null}
           <Button label={t("cash.treasury.detail")} variant="secondary" size="sm" block onPress={onOpenBoxes} />

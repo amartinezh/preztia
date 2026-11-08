@@ -1,8 +1,9 @@
 import type { CashBoxType } from '@preztiaos/domain';
 
-// Regla PURA del panel de inicio: cómo se reparte la tesorería en el lenguaje del dueño del
-// negocio ("en la oficina", "en la calle", "en el banco"). Sin I/O: recibe los saldos ya
-// agregados por caja y los clasifica; el repositorio solo aporta las filas.
+// Regla PURA de la TESORERÍA (fuente única para Inicio, Dinero y Operación): cómo se reparte el
+// dinero de la empresa en el lenguaje del dueño ("en la oficina", "en la calle", "en el banco").
+// Sin I/O: recibe los saldos ya agregados por caja y los clasifica; `treasury-snapshot.ts` aporta
+// las filas desde el libro.
 
 /** Saldo de una caja activa con lo necesario para clasificarla. */
 export interface CashBoxBalance {
@@ -26,6 +27,8 @@ export interface TreasuryByClass {
   readonly bankMinor: number;
   /** Dinero sin identificar aún (TRANSIT); solo cuenta en el total. */
   readonly transitMinor: number;
+  /** Liquidez disponible: lo que la empresa puede usar hoy = oficina + bancos. */
+  readonly availableMinor: number;
 }
 
 /**
@@ -40,7 +43,11 @@ export function cashBoxClass(
   return box.assignedTo === null ? 'OFFICE' : 'ROUTE';
 }
 
-/** Invariante: `totalMinor === officeMinor + routeMinor + bankMinor + transitMinor`. */
+/**
+ * Invariantes: `totalMinor === officeMinor + routeMinor + bankMinor + transitMinor` y
+ * `availableMinor === officeMinor + bankMinor` (el efectivo en ruta aún no está entregado y el
+ * tránsito no está identificado: no se puede contar con ellos hoy).
+ */
 export function sumTreasuryByClass(
   boxes: readonly CashBoxBalance[],
 ): TreasuryByClass {
@@ -57,5 +64,6 @@ export function sumTreasuryByClass(
     routeMinor: totals.ROUTE,
     bankMinor: totals.BANK,
     transitMinor: totals.TRANSIT,
+    availableMinor: totals.OFFICE + totals.BANK,
   };
 }

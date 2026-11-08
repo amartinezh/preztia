@@ -69,14 +69,17 @@ def fetch_text(url: str) -> str:
 
 
 def main() -> None:
-    # 1) Web app publicada con el bundle esperado
-    html = fetch_text(f"{APP}/")
-    bundle = next((p for p in html.split('"') if p.startswith("/_expo/static/js/web/") and p.endswith(".js")), None)
-    check("web app responde y referencia un bundle", bundle is not None, bundle or "")
-    if bundle:
-        js = fetch_text(f"{APP}{bundle}")
-        for text in EXPECT_STRINGS:
-            check(f"bundle contiene «{text}»", text in js)
+    # 1) Web app publicada con el bundle esperado (un fallo aquí no detiene el resto)
+    try:
+        html = fetch_text(f"{APP}/")
+        bundle = next((p for p in html.split('"') if p.startswith("/_expo/static/js/web/") and p.endswith(".js")), None)
+        check("web app responde y referencia un bundle", bundle is not None, bundle or "")
+        if bundle:
+            js = fetch_text(f"{APP}{bundle}")
+            for text in (t for t in EXPECT_STRINGS if t):
+                check(f"bundle contiene «{text}»", text in js)
+    except (urllib.error.URLError, OSError) as e:
+        check("web app responde", False, str(e)[:120])
 
     # 2) Cobrador real: sesión, lista operativa del día, refresco de token
     col_email = os.environ.get("COLLECTOR_EMAIL")
@@ -116,6 +119,28 @@ def main() -> None:
                 check("reporte diario: fecha de negocio presente", bool(report.get("date")), report.get("date", ""))
                 board = call("GET", "/remittances/board?page=1&pageSize=5", token=adm)
                 check("entregas: tablero responde", "items" in board, f"{board.get('total')} cobradores")
+                # Una sola tesorería: Inicio, Dinero y Operación deben dar la MISMA liquidez disponible.
+                cash = call("GET", "/cash/dashboard", token=adm)
+                ops = call("GET", "/reports/dashboard", token=adm)
+                home_available = kpis.get("treasury", {}).get("availableMinor")
+                check(
+                    "tesorería: la misma liquidez en Inicio, Dinero y Operación",
+                    home_available is not None
+                    and home_available == cash.get("treasury", {}).get("availableMinor") == ops.get("cashCurrentMinor"),
+                    f"inicio {home_available} · dinero {cash.get('treasury', {}).get('availableMinor')} · operación {ops.get('cashCurrentMinor')}",
+                )
+                tre = cash.get("treasury", {})
+                check(
+                    "tesorería: total = oficina + ruta + bancos + tránsito",
+                    tre and tre["totalMinor"] == tre["officeMinor"] + tre["routeMinor"] + tre["bankMinor"] + tre["transitMinor"],
+                    f"total {tre.get('totalMinor')}",
+                )
+                first_borrower = call("GET", "/borrowers?page=1&pageSize=1", token=adm)["items"]
+                if first_borrower:
+                    detail = call("GET", f"/borrowers/{first_borrower[0]['id']}", token=adm)
+                    check("cliente: la ficha por id responde", detail.get("id") == first_borrower[0]["id"])
+                else:
+                    print("  (sin clientes: la ficha por id no se verifica en vivo)")
             finally:
                 call("PATCH", f"/admin/tenants/{TENANT}/admins/{temp['id']}", {"active": False}, token=sup, tenant=False)
         else:

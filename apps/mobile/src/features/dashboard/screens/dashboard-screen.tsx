@@ -136,7 +136,8 @@ export function DashboardScreen() {
                 <KpiCard
                   icon="🏦"
                   label={t("home.treasury.cash")}
-                  value={money(kpis.treasury.cashAvailableMinor)}
+                  value={money(kpis.treasury.availableMinor)}
+                  caption={t("home.treasury.availableHint")}
                   accent={dashboardPalette.emerald}
                   textColor={textColor}
                   mutedColor={muted}
@@ -177,8 +178,8 @@ export function DashboardScreen() {
                     data={[
                       {
                         label: t("home.treasury.cashShort"),
-                        value: kpis.treasury.cashAvailableMinor,
-                        display: compactMoney(kpis.treasury.cashAvailableMinor, kpis.currency),
+                        value: kpis.treasury.availableMinor,
+                        display: compactMoney(kpis.treasury.availableMinor, kpis.currency),
                         color: dashboardPalette.emerald,
                       },
                       {

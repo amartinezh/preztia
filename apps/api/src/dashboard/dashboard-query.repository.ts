@@ -23,7 +23,8 @@ import {
   businessDayBounds,
   type BusinessDayBounds,
 } from '../tenant-config/tenant-timezone';
-import { sumTreasuryByClass, type TreasuryByClass } from './treasury-by-class';
+import { loadTreasuryByClass } from '../cash/treasury-snapshot';
+import type { TreasuryByClass } from '../cash/treasury-by-class';
 
 // Umbral del veredicto antifraude a partir del cual un documento se considera intento de
 // fraude (SCORE_SUSPICIOUS en StructuralAntifraudService). Constante con nombre, sin número mágico.
@@ -34,9 +35,6 @@ const FRAUD_SCORE_THRESHOLD = 60;
 // la decisión manual (aprobar/negar) marca el fin (aprobar = desembolsar, misma transacción).
 const DOCUMENT_RECORDED_EVENT = 'DOCUMENT_RECORDED';
 const DECISION_EVENT = 'MANUAL_REVIEW_DECISION';
-
-// Suma firmada del libro mayor de caja: IN suma, OUT resta. Espejo de cash-query.repository.
-const signedCashSum = sql<number>`COALESCE(SUM(CASE WHEN ${schema.cashTransaction.direction} = 'IN' THEN ${schema.cashTransaction.amountMinor} ELSE -${schema.cashTransaction.amountMinor} END), 0)`;
 
 // Saldo pendiente de una cuota: lo que falta por pagar de ella.
 const installmentOutstanding = sql`${schema.installment.amountDueMinor} - ${schema.installment.paidMinor}`;
@@ -77,7 +75,7 @@ export class DashboardQueryRepository {
       const today = day.date;
 
       // --- Tesorería: saldo de las cajas activas, repartido por clase -------
-      const treasury = await this.getTreasuryByClass(tx);
+      const treasury = await loadTreasuryByClass(tx);
 
       // --- Cartera activa: deuda vigente de créditos ACTIVE ------------------
       const [portfolioActive] = await tx
@@ -135,7 +133,7 @@ export class DashboardQueryRepository {
         today: await this.getToday(tx, day, treasury),
         pending: await this.getPending(tx),
         treasury: {
-          cashAvailableMinor: treasury.totalMinor,
+          ...treasury,
           portfolioActiveMinor: Number(portfolioActive?.v ?? 0),
           portfolioOverdueMinor: Number(portfolioOverdue?.v ?? 0),
         },
@@ -151,34 +149,6 @@ export class DashboardQueryRepository {
         },
       };
     });
-  }
-
-  /**
-   * Saldo de cada caja activa (Σ asientos firmados, agrupado en BD) y reparto por clase
-   * (oficina / ruta / banco / tránsito) con la regla pura `sumTreasuryByClass`. Mismo criterio de
-   * saldo que el libro de cajas (cash-query.repository), para que el panel y Dinero coincidan.
-   */
-  private async getTreasuryByClass(tx: Tx): Promise<TreasuryByClass> {
-    const rows = await tx
-      .select({
-        type: schema.cashBox.type,
-        assignedTo: schema.cashBox.assignedTo,
-        balanceMinor: signedCashSum,
-      })
-      .from(schema.cashBox)
-      .leftJoin(
-        schema.cashTransaction,
-        eq(schema.cashTransaction.cashBoxId, schema.cashBox.id),
-      )
-      .where(eq(schema.cashBox.active, true))
-      .groupBy(schema.cashBox.id);
-    return sumTreasuryByClass(
-      rows.map((row) => ({
-        type: row.type,
-        assignedTo: row.assignedTo,
-        balanceMinor: Number(row.balanceMinor ?? 0),
-      })),
-    );
   }
 
   /**

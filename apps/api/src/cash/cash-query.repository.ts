@@ -25,6 +25,7 @@ import type {
   MyCashBoxOutput,
 } from '@preztiaos/contracts';
 import type { CashTxDirection, CashTxKind } from '@preztiaos/domain';
+import { sumTreasuryByClass } from './treasury-by-class';
 import { withTenantTxFor, type Tx } from '../tenancy/unit-of-work';
 import { findRouteBox } from './payment-box-router';
 import { balanceOfBox } from './cash-ledger';
@@ -224,26 +225,25 @@ export class CashQueryRepository {
         };
       });
 
-      const sumByType = (type: (typeof boxes)[number]['type']): number =>
-        boxes
-          .filter((b) => b.type === type)
-          .reduce((acc, b) => acc + b.balanceMinor, 0);
-
-      const totalMinor = boxes.reduce((acc, b) => acc + b.balanceMinor, 0);
-      const cashTotalMinor = sumByType('CASH');
-      const bankTotalMinor = sumByType('BANK');
-      // Liquidez = efectivo + bancos; el tránsito se reporta aparte como alerta.
-      const liquidityTotalMinor = cashTotalMinor + bankTotalMinor;
-      const unidentifiedMinor = sumByType('TRANSIT');
+      // Una sola regla de tesorería para Inicio, Dinero y Operación (misma cifra en toda la app).
+      const treasury = sumTreasuryByClass(
+        boxes.map((b) => ({
+          type: b.type,
+          assignedTo: b.assignedTo,
+          balanceMinor: b.balanceMinor,
+        })),
+      );
 
       return {
-        totalMinor,
-        cashTotalMinor,
-        bankTotalMinor,
-        liquidityTotalMinor,
+        treasury,
+        totalMinor: treasury.totalMinor,
+        cashTotalMinor: treasury.officeMinor + treasury.routeMinor,
+        bankTotalMinor: treasury.bankMinor,
+        // Liquidez disponible = oficina + bancos; la calle y el tránsito no se pueden usar hoy.
+        liquidityTotalMinor: treasury.availableMinor,
         currency: input.currency,
         boxes,
-        unidentifiedMinor,
+        unidentifiedMinor: treasury.transitMinor,
       };
     });
   }

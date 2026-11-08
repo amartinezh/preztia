@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -64,6 +65,22 @@ export class BorrowersController {
       this.notes,
       this.borrowers,
     );
+  }
+
+  @Get('borrowers/:id')
+  async getBorrower(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const tenant = requireTenant(tenantId);
+    requireRole(authorization, DATA_PLANE_ROLES);
+    const borrower = await this.queries.findById({
+      tenantId: tenant,
+      borrowerId: uuid.parse(id),
+    });
+    if (!borrower) throw new NotFoundException('Cliente no encontrado');
+    return borrower;
   }
 
   @Get('borrowers')

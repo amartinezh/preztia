@@ -116,6 +116,14 @@ const tenantHeaders = z.object({ "x-tenant-id": z.string().uuid() });
 const idParam = z.object({ id: z.string().uuid() });
 
 export const borrowersContract = c.router({
+  getBorrower: {
+    method: "GET",
+    path: "/borrowers/:id",
+    pathParams: z.object({ id: z.string().uuid() }),
+    headers: tenantHeaders,
+    responses: { 200: borrowerSummary },
+    summary: "Detalle de un cliente (para prellenar un crédito o abrir su ficha)",
+  },
   listBorrowers: {
     method: "GET",
     path: "/borrowers",

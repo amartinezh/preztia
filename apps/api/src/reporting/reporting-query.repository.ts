@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { schema } from '@preztiaos/db';
 import type { BorrowerReport, Dashboard } from '@preztiaos/contracts';
 import { withTenantTxFor } from '../tenancy/unit-of-work';
+import { loadTreasuryByClass } from '../cash/treasury-snapshot';
 import { resolveTenantCurrency } from '../tenant-config/tenant-currency';
 import { csvCell } from '../shared/csv';
 
@@ -80,22 +81,8 @@ export class ReportingQueryRepository {
           ),
         );
 
-      // Caja actual = liquidez real del libro: Σ saldo de cajas CASH + BANK activas (fuente única).
-      const [cash] = await tx
-        .select({
-          v: sql<number>`COALESCE(SUM(CASE WHEN ${schema.cashTransaction.direction} = 'IN' THEN ${schema.cashTransaction.amountMinor} ELSE -${schema.cashTransaction.amountMinor} END), 0)`,
-        })
-        .from(schema.cashTransaction)
-        .innerJoin(
-          schema.cashBox,
-          eq(schema.cashBox.id, schema.cashTransaction.cashBoxId),
-        )
-        .where(
-          and(
-            inArray(schema.cashBox.type, ['CASH', 'BANK']),
-            eq(schema.cashBox.active, true),
-          ),
-        );
+      // Tesorería: la MISMA fuente que Inicio y Dinero (oficina / ruta / bancos / tránsito).
+      const treasury = await loadTreasuryByClass(tx);
 
       const [pendingExp] = await tx
         .select({ v: count() })
@@ -114,7 +101,8 @@ export class ReportingQueryRepository {
         portfolioOutstandingMinor: Number(outstanding?.v ?? 0),
         collectedTodayMinor: Number(collected?.v ?? 0),
         lentTodayMinor: Number(lent?.v ?? 0),
-        cashCurrentMinor: Number(cash?.v ?? 0),
+        cashCurrentMinor: treasury.availableMinor,
+        treasury,
         pendingExpenses: Number(pendingExp?.v ?? 0),
         pendingChangeRequests: Number(pendingChg?.v ?? 0),
       };

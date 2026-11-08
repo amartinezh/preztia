@@ -1,22 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
 import type { BorrowerSummary } from "@preztiaos/contracts";
 
-import { borrowerKeys, findBorrowerByNationalId } from "@/features/borrowers/api/queries";
+import { api, tenantHeader, unwrap } from "@/core/api/client";
+import { borrowerKeys } from "@/features/borrowers/api/queries";
 
 /**
- * Resuelve el cliente que la pantalla de Clientes pasó por la URL ("Nuevo crédito" prellenado):
- * `borrowerId` es la identidad y `nationalId` la pista de búsqueda, porque el API no expone
- * `GET /borrowers/:id`. Se localiza por cédula exacta y se COMPRUEBA el id: una pista que no
- * corresponda al id no se preselecciona (nunca se otorga al cliente equivocado). `null` = no hallado.
+ * Resuelve el cliente que la pantalla de Clientes pasó por la URL ("Nuevo crédito" prellenado) con
+ * su ficha real (`GET /borrowers/:id`): nunca se otorga al cliente equivocado. `null` = no existe.
  */
-export function usePrefilledBorrower(borrowerId: string | undefined, nationalId: string | undefined) {
+export function usePrefilledBorrower(borrowerId: string | undefined) {
   return useQuery({
-    queryKey: [...borrowerKeys.all, "prefill", borrowerId ?? "", nationalId ?? ""] as const,
+    queryKey: [...borrowerKeys.all, "detail", borrowerId ?? ""] as const,
     enabled: !!borrowerId,
     queryFn: async (): Promise<BorrowerSummary | null> => {
-      if (!borrowerId || !nationalId) return null;
-      const found = await findBorrowerByNationalId(nationalId);
-      return found !== null && found.id === borrowerId ? found : null;
+      if (!borrowerId) return null;
+      return unwrap(await api.getBorrower({ headers: tenantHeader(), params: { id: borrowerId } }));
     },
   });
 }

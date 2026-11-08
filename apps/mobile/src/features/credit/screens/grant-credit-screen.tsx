@@ -76,8 +76,8 @@ export function GrantCreditScreen() {
   const currency = useTenantCurrency();
 
   // Prellenado desde Clientes ("Nuevo crédito"): el id manda; la cédula solo sirve para localizarlo.
-  const params = useLocalSearchParams<{ borrowerId?: string; nationalId?: string }>();
-  const prefilled = usePrefilledBorrower(params.borrowerId, params.nationalId);
+  const params = useLocalSearchParams<{ borrowerId?: string }>();
+  const prefilled = usePrefilledBorrower(params.borrowerId);
   const [borrowerChoice, setBorrowerChoice] = useState<SelectedBorrower | null>(null);
   const borrower: SelectedBorrower | null = borrowerChoice ?? prefilled.data ?? null;
   const [zoneId, setZoneId] = useState("");
